@@ -246,15 +246,6 @@ On first run, defaults are auto-copied to the user override path. Edit the user 
 
 OpenAlice is a pnpm monorepo with Turborepo build orchestration. See [docs/project-structure.md](docs/project-structure.md) for the full file tree.
 
-## Roadmap to v1
-
-OpenAlice is in pre-release. All planned v1 milestones are now complete — remaining work is testing and stabilization.
-
-- [x] **Tool confirmation** — achieved through Trading-as-Git's push approval mechanism. Order execution requires explicit user approval at the push step, similar to merging a PR
-- [x] **Trading-as-Git stable interface** — the core workflow (stage → commit → push → approval) is stable and running in production
-- [x] **IBKR broker** — Interactive Brokers integration via TWS/Gateway. `IbkrBroker` bridges the callback-based `@traderalice/ibkr` SDK to the Promise-based `IBroker` interface via `RequestBridge`. Supports all IBroker methods including conId-based contract resolution
-- [x] **Account snapshot & analytics** — periodic and event-driven snapshots with equity curve visualization, configurable intervals, and carry-forward for data gaps
-
 ## Getting Help
 
 Stuck? Here's the recommended path, roughly in order:
