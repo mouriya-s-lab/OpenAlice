@@ -371,3 +371,37 @@ export async function saveAgentConfig(
     throw new Error(`save agent config failed: ${res.status} ${msg}`);
   }
 }
+
+export interface AgentTestResult {
+  readonly ok: boolean;
+  readonly response?: string;
+  readonly error?: string;
+}
+
+export interface AgentTestInput {
+  readonly baseUrl: string;
+  readonly apiKey: string;
+  readonly model: string;
+  /** Codex only. */
+  readonly wireApi?: 'chat' | 'responses';
+}
+
+export async function testAgentConfig(
+  wsId: string,
+  agent: AgentId,
+  cfg: AgentTestInput,
+): Promise<AgentTestResult> {
+  const res = await fetch(
+    `/api/workspaces/${encodeURIComponent(wsId)}/agent-config/${agent}/test`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(cfg),
+    },
+  );
+  try {
+    return (await res.json()) as AgentTestResult;
+  } catch {
+    return { ok: false, error: `HTTP ${res.status}` };
+  }
+}

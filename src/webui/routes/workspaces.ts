@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile, rm } from 'node:fs/promises';
 import { join, resolve as resolvePath } from 'node:path';
 
+import { probeAnthropic, probeOpenAI } from '../../workspaces/agent-probe.js';
 import { listDir, PathTraversal, readWorkspaceFile, writeWorkspaceFile } from '../../workspaces/file-service.js';
 import { gitLog, gitStatus } from '../../workspaces/git-service.js';
 import { logger as launcherLogger } from '../../workspaces/logger.js';
@@ -520,6 +521,42 @@ export function createWorkspaceRoutes(svc: WorkspaceService): Hono {
       if (err instanceof PathTraversal) return c.json({ error: 'invalid_path' }, 400);
       launcherLogger.warn('agent_config.write_failed', { id, agent, err });
       return c.json({ error: 'write_failed', message: (err as Error).message }, 500);
+    }
+  });
+
+  // Probe live provider with the form state (does NOT touch workspace files —
+  // tests exactly what the user sees in the modal, before they hit Save).
+  app.post('/:id/agent-config/:agent/test', async (c) => {
+    const id = c.req.param('id');
+    const agent = c.req.param('agent');
+    if (!validId(id)) return c.json({ ok: false, error: 'invalid_id' }, 400);
+    if (agent !== 'claude' && agent !== 'codex') {
+      return c.json({ ok: false, error: 'unknown_agent' }, 400);
+    }
+
+    const body = (await safeJson(c)) as AgentConfigInput | null;
+    const baseUrl = typeof body?.baseUrl === 'string' ? body.baseUrl.trim() : '';
+    const apiKey = typeof body?.apiKey === 'string' ? body.apiKey.trim() : '';
+    const model = typeof body?.model === 'string' ? body.model.trim() : '';
+    if (!baseUrl || !apiKey || !model) {
+      return c.json({ ok: false, error: 'baseUrl, apiKey, and model are all required' }, 400);
+    }
+
+    try {
+      const result = agent === 'claude'
+        ? await probeAnthropic({ baseUrl, apiKey, model })
+        : await probeOpenAI({
+            baseUrl,
+            apiKey,
+            model,
+            wireApi: body?.wireApi === 'chat' ? 'chat' : 'responses',
+          });
+      return c.json({ ok: true, response: result.text });
+    } catch (err) {
+      const e = err as { status?: number; message?: string };
+      const msg = e.status ? `${e.status} ${e.message ?? 'error'}` : (e.message ?? String(err));
+      launcherLogger.info('agent_config.test_failed', { id, agent, msg });
+      return c.json({ ok: false, error: msg });
     }
   });
 
