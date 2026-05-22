@@ -187,6 +187,41 @@ export function createTradingRoutes(ctx: EngineContext) {
     return c.json(result, result.success ? 200 : 500)
   })
 
+  // Force broker state sync. The AI tool calls this when it suspects
+  // the in-memory order state is stale (filled but not surfaced yet).
+  app.post('/uta/:id/sync', async (c) => {
+    const uta = ctx.utaManager.get(c.req.param('id'))
+    if (!uta) return c.json({ error: 'Account not found' }, 404)
+    try {
+      const body = await c.req.json().catch(() => ({}))
+      const delayMs = typeof body.delayMs === 'number' ? body.delayMs : undefined
+      const result = await uta.sync({ delayMs })
+      return c.json(result)
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 500)
+    }
+  })
+
+  // Price simulation — the AI tool drives PnL exploration via this
+  // endpoint. Every broker implements it (real brokers compute against
+  // their current position book + the supplied hypothetical prices),
+  // so this isn't Mock-specific.
+  app.post('/uta/:id/simulate-price', async (c) => {
+    const uta = ctx.utaManager.get(c.req.param('id'))
+    if (!uta) return c.json({ error: 'Account not found' }, 404)
+    try {
+      const body = await c.req.json().catch(() => ({}))
+      const changes = Array.isArray(body.changes) ? body.changes : []
+      const result = await uta.simulatePriceChange(changes)
+      return c.json(result)
+    } catch (err) {
+      // simulatePriceChange throws on non-mock brokers — map to 400 so
+      // the AI tool can surface a clean error to the user.
+      const msg = err instanceof Error ? err.message : String(err)
+      return c.json({ error: msg }, /simulate/i.test(msg) || /mock/i.test(msg) ? 400 : 500)
+    }
+  })
+
   // Account info
   app.get('/uta/:id/account', async (c) => {
     const account = resolveAccount(ctx, c)
@@ -232,6 +267,24 @@ export function createTradingRoutes(ctx: EngineContext) {
     })
   })
 
+  // Contract details — drilldown after a search hit. Body shape mirrors
+  // the in-process `Contract` query: caller passes the relevant subset
+  // (symbol / aliceId / secType / conId / exchange / currency), broker
+  // dispatches to whichever field its native lookup uses.
+  app.post('/uta/:id/contracts/details', async (c) => {
+    const account = resolveAccount(ctx, c)
+    if (!account) return c.json({ error: 'Account not found' }, 404)
+    try {
+      const body = await c.req.json().catch(() => ({}))
+      const { Contract } = await import('@traderalice/ibkr')
+      const query = Object.assign(new Contract(), body)
+      const details = await account.getContractDetails(query)
+      return c.json(details ?? null)
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 500)
+    }
+  })
+
   // ==================== Per-account wallet/git routes ====================
 
   app.get('/uta/:id/wallet/log', (c) => {
@@ -254,6 +307,27 @@ export function createTradingRoutes(ctx: EngineContext) {
     const uta = ctx.utaManager.get(c.req.param('id'))
     if (!uta) return c.json({ error: 'Account not found' }, 404)
     return c.json(uta.status())
+  })
+
+  // Commit — finalize the current staging area without pushing. Used by
+  // the AI's `tradingCommit` tool when it wants the user to approve a
+  // staged batch separately from the push step. Returns the prepared
+  // commit (hash + pending message); a subsequent push or reject closes
+  // the cycle.
+  app.post('/uta/:id/wallet/commit', async (c) => {
+    const uta = ctx.utaManager.get(c.req.param('id'))
+    if (!uta) return c.json({ error: 'Account not found' }, 404)
+    try {
+      const body = await c.req.json().catch(() => ({}))
+      const message = typeof body.message === 'string' ? body.message : ''
+      if (!message.trim()) {
+        return c.json({ error: 'Commit message is required' }, 400)
+      }
+      const result = uta.commit(message)
+      return c.json(result)
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 500)
+    }
   })
 
   // Reject (records a user-rejected commit, clears staging)

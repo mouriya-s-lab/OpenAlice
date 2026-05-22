@@ -14,7 +14,11 @@
 
 import { Hono } from 'hono'
 
-const CONNECT_TIMEOUT_MS = 1_000
+// Total request timeout. UTA is on the loopback interface so connect is
+// instant — this guards against handlers that legitimately take seconds
+// (broker queries, contract searches) hanging Alice forever. 30s is
+// well above the typical broker-API SLA without being a footgun.
+const PROXY_TIMEOUT_MS = 30_000
 
 /** Methods Hono's `app.all` actually dispatches. Empty body methods get a
  *  null body forwarded. */
@@ -43,7 +47,7 @@ export function createTradingProxyRoutes(opts: { utaBaseUrl: string }): Hono {
     }
 
     const controller = new AbortController()
-    const connectTimer = setTimeout(() => controller.abort(), CONNECT_TIMEOUT_MS)
+    const connectTimer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS)
 
     let upstream: Response
     try {
