@@ -10,7 +10,7 @@
  */
 
 import Decimal from 'decimal.js'
-import type { CurrencyClientLike } from '../market-data/client/types.js'
+import type { CurrencyClientLike } from '@/domain/market-data/client/types.js'
 
 // ==================== Types ====================
 

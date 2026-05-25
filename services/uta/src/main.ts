@@ -31,7 +31,7 @@ import { buildSDKCredentials } from '@/domain/market-data/credential-map.js'
 import { OpenBBCurrencyClient } from '@/domain/market-data/client/openbb-api/currency-client.js'
 import { createTradingRoutes } from './http/routes-trading.js'
 import { createSimulatorRoutes } from './http/routes-simulator.js'
-import type { EngineContext } from '@/core/types.js'
+import type { UTAEngineContext } from './types.js'
 
 const UTA_PORT = Number(process.env['OPENALICE_UTA_PORT'] ?? 47333)
 const CATALOG_REFRESH_MS = 6 * 60 * 60 * 1000  // 6h
@@ -119,15 +119,15 @@ async function main(): Promise<void> {
     utas: utaManager.listUTAs().length,
   }))
 
-  // Trading routes — reused from Alice's existing module via @/ path alias.
-  // Cast to EngineContext: trading routes only touch utaManager / fxService /
-  // snapshotService. Other ctx fields aren't read, so the narrow assembly is
-  // structurally sufficient even though the type is wider on paper.
-  const tradingCtx = {
+  // Trading routes — UTA-side handlers, narrowly typed via UTAEngineContext.
+  // Only utaManager / fxService / snapshotService are exposed because that's
+  // all the route layer reads. See services/uta/src/types.ts and ANG-65 for
+  // history (this used to be cast through Alice's EngineContext).
+  const tradingCtx: UTAEngineContext = {
     utaManager,
     fxService,
     snapshotService,
-  } as unknown as EngineContext
+  }
   app.route('/api/trading', createTradingRoutes(tradingCtx))
   // Simulator endpoints — MockBroker-only god-view operations the
   // /dev/simulator UI tab drives. Lives next to the trading routes

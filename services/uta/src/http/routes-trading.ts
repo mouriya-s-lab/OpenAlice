@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { z } from 'zod'
-import type { EngineContext } from '@/core/types.js'
+import type { UTAEngineContext } from '../types.js'
 import { BrokerError } from '../domain/trading/brokers/types.js'
 import type { UnifiedTradingAccount } from '../domain/trading/UnifiedTradingAccount.js'
 import { searchTradeableContracts } from '../domain/trading/contract-search.js'
@@ -78,7 +78,7 @@ const ALLOWED_ASSET_CLASSES: ReadonlySet<AssetClassHint> = new Set([
 ])
 
 /** Resolve account by :id param, return 404 if not found. */
-function resolveAccount(ctx: EngineContext, c: Context): UnifiedTradingAccount | null {
+function resolveAccount(ctx: UTAEngineContext, c: Context): UnifiedTradingAccount | null {
   const id = c.req.param('id')
   if (!id) return null
   return ctx.utaManager.get(id) ?? null
@@ -115,7 +115,7 @@ async function queryAccount<T>(
 }
 
 /** Unified trading routes — works with all account types via AccountManager */
-export function createTradingRoutes(ctx: EngineContext) {
+export function createTradingRoutes(ctx: UTAEngineContext) {
   const app = new Hono()
 
   // ==================== UTA listing ====================
@@ -188,7 +188,7 @@ export function createTradingRoutes(ctx: EngineContext) {
     let broker: { init: () => Promise<void>; getAccount: () => Promise<unknown>; getPositions: () => Promise<unknown>; close: () => Promise<void> } | null = null
     try {
       const { createBroker } = await import('../domain/trading/brokers/factory.js')
-      const { utaConfigSchema } = await import('@traderalice/uta-protocol')
+      const { utaConfigSchema } = await import('@/core/config.js')
       const body = await c.req.json()
       const utaConfig = utaConfigSchema.parse({ ...body, id: body.id ?? '__test__' })
       broker = createBroker(utaConfig)

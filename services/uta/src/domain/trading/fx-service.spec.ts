@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { FxService } from './fx-service.js'
-import type { CurrencyClientLike } from '../market-data/client/types.js'
+import type { CurrencyClientLike } from '@/domain/market-data/client/types.js'
 
 function makeMockClient(snapshots: Array<{ base_currency: string; counter_currency: string; last_rate: number }> = []): CurrencyClientLike {
   return {
