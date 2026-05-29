@@ -375,6 +375,8 @@ export interface AgentProfile {
   readonly baseUrl: string | null;
   readonly apiKey: string | null;
   readonly model: string | null;
+  /** Claude only — which header carries the key, if the profile pins one. */
+  readonly authMode?: 'x-api-key' | 'bearer' | null;
 }
 
 export interface AgentConfig {
@@ -383,6 +385,12 @@ export interface AgentConfig {
   readonly model: string | null;
   /** Codex only — wire format for the upstream API. */
   readonly wireApi?: 'chat' | 'responses' | null;
+  /**
+   * Claude only — `x-api-key` (Anthropic first-party default) vs `bearer`
+   * (`Authorization: Bearer`, for anthropic-compatible gateways like MiniMax
+   * international). Mirrors ANTHROPIC_API_KEY vs ANTHROPIC_AUTH_TOKEN.
+   */
+  readonly authMode?: 'x-api-key' | 'bearer';
 }
 
 export interface AgentConfigBundle {
@@ -436,6 +444,8 @@ export interface AgentTestInput {
   readonly model: string;
   /** Codex only. */
   readonly wireApi?: 'chat' | 'responses';
+  /** Claude only. */
+  readonly authMode?: 'x-api-key' | 'bearer';
 }
 
 export async function testAgentConfig(

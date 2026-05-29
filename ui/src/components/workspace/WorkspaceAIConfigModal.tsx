@@ -35,6 +35,11 @@ interface FormState {
   apiKey: string
   model: string
   wireApi: 'chat' | 'responses'
+  // Claude-only: which header carries the key. 'x-api-key' is Anthropic's
+  // first-party default; 'bearer' (Authorization: Bearer) is what most
+  // anthropic-compatible gateways want — MiniMax's international endpoint
+  // (api.minimax.io) only accepts Bearer, which is why x-api-key 401s there.
+  authMode: 'x-api-key' | 'bearer'
 }
 
 // codex-cli ≥ 0.130 hard-rejects `wire_api = "chat"`. The AgentConfig schema
@@ -43,7 +48,7 @@ interface FormState {
 // codex provider — a stale 'chat' loaded from disk is normalized on display,
 // so the next Save silently corrects it.
 // Ref: github.com/openai/codex/discussions/7782
-const EMPTY_FORM: FormState = { baseUrl: '', apiKey: '', model: '', wireApi: 'responses' }
+const EMPTY_FORM: FormState = { baseUrl: '', apiKey: '', model: '', wireApi: 'responses', authMode: 'x-api-key' }
 
 function configToForm(cfg: AgentConfig | null): FormState {
   if (!cfg) return EMPTY_FORM
@@ -52,6 +57,7 @@ function configToForm(cfg: AgentConfig | null): FormState {
     apiKey: cfg.apiKey ?? '',
     model: cfg.model ?? '',
     wireApi: 'responses',
+    authMode: cfg.authMode === 'bearer' ? 'bearer' : 'x-api-key',
   }
 }
 
@@ -64,7 +70,7 @@ function formToConfig(form: FormState, agent: AgentId): AgentConfig {
   if (agent === 'codex') {
     return { ...cfg, wireApi: form.wireApi }
   }
-  return cfg
+  return { ...cfg, authMode: form.authMode }
 }
 
 // Test result is per-tab so switching tabs doesn't lose the other agent's
@@ -83,7 +89,8 @@ function formsMatch(a: FormState, b: FormState, agent: AgentId): boolean {
     a.baseUrl === b.baseUrl &&
     a.apiKey === b.apiKey &&
     a.model === b.model &&
-    (agent !== 'codex' || a.wireApi === b.wireApi)
+    (agent !== 'codex' || a.wireApi === b.wireApi) &&
+    (agent !== 'claude' || a.authMode === b.authMode)
   )
 }
 
@@ -127,7 +134,8 @@ export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
       savedForm.baseUrl !== form.baseUrl ||
       savedForm.apiKey !== form.apiKey ||
       savedForm.model !== form.model ||
-      (tab === 'codex' && savedForm.wireApi !== form.wireApi)
+      (tab === 'codex' && savedForm.wireApi !== form.wireApi) ||
+      (tab === 'claude' && savedForm.authMode !== form.authMode)
     )
   }, [bundle, form, tab])
 
@@ -139,6 +147,9 @@ export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
       baseUrl: p.baseUrl ?? '',
       apiKey: p.apiKey ?? '',
       model: p.model ?? '',
+      // A profile may pin its auth mode (e.g. a MiniMax-international profile
+      // needs Bearer); fall back to x-api-key when it doesn't say.
+      authMode: p.authMode === 'bearer' ? 'bearer' : 'x-api-key',
     })
   }
 
@@ -189,6 +200,7 @@ export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
       apiKey: form.apiKey.trim(),
       model: form.model.trim(),
       wireApi: form.wireApi,
+      authMode: form.authMode,
     }
     setTesting(true)
     try {
@@ -197,6 +209,7 @@ export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
         apiKey: snapshot.apiKey,
         model: snapshot.model,
         ...(tab === 'codex' ? { wireApi: snapshot.wireApi } : {}),
+        ...(tab === 'claude' ? { authMode: snapshot.authMode } : {}),
       })
       setResult(
         r.ok
@@ -320,6 +333,30 @@ export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
               </button>
             </div>
           </div>
+
+          {tab === 'claude' && (
+            <div>
+              <label className="block text-xs font-medium text-text-muted mb-1">Auth header</label>
+              <select
+                value={form.authMode}
+                onChange={(e) => setForm({ ...form, authMode: e.target.value as FormState['authMode'] })}
+                className={inputClass}
+              >
+                <option value="x-api-key">x-api-key — Anthropic default</option>
+                <option value="bearer">Authorization: Bearer — gateways (MiniMax intl, proxies)</option>
+              </select>
+              <p className="text-[11px] text-text-muted/80 leading-snug mt-1">
+                Anthropic first-party uses <code className="font-mono text-[10.5px]">x-api-key</code>.
+                Switch to <code className="font-mono text-[10.5px]">Bearer</code> for
+                anthropic-compatible gateways that authenticate via{' '}
+                <code className="font-mono text-[10.5px]">Authorization: Bearer</code> — e.g.
+                MiniMax's international endpoint (<code className="font-mono text-[10.5px]">api.minimax.io</code>),
+                which rejects x-api-key. Written as{' '}
+                <code className="font-mono text-[10.5px]">ANTHROPIC_AUTH_TOKEN</code> instead of{' '}
+                <code className="font-mono text-[10.5px]">ANTHROPIC_API_KEY</code>.
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-medium text-text-muted mb-1">Model</label>

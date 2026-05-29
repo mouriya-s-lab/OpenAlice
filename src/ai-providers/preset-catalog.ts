@@ -199,11 +199,16 @@ export const MINIMAX: PresetDef = {
   description: 'MiniMax models via Claude Agent SDK (Anthropic-compatible)',
   category: 'third-party',
   defaultName: 'MiniMax',
-  hint: 'China console: minimaxi.com — International console: minimax.io. API keys are region-locked.',
+  hint: 'China console: minimaxi.com — International console: minimax.io. API keys are region-locked. MiniMax authenticates via Authorization: Bearer; the international endpoint (api.minimax.io) rejects x-api-key.',
   zodSchema: z.object({
     backend: z.literal('agent-sdk'),
     loginMethod: z.literal('api-key'),
     baseUrl: z.string().default('https://api.minimaxi.com/anthropic').describe('API endpoint'),
+    // MiniMax's documented integration uses Authorization: Bearer for every
+    // endpoint, and the international site (api.minimax.io) only accepts
+    // Bearer. Default to it so both endpoints work without the user having to
+    // know the split. Surfaced to the per-workspace config's "Apply" path.
+    authMode: z.enum(['x-api-key', 'bearer']).default('bearer').describe('Auth header'),
     model: z.string().default('MiniMax-M2.7').describe('Model'),
     apiKey: z.string().min(1).describe('MiniMax API key'),
   }),

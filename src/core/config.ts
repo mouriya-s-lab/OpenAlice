@@ -75,6 +75,15 @@ const baseProfileFields = {
   baseUrl: z.string().optional(),
   apiKey: z.string().optional(),
   /**
+   * Anthropic-shape only: which HTTP header carries the key. 'x-api-key' is
+   * Anthropic first-party (default when absent); 'bearer' sends Authorization:
+   * Bearer, required by anthropic-compatible gateways like MiniMax's
+   * international endpoint. Currently consumed by the per-workspace AI config
+   * "Apply from profile" path (surfaced via /agent-profiles); the in-process
+   * GenerateRouter runtime does not yet honor it — see ANG follow-up.
+   */
+  authMode: z.enum(['x-api-key', 'bearer']).optional(),
+  /**
    * Pointer into aiProviderSchema.credentials. When present, resolveProfile()
    * joins the credential's apiKey/baseUrl into the resolved shape (profile's
    * own inline values still win if set — transitional).
@@ -724,6 +733,10 @@ export interface ResolvedProfile {
   baseUrl?: string
   loginMethod?: string
   provider?: string
+  /** Anthropic-shape only: which header carries the key (x-api-key vs Bearer).
+   *  Consumed via resolveAnthropicAuthMode() at the auth-header construction
+   *  sites (agent-sdk env, vercel anthropic client, test-path adapter). */
+  authMode?: 'x-api-key' | 'bearer'
   /** Pointer into AIProviderConfig.credentials. Preserved on the resolved
    *  shape so callers can fetch the credential separately when needed. */
   credentialSlug?: string

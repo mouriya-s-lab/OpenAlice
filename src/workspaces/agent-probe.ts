@@ -19,6 +19,14 @@ export interface ClaudeProbeInput {
   baseUrl: string;
   apiKey: string;
   model: string;
+  /**
+   * Which HTTP header carries the key. `x-api-key` is Anthropic's first-party
+   * standard (the default); `bearer` sends `Authorization: Bearer <key>`,
+   * which is what most anthropic-compatible *gateways* expect (MiniMax's
+   * international endpoint, OpenRouter-style proxies, etc.). Mirrors the
+   * ANTHROPIC_API_KEY vs ANTHROPIC_AUTH_TOKEN split the real session uses.
+   */
+  authMode?: 'x-api-key' | 'bearer';
 }
 
 export interface CodexProbeInput {
@@ -29,7 +37,12 @@ export interface CodexProbeInput {
 }
 
 export async function probeAnthropic(input: ClaudeProbeInput): Promise<ProbeResult> {
-  const client = new Anthropic({ apiKey: input.apiKey, baseURL: input.baseUrl });
+  // `authToken` makes the SDK send `Authorization: Bearer`; `apiKey` makes it
+  // send `x-api-key`. Pick exactly one — sending both can trip gateways that
+  // reject ambiguous auth, and Anthropic's own API now 401s OAuth-via-Bearer.
+  const client = input.authMode === 'bearer'
+    ? new Anthropic({ authToken: input.apiKey, baseURL: input.baseUrl })
+    : new Anthropic({ apiKey: input.apiKey, baseURL: input.baseUrl });
   const msg = await client.messages.create({
     model: input.model,
     max_tokens: 32,
