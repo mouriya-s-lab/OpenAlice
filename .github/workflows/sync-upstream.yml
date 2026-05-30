@@ -52,14 +52,22 @@ jobs:
       - name: Open or reuse PR
         if: steps.check.outputs.has_changes == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GITHUB_TOKEN cannot create PRs on a fork (createPullRequest is
+          # blocked regardless of permissions). A PAT in SYNC_PAT is required.
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
+          REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
         run: |
-          if gh pr view "$SYNC_BRANCH" --json state --jq '.state' 2>/dev/null | grep -q OPEN; then
+          # REST API with literal branch names — gh pr create resolves the head
+          # sha from the local working tree, which in CI lacks the sync branch
+          # checkout and so sends a blank sha and fails.
+          existing=$(gh api "repos/$REPO/pulls?head=$OWNER:$SYNC_BRANCH&base=$BASE_BRANCH&state=open" --jq 'length')
+          if [ "$existing" -gt 0 ]; then
             echo "PR already open for $SYNC_BRANCH — branch updated, nothing to create."
           else
-            gh pr create \
-              --base "$BASE_BRANCH" \
-              --head "$SYNC_BRANCH" \
-              --title "Sync upstream → $(date +%F)" \
-              --body $'Automated sync of `upstream/master` into this fork.\n\nReview for conflicts with downstream customizations before merging.'
+            gh api "repos/$REPO/pulls" -X POST \
+              -f title="Sync upstream → $(date +%F)" \
+              -f head="$SYNC_BRANCH" \
+              -f base="$BASE_BRANCH" \
+              -f body=$'Automated sync of `upstream/master` into this fork.\n\nReview for conflicts with downstream customizations before merging.'
           fi
