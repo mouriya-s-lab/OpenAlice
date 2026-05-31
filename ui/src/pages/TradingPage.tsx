@@ -13,7 +13,7 @@ import { EditUTADialog } from '../components/uta/EditUTADialog'
 import { fmt } from '../lib/format'
 import { api } from '../api'
 import { useWorkspace } from '../tabs/store'
-import type { UTAConfig, BrokerPreset, BrokerHealthInfo, TestConnectionResult, Position, AccountInfo } from '../api/types'
+import type { UTAConfig, BrokerPreset, BrokerHealthInfo, TestConnectionResult, Position, AccountInfo, BrokerAccountInfo } from '../api/types'
 
 // ==================== Live equity (across all UTAs) ====================
 //
@@ -460,6 +460,16 @@ function CreateWizard({ presets, onSave, onOpenExisting, onClose }: {
                 setField={setField}
                 showSecrets={showSecrets}
               />
+              {preset.id === 'futu' && (
+                <FutuAccountDiscovery
+                  buildUTA={buildUTA}
+                  onSelect={(acc) => {
+                    setField('accId', acc.accId)
+                    if (acc.markets[0]) setField('market', acc.markets[0])
+                    setField('mode', acc.env === 'real' ? 'live' : 'paper')
+                  }}
+                />
+              )}
               {hasSensitive && (
                 <button
                   onClick={() => setShowSecrets(!showSecrets)}
@@ -515,6 +525,76 @@ function CreateWizard({ presets, onSave, onOpenExisting, onClose }: {
         )}
       </div>
     </Dialog>
+  )
+}
+
+// ==================== Futu account discovery ====================
+//
+// Gateway brokers (Futu via OpenD) front multiple business accounts under
+// one login. Instead of making the user type an opaque accID, we connect to
+// OpenD with the host/port already in the form, list the accounts, and let
+// them pick — which back-fills accId / market / mode into the schema form.
+
+function FutuAccountDiscovery({ buildUTA, onSelect }: {
+  buildUTA: () => Omit<UTAConfig, 'id'> | null
+  onSelect: (acc: BrokerAccountInfo) => void
+}) {
+  const [loading, setLoading] = useState(false)
+  const [accounts, setAccounts] = useState<BrokerAccountInfo[] | null>(null)
+  const [error, setError] = useState('')
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  const discover = async () => {
+    const uta = buildUTA()
+    if (!uta) return
+    setLoading(true); setError(''); setAccounts(null)
+    try {
+      const res = await api.trading.listAccounts(uta)
+      if (res.success && res.accounts) setAccounts(res.accounts)
+      else setError(res.error ?? 'Account discovery failed')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const pick = (acc: BrokerAccountInfo) => {
+    setSelectedId(acc.accId)
+    onSelect(acc)
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border border-border p-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[12px] font-medium text-text">Discover accounts</span>
+        <button onClick={discover} disabled={loading} className="btn-secondary text-[11px] py-1 px-2">
+          {loading ? 'Discovering…' : 'Discover via OpenD'}
+        </button>
+      </div>
+      <p className="text-[11px] text-text-muted">
+        Connects to OpenD at the host/port above and lists your Futu business accounts. Pick one to fill in account id / market / mode automatically.
+      </p>
+      {error && <p className="text-[12px] text-red">{error}</p>}
+      {accounts && accounts.length === 0 && <p className="text-[12px] text-text-muted">No accounts found for this OpenD login.</p>}
+      {accounts && accounts.length > 0 && (
+        <div className="space-y-1">
+          {accounts.map((acc) => (
+            <button
+              key={acc.accId}
+              onClick={() => pick(acc)}
+              className={`w-full text-left px-2 py-1.5 rounded text-[12px] border transition-colors ${
+                selectedId === acc.accId
+                  ? 'border-accent bg-accent/10 text-text'
+                  : 'border-border text-text-muted hover:text-text'
+              }`}
+            >
+              {acc.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 

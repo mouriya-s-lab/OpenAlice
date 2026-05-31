@@ -260,5 +260,29 @@ export function createTradingConfigRoutes(ctx: EngineContext) {
     }
   })
 
+  // ==================== List Accounts (account discovery) ====================
+  // BFF passthrough — broker instantiation + OpenD enumeration live in UTA.
+  // The wizard posts a partial preset config (host/port) and gets back the
+  // list of selectable business accounts.
+
+  app.post('/list-accounts', async (c) => {
+    const utaUrl = process.env['OPENALICE_UTA_URL']
+    if (!utaUrl) {
+      return c.json({ success: false, error: 'UTA URL not set' }, 500)
+    }
+    try {
+      const body = await c.req.json()
+      const res = await fetch(`${utaUrl.replace(/\/$/, '')}/api/trading/list-accounts`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      return c.json(data, res.status as 200 | 400 | 500)
+    } catch (err) {
+      return c.json({ success: false, error: err instanceof Error ? err.message : String(err) }, 500)
+    }
+  })
+
   return app
 }

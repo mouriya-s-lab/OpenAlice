@@ -203,6 +203,32 @@ export function createTradingRoutes(ctx: UTAEngineContext) {
     }
   })
 
+  // ==================== Broker list-accounts (account discovery) ====================
+  // Setup-wizard probe: instantiate a broker from a PARTIAL preset config
+  // (host/port; account not chosen yet), enumerate its business accounts,
+  // then disconnect. Ephemeral — does NOT register. Only brokers that
+  // implement IBroker.listAccounts (Futu via OpenD GetAccList) support it.
+  app.post('/list-accounts', async (c) => {
+    let broker: { listAccounts?: () => Promise<unknown>; close: () => Promise<void> } | null = null
+    try {
+      const { createBroker } = await import('../domain/trading/brokers/factory.js')
+      const { utaConfigSchema } = await import('@/core/config.js')
+      const body = await c.req.json()
+      const utaConfig = utaConfigSchema.parse({ ...body, id: body.id ?? '__discover__' })
+      broker = createBroker(utaConfig)
+      if (typeof broker.listAccounts !== 'function') {
+        return c.json({ success: false, error: 'This broker does not support account discovery' }, 400)
+      }
+      const accounts = await broker.listAccounts()
+      return c.json({ success: true, accounts })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return c.json({ success: false, error: msg }, 400)
+    } finally {
+      try { await broker?.close() } catch { /* best-effort */ }
+    }
+  })
+
   // ==================== Per-account routes ====================
 
   // Reconnect

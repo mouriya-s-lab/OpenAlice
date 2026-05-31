@@ -18,6 +18,7 @@
     "@traderalice/uta-protocol": "workspace:*",
     "ccxt": "^4.5.38",
     "decimal.js": "^10.6.0",
+    "futu-api": "^10.6.6608",
     "hono": "^4.12.14",
     "longbridge": "^4.0.5",
     "zod": "^4.3.6"

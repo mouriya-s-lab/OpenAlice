@@ -41,6 +41,7 @@ const SAMPLE_CONFIGS: Record<string, Record<string, unknown>> = {
   alpaca:          { mode: 'paper', apiKey: 'k', apiSecret: 's' },
   'ibkr-tws':      { host: '127.0.0.1', port: 7497, clientId: 0 },
   longbridge:      { mode: 'live', appKey: 'k', appSecret: 's', accessToken: 't' },
+  futu:            { mode: 'paper', market: 'HK', host: '127.0.0.1', port: 11111 },
   'ccxt-custom':   { exchange: 'kucoin', apiKey: 'k', secret: 's' },
   'leverup-monad': {
     mode: 'testnet',

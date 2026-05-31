@@ -1,5 +1,5 @@
 import { fetchJson } from './client'
-import type { TradingAccount, UTASummary, AccountInfo, Position, WalletCommitLog, ReconnectResult, UTAConfig, WalletStatus, WalletPushResult, WalletRejectResult, TestConnectionResult, BrokerPreset, UTASnapshotSummary, EquityCurvePoint, PlaceOrderRequest, ClosePositionRequest, CancelOrderRequest, OrderErrorResponse } from './types'
+import type { TradingAccount, UTASummary, AccountInfo, Position, WalletCommitLog, ReconnectResult, UTAConfig, WalletStatus, WalletPushResult, WalletRejectResult, TestConnectionResult, ListAccountsResult, BrokerPreset, UTASnapshotSummary, EquityCurvePoint, PlaceOrderRequest, ClosePositionRequest, CancelOrderRequest, OrderErrorResponse } from './types'
 
 /** Thrown by the one-shot order endpoints when the server returns non-2xx. Carries the phase. */
 export class OrderEntryError extends Error {
@@ -247,6 +247,20 @@ export const tradingApi = {
    */
   async testConnection(uta: UTAConfig | Omit<UTAConfig, 'id'>): Promise<TestConnectionResult> {
     const res = await fetch('/api/trading/config/test-connection', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(uta),
+    })
+    return res.json()
+  },
+
+  /**
+   * Discover selectable business accounts for a gateway broker (Futu) from
+   * a partial preset config (host/port; account not chosen yet). Brokers
+   * without account discovery return `{ success: false }`.
+   */
+  async listAccounts(uta: Omit<UTAConfig, 'id'>): Promise<ListAccountsResult> {
+    const res = await fetch('/api/trading/config/list-accounts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(uta),

@@ -194,6 +194,27 @@ export interface AccountCapabilities {
   supportedOrderTypes: string[]
 }
 
+// ==================== Account discovery ====================
+
+/**
+ * A broker business account discoverable *before* one is selected — for
+ * gateway brokers where a single login fronts multiple accounts (e.g. Futu
+ * OpenD: simulate/real × market × cash/margin). Returned by the optional
+ * IBroker.listAccounts() so the setup wizard can let the user pick one.
+ */
+export interface BrokerAccountInfo {
+  /** Broker-native account id, stringified (Futu accID is uint64). */
+  accId: string
+  /** Trading environment this account belongs to. */
+  env: 'real' | 'simulate'
+  /** Market codes the account is authorized to trade (e.g. ['HK', 'US']). */
+  markets: string[]
+  /** Account type if known — broker-specific (e.g. 'cash', 'margin', 'sim-stock'). */
+  accType?: string
+  /** Human-friendly label for the picker UI. */
+  label: string
+}
+
 // ==================== Broker config field descriptor ====================
 
 /** Describes a single config field for a broker type — used by the frontend to dynamically render forms. */
@@ -269,6 +290,15 @@ export interface IBroker<TMeta = unknown> {
   // ---- Capabilities ----
 
   getCapabilities(): AccountCapabilities
+
+  /**
+   * Discover the broker's available business accounts before one is
+   * selected. Optional — only gateway brokers whose single login fronts
+   * multiple accounts (Futu OpenD) implement it. Implementations connect,
+   * enumerate, and disconnect; they must NOT require an account to be
+   * already picked (so the setup wizard can call it with a partial config).
+   */
+  listAccounts?(): Promise<BrokerAccountInfo[]>
 
   // ---- Contract identity ----
 
