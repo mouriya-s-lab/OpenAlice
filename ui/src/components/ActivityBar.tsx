@@ -1,4 +1,4 @@
-import { type LucideIcon, MessageSquare, MessagesSquare, Inbox, Bell, LineChart, GitBranch, BarChart3, Newspaper, Zap, Settings, Code2, TerminalSquare, ChevronDown, Plug, Info } from 'lucide-react'
+import { type LucideIcon, MessageSquare, Inbox, LineChart, GitBranch, BarChart3, Newspaper, Zap, Settings, Code2, TerminalSquare, ChevronDown, Info } from 'lucide-react'
 import { useState } from 'react'
 import { type Page } from '../App'
 import { useWorkspace } from '../tabs/store'
@@ -22,9 +22,6 @@ function activitySectionFor(page: Page): ActivitySection {
     case 'portfolio':            return 'portfolio'
     case 'automation':           return 'automation'
     case 'news':                 return 'news'
-    case 'traditional-chat':     return 'traditional-chat'
-    case 'notifications-legacy': return 'notifications-legacy'
-    case 'connectors-legacy':    return 'connectors-legacy'
   }
 }
 
@@ -126,18 +123,6 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { page: 'settings', label: 'Settings', icon: Settings },
       { page: 'dev',      label: 'Dev',      icon: Code2 },
-    ],
-  },
-  // Legacy — pre-Workspace surfaces kept around for backwards-compat
-  // and connector flows that can't host a CLI. Default-collapsed so
-  // the "this isn't the recommended path" signal is visually loud.
-  {
-    sectionLabel: 'Legacy',
-    defaultCollapsed: true,
-    items: [
-      { page: 'traditional-chat',     label: 'Traditional chat', icon: MessagesSquare },
-      { page: 'notifications-legacy', label: 'Notifications',    icon: Bell, defaultTab: { kind: 'notifications-inbox', params: {} } },
-      { page: 'connectors-legacy',    label: 'Connectors',       icon: Plug, defaultTab: { kind: 'settings', params: { category: 'connectors' } } },
     ],
   },
 ]

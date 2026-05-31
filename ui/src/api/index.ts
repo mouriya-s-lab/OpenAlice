@@ -2,7 +2,6 @@
  * Unified API client — re-exports domain modules as the `api` namespace.
  * Existing imports like `import { api } from '../api'` continue to work.
  */
-import { chatApi } from './chat'
 import { configApi } from './config'
 import { eventsApi } from './events'
 import { cronApi } from './cron'
@@ -11,17 +10,14 @@ import { tradingApi } from './trading'
 import { marketDataApi } from './openbb'
 import { devApi } from './dev'
 import { toolsApi } from './tools'
-import { channelsApi } from './channels'
 import { agentStatusApi } from './agentStatus'
 import { personaApi } from './persona'
 import { newsApi } from './news'
 import { topologyApi } from './topology'
 import { marketApi } from './market'
-import { notificationsApi } from './notifications'
 import { inboxApi } from './inbox'
 import { versionApi } from './version'
 export const api = {
-  chat: chatApi,
   config: configApi,
   events: eventsApi,
   cron: cronApi,
@@ -30,13 +26,11 @@ export const api = {
   marketData: marketDataApi,
   dev: devApi,
   tools: toolsApi,
-  channels: channelsApi,
   agentStatus: agentStatusApi,
   persona: personaApi,
   news: newsApi,
   topology: topologyApi,
   market: marketApi,
-  notifications: notificationsApi,
   inbox: inboxApi,
   version: versionApi,
 }
