@@ -1,9 +1,15 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
-import type { BootstrapContext, CliAdapter, SpawnContext } from '../cli-adapter.js';
+import type { BootstrapContext, CliAdapter, SpawnContext, WorkspaceAiCred } from '../cli-adapter.js';
+import { readWorkspaceFile, writeWorkspaceFile } from '../file-service.js';
+
+const CODEX_CONFIG_PATH = '.codex/config.toml';
+const CODEX_ENV_PATH = '.codex/env.json';
+const CODEX_KEY_ENV_NAME = 'OPENALICE_WORKSPACE_KEY';
+const CODEX_PROVIDER_NAME = 'workspace';
 
 /**
  * OpenAI Codex CLI (Rust rewrite, `codex-cli`).
@@ -79,6 +85,87 @@ export const codexAdapter: CliAdapter = {
     if (ctx.resume === undefined) return head;
     if (ctx.resume === 'last') return [...head, 'resume', '--last'];
     return [...head, 'resume', ctx.resume.sessionId];
+  },
+
+  async writeAiConfig(cwd: string, cred: WorkspaceAiCred): Promise<void> {
+    const hasProvider = !!(cred.baseUrl || cred.model);
+
+    if (!hasProvider) {
+      // Reset: tear down the workspace's entire `.codex/` directory. The
+      // adapter's `composeEnv` won't set `CODEX_HOME` when the directory is
+      // absent, so codex falls back to the user's global `~/.codex/`. We
+      // don't leave empty stubs behind — workspace files exist only when
+      // there's an actual override. Note: `CODEX_HOME` is exclusive (not a
+      // merge layer), so a half-empty `.codex/` would *shadow* the user's
+      // global login and break auth. Full teardown is the only safe reset.
+      const codexDir = join(cwd, '.codex');
+      await rm(codexDir, { recursive: true, force: true });
+      return;
+    }
+
+    // Provider override. config.toml carries only model / model_provider /
+    // [model_providers.*] — the OpenAlice MCP server entry is wired per-spawn
+    // via this adapter's `-c mcp_servers.openalice.url=...` flag, so we
+    // don't repeat it here.
+    let toml = '';
+    if (cred.model) toml += `model = ${tomlString(cred.model)}\n`;
+    if (cred.baseUrl) toml += `model_provider = "${CODEX_PROVIDER_NAME}"\n`;
+    if (cred.baseUrl) {
+      toml += '\n';
+      toml += `[model_providers.${CODEX_PROVIDER_NAME}]\n`;
+      toml += `name = "OpenAlice workspace provider"\n`;
+      toml += `base_url = ${tomlString(cred.baseUrl)}\n`;
+      toml += `env_key = "${CODEX_KEY_ENV_NAME}"\n`;
+      toml += `wire_api = "${cred.wireApi ?? 'chat'}"\n`;
+    }
+    await writeWorkspaceFile(cwd, CODEX_CONFIG_PATH, toml);
+
+    // env.json: holds the per-workspace API key codex picks up via env_key.
+    // composeEnv reads this and exports at spawn.
+    if (cred.apiKey) {
+      const envObj: Record<string, string> = { [CODEX_KEY_ENV_NAME]: cred.apiKey };
+      await writeWorkspaceFile(cwd, CODEX_ENV_PATH, JSON.stringify(envObj, null, 2) + '\n');
+    } else {
+      await writeWorkspaceFile(cwd, CODEX_ENV_PATH, '{}\n');
+    }
+  },
+
+  async readAiConfig(cwd: string): Promise<WorkspaceAiCred | null> {
+    const tomlRaw = await readWorkspaceFile(cwd, CODEX_CONFIG_PATH);
+    const envRaw = await readWorkspaceFile(cwd, CODEX_ENV_PATH);
+    if (tomlRaw === null && envRaw === null) return null;
+
+    let baseUrl: string | null = null;
+    let wireApi: 'chat' | 'responses' | null = null;
+    let model: string | null = null;
+    if (tomlRaw) {
+      // Shape-specific extraction: we always write the provider section as
+      // `[model_providers.workspace]` with `base_url`, `wire_api`, plus
+      // top-level `model`. Regex is brittle in general but our shape is
+      // controlled (writer above produces deterministic output).
+      const providerBlock = tomlRaw.match(/\[model_providers\.workspace\][^\[]*/);
+      if (providerBlock) {
+        const block = providerBlock[0];
+        const base = block.match(/base_url\s*=\s*"([^"]*)"/);
+        if (base) baseUrl = base[1] ?? null;
+        const wire = block.match(/wire_api\s*=\s*"(chat|responses)"/);
+        if (wire) wireApi = wire[1] as 'chat' | 'responses';
+      }
+      const modelMatch = tomlRaw.match(/^model\s*=\s*"([^"]*)"\s*$/m);
+      if (modelMatch) model = modelMatch[1] ?? null;
+    }
+
+    let apiKey: string | null = null;
+    if (envRaw) {
+      try {
+        const env = JSON.parse(envRaw) as Record<string, unknown>;
+        const k = env[CODEX_KEY_ENV_NAME];
+        if (typeof k === 'string') apiKey = k;
+      } catch { /* ignore parse error, leave apiKey null */ }
+    }
+
+    if (baseUrl === null && apiKey === null && model === null && wireApi === null) return null;
+    return { baseUrl, apiKey, model, wireApi };
   },
 
   /**
@@ -159,4 +246,8 @@ async function ensureTrustedProject(cwd: string): Promise<void> {
 
 function isENOENT(err: unknown): boolean {
   return typeof err === 'object' && err !== null && (err as { code?: string }).code === 'ENOENT';
+}
+
+function tomlString(s: string): string {
+  return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }

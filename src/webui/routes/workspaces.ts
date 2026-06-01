@@ -8,15 +8,16 @@
 
 import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
-import { readFile, rm } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join, resolve as resolvePath } from 'node:path';
 
 import { probeAnthropic, probeOpenAI } from '../../workspaces/agent-probe.js';
-import { listDir, PathTraversal, readWorkspaceFile, writeWorkspaceFile } from '../../workspaces/file-service.js';
+import { listDir, PathTraversal, readWorkspaceFile } from '../../workspaces/file-service.js';
 import { gitLog, gitStatus } from '../../workspaces/git-service.js';
 import { logger as launcherLogger } from '../../workspaces/logger.js';
 import type { SessionRecord } from '../../workspaces/session-registry.js';
 import { resumeFromRecord, type SessionFactoryContext, type WorkspaceService } from '../../workspaces/service.js';
+import type { WorkspaceAiCred } from '../../workspaces/cli-adapter.js';
 
 const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -729,8 +730,8 @@ export function createWorkspaceRoutes(svc: WorkspaceService): Hono {
     if (!meta) return c.json({ error: 'not_found' }, 404);
     try {
       const [claude, codex] = await Promise.all([
-        readClaudeConfig(meta.dir),
-        readCodexConfig(meta.dir),
+        svc.adapters.get('claude')?.readAiConfig?.(meta.dir) ?? null,
+        svc.adapters.get('codex')?.readAiConfig?.(meta.dir) ?? null,
       ]);
       return c.json({ claude, codex });
     } catch (err) {
@@ -748,14 +749,12 @@ export function createWorkspaceRoutes(svc: WorkspaceService): Hono {
     const meta = svc.registry.get(id);
     if (!meta) return c.json({ error: 'not_found' }, 404);
 
-    const body = (await safeJson(c)) as AgentConfigInput | null;
+    const body = (await safeJson(c)) as WorkspaceAiCred | null;
     const cfg = body && typeof body === 'object' ? body : {};
     try {
-      if (agent === 'claude') {
-        await writeClaudeConfig(meta.dir, cfg);
-      } else {
-        await writeCodexConfig(meta.dir, cfg);
-      }
+      const adapter = svc.adapters.get(agent);
+      if (!adapter?.writeAiConfig) return c.json({ error: 'unknown_agent' }, 400);
+      await adapter.writeAiConfig(meta.dir, cfg);
       launcherLogger.info('agent_config.saved', { id, agent });
       return c.json({ ok: true });
     } catch (err) {
@@ -775,7 +774,7 @@ export function createWorkspaceRoutes(svc: WorkspaceService): Hono {
       return c.json({ ok: false, error: 'unknown_agent' }, 400);
     }
 
-    const body = (await safeJson(c)) as AgentConfigInput | null;
+    const body = (await safeJson(c)) as WorkspaceAiCred | null;
     const baseUrl = typeof body?.baseUrl === 'string' ? body.baseUrl.trim() : '';
     const apiKey = typeof body?.apiKey === 'string' ? body.apiKey.trim() : '';
     const model = typeof body?.model === 'string' ? body.model.trim() : '';
@@ -818,169 +817,9 @@ interface ProfileShape {
   authMode?: unknown;
 }
 
-interface AgentConfigInput {
-  baseUrl?: string;
-  apiKey?: string;
-  model?: string;
-  wireApi?: 'chat' | 'responses';
-  /** Claude only — which header carries the key (see ClaudeProbeInput). */
-  authMode?: 'x-api-key' | 'bearer';
-}
-
-interface ClaudeConfigShape {
-  baseUrl: string | null;
-  apiKey: string | null;
-  model: string | null;
-  authMode: 'x-api-key' | 'bearer';
-}
-
-interface CodexConfigShape {
-  baseUrl: string | null;
-  apiKey: string | null;
-  model: string | null;
-  wireApi: 'chat' | 'responses' | null;
-}
-
-const CLAUDE_SETTINGS_PATH = '.claude/settings.local.json';
-const CODEX_CONFIG_PATH = '.codex/config.toml';
-const CODEX_ENV_PATH = '.codex/env.json';
-const CODEX_KEY_ENV_NAME = 'OPENALICE_WORKSPACE_KEY';
-const CODEX_PROVIDER_NAME = 'workspace';
-
-async function readClaudeConfig(workspaceDir: string): Promise<ClaudeConfigShape | null> {
-  const raw = await readWorkspaceFile(workspaceDir, CLAUDE_SETTINGS_PATH);
-  if (raw === null) return null;
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-  const env = (parsed['env'] ?? {}) as Record<string, unknown>;
-  const baseUrl = typeof env['ANTHROPIC_BASE_URL'] === 'string' ? (env['ANTHROPIC_BASE_URL'] as string) : null;
-  // The key lives in exactly one of two env vars depending on auth mode:
-  // ANTHROPIC_API_KEY → x-api-key header, ANTHROPIC_AUTH_TOKEN → Bearer.
-  // Which one is present tells us the mode to surface back to the modal.
-  const xApiKey = typeof env['ANTHROPIC_API_KEY'] === 'string' ? (env['ANTHROPIC_API_KEY'] as string) : null;
-  const authToken = typeof env['ANTHROPIC_AUTH_TOKEN'] === 'string' ? (env['ANTHROPIC_AUTH_TOKEN'] as string) : null;
-  const authMode: 'x-api-key' | 'bearer' = authToken !== null ? 'bearer' : 'x-api-key';
-  const apiKey = authToken ?? xApiKey;
-  const model = typeof parsed['model'] === 'string' ? (parsed['model'] as string) : null;
-  if (baseUrl === null && apiKey === null && model === null) return null;
-  return { baseUrl, apiKey, model, authMode };
-}
-
-async function writeClaudeConfig(workspaceDir: string, cfg: AgentConfigInput): Promise<void> {
-  const hasAny = cfg.baseUrl || cfg.apiKey || cfg.model;
-  if (!hasAny) {
-    // Reset: delete the settings file so claude falls back to its global
-    // OAuth / settings. We don't leave an empty `{}` behind — workspace
-    // files exist only when there's an actual override.
-    const filePath = join(workspaceDir, CLAUDE_SETTINGS_PATH);
-    await rm(filePath, { force: true });
-    return;
-  }
-  const out: Record<string, unknown> = {};
-  const env: Record<string, string> = {};
-  if (cfg.baseUrl) env['ANTHROPIC_BASE_URL'] = cfg.baseUrl;
-  // Write the key into exactly one env var. Bearer-mode gateways (MiniMax
-  // international, proxy front-ends) read ANTHROPIC_AUTH_TOKEN → the CLI sends
-  // `Authorization: Bearer`. Default x-api-key mode uses ANTHROPIC_API_KEY.
-  // Never write both: Claude Code warns on dual-set, and the two headers
-  // together can be rejected as ambiguous auth.
-  if (cfg.apiKey) {
-    if (cfg.authMode === 'bearer') env['ANTHROPIC_AUTH_TOKEN'] = cfg.apiKey;
-    else env['ANTHROPIC_API_KEY'] = cfg.apiKey;
-  }
-  if (Object.keys(env).length > 0) out['env'] = env;
-  if (cfg.model) out['model'] = cfg.model;
-  await writeWorkspaceFile(workspaceDir, CLAUDE_SETTINGS_PATH, JSON.stringify(out, null, 2) + '\n');
-}
-
-async function readCodexConfig(workspaceDir: string): Promise<CodexConfigShape | null> {
-  const tomlRaw = await readWorkspaceFile(workspaceDir, CODEX_CONFIG_PATH);
-  const envRaw = await readWorkspaceFile(workspaceDir, CODEX_ENV_PATH);
-  if (tomlRaw === null && envRaw === null) return null;
-
-  let baseUrl: string | null = null;
-  let wireApi: 'chat' | 'responses' | null = null;
-  let model: string | null = null;
-  if (tomlRaw) {
-    // Shape-specific extraction: we always write the provider section as
-    // `[model_providers.workspace]` with `base_url`, `wire_api`, plus
-    // top-level `model`. Regex is brittle in general but our shape is
-    // controlled (writer below produces deterministic output).
-    const providerBlock = tomlRaw.match(/\[model_providers\.workspace\][^\[]*/);
-    if (providerBlock) {
-      const block = providerBlock[0];
-      const base = block.match(/base_url\s*=\s*"([^"]*)"/);
-      if (base) baseUrl = base[1] ?? null;
-      const wire = block.match(/wire_api\s*=\s*"(chat|responses)"/);
-      if (wire) wireApi = wire[1] as 'chat' | 'responses';
-    }
-    const modelMatch = tomlRaw.match(/^model\s*=\s*"([^"]*)"\s*$/m);
-    if (modelMatch) model = modelMatch[1] ?? null;
-  }
-
-  let apiKey: string | null = null;
-  if (envRaw) {
-    try {
-      const env = JSON.parse(envRaw) as Record<string, unknown>;
-      const k = env[CODEX_KEY_ENV_NAME];
-      if (typeof k === 'string') apiKey = k;
-    } catch { /* ignore parse error, leave apiKey null */ }
-  }
-
-  if (baseUrl === null && apiKey === null && model === null && wireApi === null) return null;
-  return { baseUrl, apiKey, model, wireApi };
-}
-
-async function writeCodexConfig(workspaceDir: string, cfg: AgentConfigInput): Promise<void> {
-  const hasProvider = !!(cfg.baseUrl || cfg.model);
-
-  if (!hasProvider) {
-    // Reset: tear down the workspace's entire `.codex/` directory. The
-    // adapter's `composeEnv` won't set `CODEX_HOME` when the directory is
-    // absent, so codex falls back to the user's global `~/.codex/`. We
-    // don't leave empty stubs behind — workspace files exist only when
-    // there's an actual override. Note: `CODEX_HOME` is exclusive (not a
-    // merge layer), so a half-empty `.codex/` would *shadow* the user's
-    // global login and break auth. Full teardown is the only safe reset.
-    const codexDir = join(workspaceDir, '.codex');
-    await rm(codexDir, { recursive: true, force: true });
-    return;
-  }
-
-  // Provider override. config.toml carries only model / model_provider /
-  // [model_providers.*] — the OpenAlice MCP server entry is wired per-spawn
-  // via the codex adapter's `-c mcp_servers.openalice.url=...` flag, so we
-  // don't repeat it here.
-  let toml = '';
-  if (cfg.model) toml += `model = ${tomlString(cfg.model)}\n`;
-  if (cfg.baseUrl) toml += `model_provider = "${CODEX_PROVIDER_NAME}"\n`;
-  if (cfg.baseUrl) {
-    toml += '\n';
-    toml += `[model_providers.${CODEX_PROVIDER_NAME}]\n`;
-    toml += `name = "OpenAlice workspace provider"\n`;
-    toml += `base_url = ${tomlString(cfg.baseUrl)}\n`;
-    toml += `env_key = "${CODEX_KEY_ENV_NAME}"\n`;
-    toml += `wire_api = "${cfg.wireApi ?? 'chat'}"\n`;
-  }
-  await writeWorkspaceFile(workspaceDir, CODEX_CONFIG_PATH, toml);
-
-  // env.json: holds the per-workspace API key codex picks up via env_key.
-  // Adapter's composeEnv reads this and exports at spawn.
-  if (cfg.apiKey) {
-    const envObj: Record<string, string> = { [CODEX_KEY_ENV_NAME]: cfg.apiKey };
-    await writeWorkspaceFile(workspaceDir, CODEX_ENV_PATH, JSON.stringify(envObj, null, 2) + '\n');
-  } else {
-    await writeWorkspaceFile(workspaceDir, CODEX_ENV_PATH, '{}\n');
-  }
-}
-
-function tomlString(s: string): string {
-  return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
-}
+// AI-provider config IO moved into the CLI adapters (writeAiConfig /
+// readAiConfig on claudeAdapter / codexAdapter). The routes above dispatch
+// through svc.adapters so each CLI owns its own file format.
 
 function validId(id: string | undefined): id is string {
   return typeof id === 'string' && /^[a-zA-Z0-9_-]+$/.test(id);

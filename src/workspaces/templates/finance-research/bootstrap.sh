@@ -32,7 +32,6 @@ set -euo pipefail
 
 TAG="${1:?tag required}"
 OUT_DIR="${2:?outDir required}"
-: "${AQ_TEMPLATE_FILES_DIR:?AQ_TEMPLATE_FILES_DIR must be set by the launcher}"
 
 source "$(dirname "${BASH_SOURCE[0]}")/../_common.sh"
 
@@ -42,9 +41,6 @@ PLUGINS=(market-analysis social-readers data-providers)
 
 init_workspace_dir "$OUT_DIR"
 WS_ID="$(extract_ws_id "$OUT_DIR")"
-
-write_mcp_config "$WS_ID" "$AQ_TEMPLATE_FILES_DIR"
-compose_persona_claude_md "$AQ_TEMPLATE_FILES_DIR"
 copy_readme
 
 git init -q
@@ -116,8 +112,6 @@ fi
   echo "  - .claude/skills/   (Claude Code)"
   echo "  - .agents/skills/   (Codex)"
 } > .openalice-finance-info
-
-commit_initial "$TAG" finance-research
 
 if [[ ${#SKILLS_FAILED[@]} -gt 0 ]]; then
   echo "[finance-research] bootstrapped with WARN: ${SKILLS_FAILED[*]}" >&2

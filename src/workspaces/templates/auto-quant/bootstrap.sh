@@ -65,12 +65,20 @@ fi
 
 # ── Materialise the workspace ───────────────────────────────────────────────
 
-# 1. local clone — hardlinks .git/objects, fast and disk-cheap.
+# 1. local clone — hardlinks .git/objects, fast and disk-cheap. We clone only
+#    for the working tree; history + remote are scrubbed below.
 git clone --local "$SOURCE" "$OUT_DIR" >/dev/null
 
 cd "$OUT_DIR"
 
-# 2. autoresearch branch from whatever master/main the source points at.
+# 2. Scrub to a fresh local repo (no upstream history, no pushable remote), on
+#    the autoresearch branch. A Harness is always a fresh-git workspace with a
+#    clean initial commit — carrying Auto-Quant's whole history + an origin
+#    pointing at the public GitHub repo violates that (and was the key-leak
+#    vector the excludes only half-covered). The launcher makes the initial
+#    commit after this script returns.
+rm -rf .git
+git init -q
 git checkout -b "autoresearch/$TAG" >/dev/null
 
 # ── Agent-config excludes ────────────────────────────────────────────────

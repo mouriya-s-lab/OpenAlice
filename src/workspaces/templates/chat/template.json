@@ -2,5 +2,8 @@
   "displayName": "Chat",
   "groupOrder": 10,
   "description": "Chat workspace wired to OpenAlice's MCP server — full trading/market tool surface available to the agent.",
-  "defaultAgents": ["claude", "codex"]
+  "defaultAgents": ["claude", "codex"],
+  "injectMcp": true,
+  "injectPersona": true,
+  "bundledSkills": ["scan-value-chain"]
 }
