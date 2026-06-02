@@ -40,6 +40,23 @@ const MCP_JSON = `{
 }
 `;
 
+/**
+ * Inbox-only variant (`injectMcp: 'inbox'`): keep just the workspace-scoped
+ * `openalice-workspace` server — the inbox-push outbound channel, which is
+ * stateful and stays on MCP — and DROP the global `openalice` tool server. In
+ * this mode the agent reaches market/data tools through the `alice` CLI on its
+ * PATH instead of MCP. Used by the `chat-cli` template.
+ */
+const MCP_JSON_INBOX_ONLY = `{
+  "mcpServers": {
+    "openalice-workspace": {
+      "type": "streamable-http",
+      "url": "\${OPENALICE_MCP_URL:-http://127.0.0.1:47332/mcp}/__WS_ID__"
+    }
+  }
+}
+`;
+
 export async function injectWorkspaceContext(opts: {
   readonly template: TemplateMeta;
   readonly wsId: string;
@@ -48,17 +65,21 @@ export async function injectWorkspaceContext(opts: {
   const { template, wsId, dir } = opts;
 
   if (template.injectMcp) {
-    await writeWorkspaceFile(dir, '.mcp.json', MCP_JSON.replaceAll('__WS_ID__', wsId));
+    const json = template.injectMcp === 'inbox' ? MCP_JSON_INBOX_ONLY : MCP_JSON;
+    await writeWorkspaceFile(dir, '.mcp.json', json.replaceAll('__WS_ID__', wsId));
   }
 
   if (template.injectPersona) {
-    // Compose `persona + "\n\n---\n\n" + <template>/CLAUDE.md`, byte-identical
-    // to the old `compose_persona_claude_md`. A template that asks for persona
-    // injection but ships no CLAUDE.md is a misconfiguration — let the readFile
-    // throw so the create fails loudly (matches the old `exit 4`).
+    // One neutral instruction source (`<template>/instruction.md`), composed
+    // with the persona, then written byte-identically to BOTH CLAUDE.md (Claude
+    // Code's filename) and AGENTS.md (Codex's). The CLIs disagree on the
+    // filename; we don't pick a side — we copy to each at injection. A template
+    // that asks for persona injection but ships no instruction.md is a
+    // misconfiguration — let the readFile throw so the create fails loudly
+    // (matches the old `compose_persona_claude_md` exit 4).
     const persona = await resolvePersona();
-    const templateMd = await readFile(join(template.filesDir, 'CLAUDE.md'), 'utf8');
-    const composed = persona !== null ? `${persona}\n\n---\n\n${templateMd}` : templateMd;
+    const instruction = await readFile(join(template.filesDir, 'instruction.md'), 'utf8');
+    const composed = persona !== null ? `${persona}\n\n---\n\n${instruction}` : instruction;
     await writeWorkspaceFile(dir, 'CLAUDE.md', composed);
     await writeWorkspaceFile(dir, 'AGENTS.md', composed);
   }
