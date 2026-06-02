@@ -1,4 +1,4 @@
-import { type LucideIcon, MessageSquare, MessagesSquare, Inbox, Bell, LineChart, GitBranch, BarChart3, Newspaper, Zap, Settings, Code2, TerminalSquare, ChevronDown, Plug, Info } from 'lucide-react'
+import { type LucideIcon, MessageSquare, Inbox, LineChart, GitBranch, BarChart3, Newspaper, Zap, Settings, Code2, TerminalSquare, ChevronDown, Info } from 'lucide-react'
 import { useState } from 'react'
 import { type Page } from '../App'
 import { useWorkspace } from '../tabs/store'
@@ -22,9 +22,6 @@ function activitySectionFor(page: Page): ActivitySection {
     case 'portfolio':            return 'portfolio'
     case 'automation':           return 'automation'
     case 'news':                 return 'news'
-    case 'traditional-chat':     return 'traditional-chat'
-    case 'notifications-legacy': return 'notifications-legacy'
-    case 'connectors-legacy':    return 'connectors-legacy'
   }
 }
 
@@ -100,18 +97,25 @@ const NAV_SECTIONS: NavSection[] = [
       { page: 'news',       label: 'News',       icon: Newspaper, defaultTab: { kind: 'news', params: {} } },
     ],
   },
-  // Beta — functional but unstable. The underlying cross-broker
-  // unification (UTA abstraction, FX/options/futures) is in active
-  // rearchitecture. Portfolio surfaces that state; Trading-as-Git is
-  // the operations side (pending broker writes). Broker connection
-  // CRUD lives under Settings → Trading, not here — it's a config
-  // surface, not a state/ops one.
+  // Beta — functional but not yet dependable. Two distinct reasons
+  // land an entry here:
+  //  - Cross-broker unification (UTA abstraction, FX/options/futures)
+  //    is in active rearchitecture. Portfolio surfaces that state;
+  //    Trading-as-Git is the operations side (pending broker writes).
+  //    The data runs; the schema/UX underneath isn't settled.
+  //  - Automation runs fine in isolation, but its trigger chain isn't
+  //    closed in the current Harness architecture — nothing fires it
+  //    end-to-end yet, so it's effectively unusable today. Once
+  //    Harness scheduling lands it gets wired back up.
+  // Broker connection CRUD lives under Settings → Trading, not here —
+  // it's a config surface, not a state/ops one.
   {
     sectionLabel: 'Beta',
-    description: 'Cross-broker unified state + ops surfaces. The abstraction underneath is still being settled — try them, but don\'t depend on schema or UX as stable yet. Broker connection setup lives in Settings → Trading.',
+    description: 'Functional but not yet dependable. Trading-as-Git and Portfolio surface cross-broker unified state whose underlying abstraction is still being settled — try them, but don\'t depend on schema or UX as stable yet. Automation runs, but its trigger chain isn\'t closed in the current Harness architecture, so it can\'t fire end-to-end until Harness scheduling lands. Broker connection setup lives in Settings → Trading.',
     items: [
       { page: 'trading-as-git', label: 'Trading as Git', icon: GitBranch },
       { page: 'portfolio',      label: 'Portfolio',      icon: LineChart, defaultTab: { kind: 'portfolio', params: {} } },
+      { page: 'automation',     label: 'Automation',     icon: Zap, defaultTab: { kind: 'automation', params: { section: 'flow' } } },
     ],
   },
   {
@@ -119,19 +123,6 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { page: 'settings', label: 'Settings', icon: Settings },
       { page: 'dev',      label: 'Dev',      icon: Code2 },
-    ],
-  },
-  // Legacy — pre-Workspace surfaces kept around for backwards-compat
-  // and connector flows that can't host a CLI. Default-collapsed so
-  // the "this isn't the recommended path" signal is visually loud.
-  {
-    sectionLabel: 'Legacy',
-    defaultCollapsed: true,
-    items: [
-      { page: 'traditional-chat',     label: 'Traditional chat', icon: MessagesSquare },
-      { page: 'notifications-legacy', label: 'Notifications',    icon: Bell, defaultTab: { kind: 'notifications-inbox', params: {} } },
-      { page: 'connectors-legacy',    label: 'Connectors',       icon: Plug, defaultTab: { kind: 'settings', params: { category: 'connectors' } } },
-      { page: 'automation',           label: 'Automation',       icon: Zap, defaultTab: { kind: 'automation', params: { section: 'flow' } } },
     ],
   },
 ]

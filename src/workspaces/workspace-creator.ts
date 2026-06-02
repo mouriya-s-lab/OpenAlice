@@ -1,8 +1,10 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type { AdapterRegistry } from './cli-adapter.js';
+import { injectWorkspaceContext } from './context-injector.js';
 import type { Logger } from './logger.js';
 import type { TemplateRegistry } from './template-registry.js';
 import type { WorkspaceMeta, WorkspaceRegistry } from './workspace-registry.js';
@@ -36,6 +38,7 @@ export type CreateResult =
         | 'invalid_tag'
         | 'tag_in_use'
         | 'bootstrap_failed'
+        | 'injection_failed'
         | 'unknown_template'
         | 'unknown_agent';
       readonly message: string;
@@ -132,6 +135,32 @@ export class WorkspaceCreator {
       };
     }
 
+    // Launcher-owned context injection (MCP / persona / skills, gated by the
+    // template manifest), then the initial commit. The launcher — not the
+    // bootstrap script — owns what lands in the workspace's first commit.
+    try {
+      await injectWorkspaceContext({ template, wsId: id, dir });
+    } catch (err) {
+      log.warn('inject.failed', { err });
+      await rm(dir, { recursive: true, force: true });
+      return {
+        ok: false,
+        code: 'injection_failed',
+        message: `context injection failed: ${(err as Error).message}`,
+      };
+    }
+    try {
+      await commitInitial(dir, `${templateName}: ${tag}`);
+    } catch (err) {
+      log.warn('initial_commit.failed', { err });
+      await rm(dir, { recursive: true, force: true });
+      return {
+        ok: false,
+        code: 'injection_failed',
+        message: `initial commit failed: ${(err as Error).message}`,
+      };
+    }
+
     // Per-adapter technical bootstrap (MCP wiring, trust entries, …). Each
     // adapter is responsible for idempotency. We log but don't fail the
     // workspace create on a single adapter's bootstrap failure — the user
@@ -163,6 +192,35 @@ export class WorkspaceCreator {
     log.info('bootstrap.ok', { stdout: result.stdout.slice(-400) });
     return { ok: true, workspace };
   }
+}
+
+/**
+ * The launcher's initial commit — uniform across templates (the "Harness rule":
+ * every workspace is a fresh-git repo with a clean initial commit, no inherited
+ * history, no pushable remote). Replaces the old per-template `commit_initial`
+ * bash helper, byte-identical in message + author. The bootstrap script has
+ * already run `git init` and set excludes; we just stage and commit.
+ */
+export async function commitInitial(dir: string, message: string): Promise<void> {
+  await runGit(dir, ['add', '.']);
+  await runGit(dir, [
+    '-c', 'user.email=launcher@local',
+    '-c', 'user.name=launcher',
+    'commit', '-q', '-m', message,
+  ]);
+}
+
+function runGit(dir: string, args: readonly string[]): Promise<void> {
+  return new Promise((resolveCommit, reject) => {
+    const child = spawn('git', [...args], { cwd: dir, stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = '';
+    child.stderr?.on('data', (c: Buffer) => { stderr += c.toString(); });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) resolveCommit();
+      else reject(new Error(`git ${args[0] ?? ''} exited ${code ?? 'null'}: ${stderr.slice(0, 500)}`));
+    });
+  });
 }
 
 interface RunResult {

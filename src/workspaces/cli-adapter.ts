@@ -37,6 +37,26 @@ export interface BootstrapContext {
   readonly launcherRepoRoot: string;
 }
 
+/**
+ * Per-workspace AI-provider override (endpoint / key / model). The launcher
+ * owns the *contract* — one shape, dispatched uniformly across CLIs — while
+ * each adapter owns the *format* (claude → `.claude/settings.local.json`,
+ * codex → `.codex/config.toml` + `.codex/env.json`). Superset shape: `authMode`
+ * is claude-only (which header carries the key), `wireApi` is codex-only
+ * (Responses vs Chat Completions). Fields are optional/nullable so the same
+ * shape serves both the write-input (absent ⇒ unset) and the read-output
+ * (null ⇒ not present in the file).
+ */
+export interface WorkspaceAiCred {
+  baseUrl?: string | null;
+  apiKey?: string | null;
+  model?: string | null;
+  /** Codex only. */
+  wireApi?: 'chat' | 'responses' | null;
+  /** Claude only. */
+  authMode?: 'x-api-key' | 'bearer';
+}
+
 export interface EnvOverrides {
   /**
    * Substrings that, when found anywhere in an env var name, cause the var to
@@ -101,6 +121,16 @@ export interface CliAdapter {
    * the cross-CLI guidance).
    */
   bootstrap?(ctx: BootstrapContext): Promise<void>;
+
+  /**
+   * Read/write the workspace's per-CLI AI-provider override. The launcher
+   * dispatches uniformly; each adapter renders the shared `WorkspaceAiCred`
+   * into (and parses it out of) its own native config files. An empty cred
+   * resets — the adapter deletes its config so the CLI falls back to global.
+   * Absent on adapters with no configurable provider (shell).
+   */
+  writeAiConfig?(cwd: string, cred: WorkspaceAiCred): Promise<void>;
+  readAiConfig?(cwd: string): Promise<WorkspaceAiCred | null>;
 
   // ── Transcript detection (used only when capabilities.transcriptDiscovery === 'fs-watch')
   transcriptDir?(cwd: string): string;

@@ -21,10 +21,6 @@
 
 import type { ComponentType } from 'react'
 import { ChatChannelListContainer } from './components/ChatChannelListContainer'
-import { TraditionalChatSidebar } from './components/TraditionalChatSidebar'
-import { NotificationsLegacySidebar } from './components/NotificationsLegacySidebar'
-import { ConnectorsLegacySidebar } from './components/ConnectorsLegacySidebar'
-import { NewChannelButton } from './components/NewChannelButton'
 import { InboxSidebar } from './components/InboxSidebar'
 import { WorkspacesSidebar } from './components/workspace/WorkspacesSidebar'
 import { PushApprovalPanel } from './components/PushApprovalPanel'
@@ -88,22 +84,6 @@ const SECTION_BY_KEY: Record<ActivitySection, SidebarSection> = {
   news: {
     title: 'News',
     Secondary: NewsSidebar,
-  },
-  // Legacy entries — pre-Workspace artifacts. Sidebars include a
-  // muted explanatory note so users opening them understand the
-  // lifecycle context.
-  'traditional-chat': {
-    title: 'Traditional chat',
-    Secondary: TraditionalChatSidebar,
-    Actions: NewChannelButton,
-  },
-  'notifications-legacy': {
-    title: 'Notifications',
-    Secondary: NotificationsLegacySidebar,
-  },
-  'connectors-legacy': {
-    title: 'Connectors',
-    Secondary: ConnectorsLegacySidebar,
   },
 }
 

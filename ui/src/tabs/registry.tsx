@@ -1,9 +1,7 @@
 import type { ComponentType } from 'react'
-import type { ChannelListItem } from '../api/channels'
 import type { Workspace } from '../components/workspace/api'
 import type { ViewKind, ViewSpec } from './types'
 
-import { ChatPage } from '../pages/ChatPage'
 import { PortfolioPage } from '../pages/PortfolioPage'
 import { AutomationPage } from '../pages/AutomationPage'
 import { NewsPage } from '../pages/NewsPage'
@@ -12,13 +10,11 @@ import { MarketDetailPage } from '../pages/MarketDetailPage'
 import { SettingsPage } from '../pages/SettingsPage'
 import { AIProviderPage } from '../pages/AIProviderPage'
 import { TradingPage } from '../pages/TradingPage'
-import { ConnectorsPage } from '../pages/ConnectorsPage'
 import { MCPPage } from '../pages/MCPPage'
 import { MarketDataPage } from '../pages/MarketDataPage'
 import { NewsCollectorPage } from '../pages/NewsCollectorPage'
 import { UTADetailPage } from '../pages/UTADetailPage'
 import { DevPage } from '../pages/DevPage'
-import { NotificationsInboxPage } from '../pages/NotificationsInboxPage'
 import { InboxPage } from '../pages/InboxPage'
 import { WorkspaceListPage } from '../pages/WorkspaceListPage'
 import { WorkspacePage } from '../pages/WorkspacePage'
@@ -35,7 +31,6 @@ import { TemplateDetailPage } from '../pages/TemplateDetailPage'
  */
 
 export interface TitleCtx {
-  channels: ChannelListItem[]
   /** Workspaces list, threaded from WorkspacesContext. Used by workspaceModule
    *  to render tab titles as `<tag> · <sessionName>` instead of opaque UUIDs. */
   workspaces?: readonly Workspace[]
@@ -57,20 +52,6 @@ export interface ViewModule<K extends ViewKind> {
 }
 
 // ==================== Per-kind modules ====================
-
-const chatModule: ViewModule<'chat'> = {
-  kind: 'chat',
-  title(spec, ctx) {
-    const ch = ctx.channels.find((c) => c.id === spec.params.channelId)
-    return ch?.label ?? spec.params.channelId
-  },
-  toUrl(spec) {
-    return spec.params.channelId === 'default'
-      ? '/chat'
-      : `/chat/${encodeURIComponent(spec.params.channelId)}`
-  },
-  Component: ChatPage,
-}
 
 const portfolioModule: ViewModule<'portfolio'> = {
   kind: 'portfolio',
@@ -125,7 +106,6 @@ const settingsCategoryTitle: Record<
   general: 'Settings',
   'ai-provider': 'AI Provider',
   trading: 'Trading',
-  connectors: 'Connectors',
   mcp: 'MCP Server',
   'market-data': 'Market Data',
   'news-collector': 'News Sources',
@@ -136,7 +116,6 @@ function SettingsRouter({ spec }: ViewProps<'settings'>) {
     case 'general': return <SettingsPage />
     case 'ai-provider': return <AIProviderPage />
     case 'trading': return <TradingPage />
-    case 'connectors': return <ConnectorsPage />
     case 'mcp': return <MCPPage />
     case 'market-data': return <MarketDataPage />
     case 'news-collector': return <NewsCollectorPage />
@@ -174,13 +153,6 @@ const devModule: ViewModule<'dev'> = {
   title: (spec) => devTabTitle[spec.params.tab],
   toUrl: (spec) => `/dev/${spec.params.tab}`,
   Component: DevPage,
-}
-
-const notificationsInboxModule: ViewModule<'notifications-inbox'> = {
-  kind: 'notifications-inbox',
-  title: () => 'Notifications',
-  toUrl: () => '/notifications',
-  Component: NotificationsInboxPage,
 }
 
 const inboxModule: ViewModule<'inbox'> = {
@@ -233,7 +205,6 @@ const templateDetailModule: ViewModule<'template-detail'> = {
 // ==================== Aggregate ====================
 
 export const VIEWS = {
-  chat: chatModule,
   portfolio: portfolioModule,
   automation: automationModule,
   news: newsModule,
@@ -242,7 +213,6 @@ export const VIEWS = {
   settings: settingsModule,
   'uta-detail': utaDetailModule,
   dev: devModule,
-  'notifications-inbox': notificationsInboxModule,
   inbox: inboxModule,
   'workspace-list': workspaceListModule,
   workspace: workspaceModule,

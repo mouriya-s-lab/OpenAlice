@@ -26,16 +26,13 @@ export function UrlAdopter() {
   return (
     <>
       <Routes>
-        {/* Root → Inbox (Traditional Chat is legacy; Inbox is the
-            workspace-anchored landing now). */}
+        {/* Root → Inbox (the workspace-anchored landing). */}
         <Route path="/" element={<Navigate to="/inbox" replace />} />
 
         {/* Activities */}
-        {/* Traditional Chat is now in the ActivityBar's Legacy section —
-            redirect the bare /chat and /chat/:channelId URLs to /inbox so
-            UrlSync's writes from a previously-focused chat tab don't drag
-            users back into the legacy view on every reload. Traditional
-            Chat itself stays reachable via ActivityBar → Legacy. */}
+        {/* Legacy /chat URLs (the retired traditional-chat surface) →
+            Inbox, so any stale bookmark or persisted history entry lands
+            on the live surface instead of a 404. */}
         <Route path="/chat" element={<Navigate to="/inbox" replace />} />
         <Route path="/chat/:channelId" element={<Navigate to="/inbox" replace />} />
         <Route path="/portfolio" element={<AdoptStatic spec={{ kind: 'portfolio', params: {} }} />} />
@@ -51,18 +48,18 @@ export function UrlAdopter() {
         <Route path="/settings" element={<AdoptStatic spec={{ kind: 'settings', params: { category: 'general' } }} />} />
         <Route path="/settings/ai-provider" element={<AdoptStatic spec={{ kind: 'settings', params: { category: 'ai-provider' } }} />} />
         <Route path="/settings/trading" element={<AdoptStatic spec={{ kind: 'settings', params: { category: 'trading' } }} />} />
-        <Route path="/settings/connectors" element={<AdoptStatic spec={{ kind: 'settings', params: { category: 'connectors' } }} />} />
         <Route path="/settings/mcp" element={<AdoptStatic spec={{ kind: 'settings', params: { category: 'mcp' } }} />} />
         <Route path="/settings/market-data" element={<AdoptStatic spec={{ kind: 'settings', params: { category: 'market-data' } }} />} />
         <Route path="/settings/news-collector" element={<AdoptStatic spec={{ kind: 'settings', params: { category: 'news-collector' } }} />} />
         <Route path="/settings/uta/:id" element={<AdoptUtaDetail />} />
 
         {/* Dev */}
-        <Route path="/dev" element={<Navigate to="/dev/connectors" replace />} />
+        <Route path="/dev" element={<Navigate to="/dev/tools" replace />} />
         <Route path="/dev/:tab" element={<AdoptDev />} />
 
-        {/* Notifications inbox (legacy — Chat sidebar) */}
-        <Route path="/notifications" element={<AdoptStatic spec={{ kind: 'notifications-inbox', params: {} }} />} />
+        {/* Legacy /notifications (retired NotificationsStore inbox) →
+            the workspace-anchored Inbox. */}
+        <Route path="/notifications" element={<Navigate to="/inbox" replace />} />
 
         {/* Inbox (workspace-anchored, Linear-style) */}
         <Route path="/inbox" element={<AdoptStatic spec={{ kind: 'inbox', params: {} }} />} />
@@ -87,7 +84,6 @@ export function UrlAdopter() {
         <Route path="/ai-provider" element={<Navigate to="/settings/ai-provider" replace />} />
         <Route path="/trading" element={<Navigate to="/settings/trading" replace />} />
         <Route path="/trading-accounts" element={<Navigate to="/settings/trading" replace />} />
-        <Route path="/connectors" element={<Navigate to="/settings/connectors" replace />} />
         <Route path="/market-data" element={<Navigate to="/settings/market-data" replace />} />
         <Route path="/news-collector" element={<Navigate to="/settings/news-collector" replace />} />
         <Route path="/data-sources" element={<Navigate to="/settings/market-data" replace />} />
@@ -210,7 +206,6 @@ function SetSidebarOnly({ section }: { section: import('./types').ActivitySectio
 function specToSection(spec: ViewSpec): ActivitySection {
   switch (spec.kind) {
     case 'inbox':              return 'inbox'
-    case 'chat':               return 'traditional-chat'
     case 'workspace':
     case 'workspace-list':
     case 'template-catalog':
@@ -223,7 +218,6 @@ function specToSection(spec: ViewSpec): ActivitySection {
     case 'market-detail':      return 'market'
     case 'settings':           return 'settings'
     case 'dev':                return 'dev'
-    case 'notifications-inbox': return 'notifications-legacy'
   }
 }
 

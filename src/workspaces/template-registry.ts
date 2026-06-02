@@ -47,6 +47,21 @@ export interface TemplateMeta {
    * single-agent flow.
    */
   readonly defaultAgents: readonly string[];
+  /**
+   * Launcher-owned context injection, post-bootstrap, gated per template
+   * (defaults preserve each template's pre-standardization behavior):
+   *   injectMcp     — write the OpenAlice `.mcp.json`. `true` writes the full
+   *                   config (global tool server + workspace inbox server);
+   *                   `'inbox'` writes ONLY the inbox server (tools come from
+   *                   the `alice` CLI instead); `false` writes nothing.
+   *   injectPersona — compose Alice persona + this template's instruction.md
+   *                   into CLAUDE.md / AGENTS.md
+   *   bundledSkills — names under `default/skills/` to copy into the
+   *                   workspace's `.claude/skills` + `.agents/skills`
+   */
+  readonly injectMcp: boolean | 'inbox';
+  readonly injectPersona: boolean;
+  readonly bundledSkills: readonly string[];
 }
 
 /**
@@ -95,6 +110,9 @@ export class TemplateRegistry {
         ...(hasReadme ? { readmePath } : {}),
         version,
         defaultAgents: tplMeta.defaultAgents,
+        injectMcp: tplMeta.injectMcp,
+        injectPersona: tplMeta.injectPersona,
+        bundledSkills: tplMeta.bundledSkills,
       };
       reg.byName.set(name, meta);
     }
@@ -136,6 +154,9 @@ interface ParsedTemplateMeta {
   readonly displayName?: string;
   readonly groupOrder?: number;
   readonly defaultAgents: readonly string[];
+  readonly injectMcp: boolean | 'inbox';
+  readonly injectPersona: boolean;
+  readonly bundledSkills: readonly string[];
 }
 
 /**
@@ -187,7 +208,9 @@ function extractVersion(raw: string): string {
 }
 
 async function readTemplateMeta(path: string): Promise<ParsedTemplateMeta> {
-  const fallback: ParsedTemplateMeta = { defaultAgents: ['claude'] };
+  const fallback: ParsedTemplateMeta = {
+    defaultAgents: ['claude'], injectMcp: false, injectPersona: false, bundledSkills: [],
+  };
   try {
     if (!statSync(path).isFile()) return fallback;
   } catch {
@@ -207,11 +230,24 @@ async function readTemplateMeta(path: string): Promise<ParsedTemplateMeta> {
     const defaultAgents = Array.isArray(obj['defaultAgents'])
       ? obj['defaultAgents'].filter((a): a is string => typeof a === 'string')
       : null;
+    const injectMcp: boolean | 'inbox' =
+      obj['injectMcp'] === 'inbox' ? 'inbox' : obj['injectMcp'] === true;
+    const injectPersona = obj['injectPersona'] === true;
+    // Skill names become directory names under `.claude/skills/` — reject any
+    // with path separators / traversal as a defensive measure.
+    const bundledSkills = Array.isArray(obj['bundledSkills'])
+      ? obj['bundledSkills'].filter(
+          (s): s is string => typeof s === 'string' && !s.includes('/') && !s.includes('..'),
+        )
+      : [];
     return {
       ...(description !== undefined ? { description } : {}),
       ...(displayName !== undefined ? { displayName } : {}),
       ...(groupOrder !== undefined ? { groupOrder } : {}),
       defaultAgents: defaultAgents && defaultAgents.length > 0 ? defaultAgents : ['claude'],
+      injectMcp,
+      injectPersona,
+      bundledSkills,
     };
   } catch {
     return fallback;
