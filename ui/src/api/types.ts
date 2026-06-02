@@ -452,7 +452,7 @@ export interface BrokerPreset {
   defaultName: string
   badge: string
   badgeColor: string
-  engine: 'ccxt' | 'alpaca' | 'ibkr' | 'leverup' | 'longbridge' | 'mock'
+  engine: 'ccxt' | 'alpaca' | 'ibkr' | 'leverup' | 'longbridge' | 'futu' | 'mock'
   guardCategory: 'crypto' | 'securities'
   modes?: ModeOption[]
   subtitleFields: SubtitleField[]
@@ -469,6 +469,21 @@ export interface TestConnectionResult {
   error?: string
   account?: AccountInfo
   positions?: Position[]
+}
+
+/** One selectable business account from gateway-broker account discovery (Futu). */
+export interface BrokerAccountInfo {
+  accId: string
+  env: 'real' | 'simulate'
+  markets: string[]
+  accType?: string
+  label: string
+}
+
+export interface ListAccountsResult {
+  success: boolean
+  error?: string
+  accounts?: BrokerAccountInfo[]
 }
 
 // ==================== Order entry (frontend manual surface) ====================

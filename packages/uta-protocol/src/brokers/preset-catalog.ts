@@ -15,7 +15,7 @@ import { createHash, randomBytes } from 'node:crypto'
 
 // ==================== Types ====================
 
-export type BrokerEngine = 'ccxt' | 'alpaca' | 'ibkr' | 'leverup' | 'longbridge' | 'mock'
+export type BrokerEngine = 'ccxt' | 'alpaca' | 'ibkr' | 'leverup' | 'longbridge' | 'futu' | 'mock'
 
 export interface ModeOption {
   id: string
@@ -386,6 +386,46 @@ export const LONGBRIDGE_PRESET: BrokerPresetDef = {
   isPaper: (d) => d.mode === 'paper',
 }
 
+export const FUTU_PRESET: BrokerPresetDef = {
+  id: 'futu',
+  label: 'Futu / moomoo (HK / US / CN / SG)',
+  description: 'Futu OpenAPI via a local OpenD gateway — HK, US, CN A-shares (Stock Connect), and SG equities. One account per trading market.',
+  category: 'recommended',
+  hint: 'Futu requires a running **OpenD** gateway (desktop or headless) already logged into your Futu/moomoo account. This config points Alice at that gateway (host + port) and selects which market account to trade. **Live** trading needs your **trade unlock password**; Paper (Simulate) does not. One Futu account maps to one trading market — add separate accounts for HK vs US vs CN vs SG.',
+  defaultName: 'futu-main',
+  badge: 'FT',
+  badgeColor: 'text-accent',
+  engine: 'futu',
+  guardCategory: 'securities',
+  modes: [
+    { id: 'live', label: 'Live Trading' },
+    { id: 'paper', label: 'Paper Trading' },
+  ],
+  zodSchema: z.object({
+    mode: z.enum(['live', 'paper']).default('live').describe('Mode'),
+    market: z.enum(['HK', 'US', 'CN', 'SG', 'JP', 'AU', 'MY', 'CA']).default('HK').describe('Trading Market'),
+    host: z.string().min(1).default('127.0.0.1').describe('OpenD Host'),
+    port: z.coerce.number().int().positive().default(11111).describe('OpenD Port'),
+    unlockPwd: z.string().optional().describe('Trade Unlock Password (live only)'),
+    accId: z.string().optional().describe('Account ID (optional)'),
+  }),
+  subtitleFields: [
+    { field: 'market', prefix: 'Futu · ' },
+    { field: 'mode' },
+  ],
+  writeOnlyFields: ['unlockPwd'],
+  fingerprintFields: ['mode', 'market', 'host', 'port', 'accId'],
+  toEngineConfig: (d) => ({
+    host: d.host,
+    port: Number(d.port),
+    paper: d.mode === 'paper',
+    market: d.market,
+    unlockPwd: d.unlockPwd,
+    accId: d.accId,
+  }),
+  isPaper: (d) => d.mode === 'paper',
+}
+
 // ==================== Other ecosystem brokers (lower-tier, isolated) ====================
 
 export const LEVERUP_PRESET: BrokerPresetDef = {
@@ -462,6 +502,7 @@ export const BROKER_PRESET_CATALOG: BrokerPresetDef[] = [
   IBKR_PRESET,
   ALPACA_PRESET,
   LONGBRIDGE_PRESET,
+  FUTU_PRESET,
   HYPERLIQUID_PRESET,
   // ---- Crypto ----
   OKX_PRESET,
