@@ -14,7 +14,6 @@
  */
 
 export type ViewSpec =
-  | { kind: 'chat';           params: { channelId: string } }
   | { kind: 'workspace-list'; params: Record<string, never> }
   | { kind: 'workspace';      params: { wsId: string; sessionId?: string } }
   | { kind: 'template-catalog'; params: Record<string, never> }
@@ -24,10 +23,9 @@ export type ViewSpec =
   | { kind: 'news';           params: Record<string, never> }
   | { kind: 'market-list';    params: Record<string, never> }
   | { kind: 'market-detail';  params: { assetClass: 'equity' | 'crypto' | 'currency' | 'commodity'; symbol: string } }
-  | { kind: 'settings';       params: { category: 'general' | 'ai-provider' | 'trading' | 'connectors' | 'mcp' | 'market-data' | 'news-collector' } }
+  | { kind: 'settings';       params: { category: 'general' | 'ai-provider' | 'trading' | 'mcp' | 'market-data' | 'news-collector' } }
   | { kind: 'uta-detail';     params: { id: string } }
   | { kind: 'dev';            params: { tab: 'connectors' | 'tools' | 'sessions' | 'snapshots' | 'logs' | 'simulator' } }
-  | { kind: 'notifications-inbox'; params: Record<string, never> }
   | { kind: 'inbox';               params: Record<string, never> }
 
 export type ViewKind = ViewSpec['kind']
@@ -53,9 +51,6 @@ export type ActivitySection =
   | 'portfolio'
   | 'automation'
   | 'news'
-  | 'traditional-chat'
-  | 'notifications-legacy'
-  | 'connectors-legacy'
 
 export interface Tab {
   id: string

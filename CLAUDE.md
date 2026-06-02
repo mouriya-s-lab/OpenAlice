@@ -81,6 +81,23 @@ wiring. When working on one of these, read its guide first:
   list of files to touch for each kind of change, plus a "common pitfalls"
   section for the kinds of things AI sessions have historically half-done.
 
+- **Demo mode** — `ui/src/demo/` (MSW handlers + fixtures, deployed to
+  Vercel as the marketing demo). When you change a frontend surface that
+  uses `/api/*` — new endpoint, modified response shape, new UI page,
+  new sidebar item, retired surface — check that the corresponding
+  `ui/src/demo/handlers/<domain>.ts` still matches. Three recent crashes
+  (PRs #235, #238, #240) all came from this pattern: a refactor changed
+  what production code returns / expects, but the demo handler kept the
+  old (or invented an ad-hoc) shape, and `pnpm test` didn't catch it
+  because esbuild doesn't enforce types. Cheap habits that prevent this:
+  - When writing a demo handler, import the canonical type from
+    `ui/src/api/types.ts` (or wherever the contract lives), don't inline
+    an ad-hoc shape.
+  - `pnpm -F open-alice-ui dev:demo` and walk the affected surface
+    before declaring the refactor done. The `[demo] unmocked …` catchAll
+    `console.warn` log will surface endpoints you've added but not
+    mocked; visible crashes will surface shape mismatches.
+
 ## Surfacing future work — Linear, not TODO.md
 
 When a session notices something worth fixing later but **out of scope
@@ -179,12 +196,11 @@ src/                           # Alice process — agent runtime
 │                              #   (provider selection) + ToolCenter +
 │                              #   workspace-tool-center + InboxStore +
 │                              #   session store + event-log +
-│                              #   listener/producer. The legacy chat path
-│                              #   (agent-center.ts, connector-center.ts,
-│                              #   notifications-store.ts) also lives here
-│                              #   — still wired for Telegram / MCP Ask /
-│                              #   heartbeat, but no new work routes
-│                              #   through it.
+│                              #   listener/producer + agent-work
+│                              #   (autonomous-task runner: drives
+│                              #   GenerateRouter directly, delivers to
+│                              #   InboxStore) + ai-config (profile/
+│                              #   credential test path).
 ├── ai-providers/              # AI backend implementations.
 │   ├── agent-sdk/             # Claude via @anthropic-ai/claude-agent-sdk
 │   ├── codex/                 # OpenAI Codex CLI / API
@@ -203,9 +219,9 @@ src/                           # Alice process — agent runtime
 ├── tool/                      # AI tool definitions — thin bridges from
 │                              # domain → ToolCenter (trading, equity,
 │                              # market, analysis, news, economy,
-│                              # thinking, session, inbox-push,
-│                              # notify-user). trading.ts is now a thin
-│                              # HTTP-SDK wrapper, not a domain caller.
+│                              # thinking, inbox-push). trading.ts is now
+│                              # a thin HTTP-SDK wrapper, not a domain
+│                              # caller.
 ├── workspaces/                # Workspace launcher (cost-curve-inversion
 │                              # mechanism, see Key Architecture). Pool
 │                              # of PTY sessions, scrollback store,
@@ -220,15 +236,6 @@ src/                           # Alice process — agent runtime
 │                              #   shape: UTAManagerSDK + UTAAccountSDK
 │   └── uta-supervisor/        # health probe + restart-trigger
 │                              #   (flag-file protocol to Guardian)
-├── connectors/                # Legacy push channels for the traditional
-│                              #   chat path (ConnectorCenter routes
-│                              #   AgentCenter output here). Workspace
-│                              #   outputs do NOT route through these —
-│                              #   they go through InboxStore.
-│   ├── web/                   # Web UI chat-push adapter (SSE)
-│   ├── telegram/              # Telegram bot (grammY)
-│   ├── mcp-ask/               # MCP Ask connector
-│   └── mock/                  # Test connector
 ├── server/                    # In-process servers Alice exposes.
 │   ├── mcp.ts                 # MCP protocol server
 │   └── opentypebb.ts          # Mounted market-data routes
@@ -238,7 +245,7 @@ src/                           # Alice process — agent runtime
 │   ├── routes/                # ~23 route files; trading routes are
 │                              #   BFF-proxied to UTA, not handled here
 │   └── workspaces-ws.ts       # PTY WebSocket upgrade + auth gate
-├── migrations/                # Versioned data migrations (0001–0006).
+├── migrations/                # Versioned data migrations (0001–0007).
 │                              # See `## Migrations` for the rule.
 └── task/                      # cron, heartbeat, metrics
 
@@ -344,16 +351,17 @@ jump back into the workspace session and continue there.
 - `tool/inbox-push.ts` — the MCP tool registration, wired through
   `core/workspace-tool-center.ts` so the wsId is bound per workspace
   (the agent never traffics its own identity).
-- Distinct from the legacy chat path's notification surface
-  (`NotificationsStore` → connectors), which now sits demoted in the
-  Chat sidebar's Traditional section.
+- The Inbox is the only push surface. AgentWork's autonomous trigger
+  sources (cron / task) deliver here too, appending under a synthetic
+  `automation:<source>` workspace id.
 
 ### Provider routing — GenerateRouter (in flight)
 
 Scope note: the Workspace path runs the model loop **inside** the
 native CLI (`claude` / `codex`), so it does not touch this layer.
-GenerateRouter governs the legacy chat path and any code that calls
-Alice's in-process AI machinery directly.
+GenerateRouter governs AgentWork (heartbeat / cron autonomous runs),
+the profile/credential test path (`core/ai-config.ts`), and any other
+code that calls Alice's in-process AI machinery directly.
 
 > ⚠️ This layer is destined for redesign — the cross-shape assumptions
 > between Anthropic-API-shape and OpenAI-API-shape backends are
@@ -385,24 +393,16 @@ Workspace-scoped tool registration goes through
 polluting the global tool list) — this is how Trading-context
 injection actually lands inside a workspace.
 
-### Legacy chat path
+### Legacy chat path — removed (0.30.0)
 
-The pre-Workspace orchestration is still wired and still serves flows
-that have no terminal to host a CLI in (Telegram, MCP Ask, heartbeat /
-cron `notify_user` pings, the `/chat` SSE surface):
-
-- **AgentCenter** (`core/agent-center.ts`) — runs the AI loop with
-  session history + compaction, routes through GenerateRouter.
-- **ConnectorCenter** (`core/connector-center.ts`) — sends
-  AgentCenter's outbound messages to the last-interacted push channel
-  (`connectors/{web,telegram,mcp-ask}/`).
-- **NotificationsStore** (`core/notifications-store.ts`) — the
-  pre-Workspace notification surface.
-
-No new feature work should ride this path — see memory
-`project_automation_notifications_legacy`. The Workspace path bypasses
-all of it: the CLI runs the model loop, MCP carries tool calls, and
-InboxStore handles push.
+The pre-Workspace orchestration (AgentCenter, ConnectorCenter,
+NotificationsStore, the `notify_user` tool, `src/connectors/**`, the
+`/chat` SSE surface, and the Telegram / MCP-Ask connectors) was deleted
+in 0.30.0 — see migration 0007 and memory
+`project_agentcenter_retirement`. If you're hunting for where one of
+those symbols went: AgentWork now drives GenerateRouter directly and
+delivers to the InboxStore; the in-process AI loop is gone (the model
+loop runs inside the native workspace CLIs).
 
 ## Conventions
 

@@ -3,10 +3,9 @@ import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panel
 import { ActivityBar } from './components/ActivityBar'
 import { Sidebar } from './components/Sidebar'
 import { TabHost } from './components/TabHost'
-import { ChannelConfigModal } from './components/ChannelConfigModal'
 import { UpdateBanner } from './components/UpdateBanner'
 import { DemoBanner } from './demo/DemoBanner'
-import { ChannelsProvider, useChannels } from './contexts/ChannelsContext'
+import { DemoAnalytics } from './demo/DemoAnalytics'
 import { WorkspacesProvider } from './contexts/WorkspacesContext'
 import { findSectionForActivity } from './sections'
 import { UrlAdopter } from './tabs/UrlAdopter'
@@ -21,7 +20,6 @@ export type Page =
   | 'chat' | 'inbox' | 'workspaces' | 'portfolio' | 'news' | 'automation' | 'market'
   | 'trading-as-git'
   | 'settings' | 'dev'
-  | 'traditional-chat' | 'notifications-legacy' | 'connectors-legacy'
 
 /** Track whether we're at a desktop viewport (md+ in Tailwind = ≥768px). */
 function useIsDesktop(): boolean {
@@ -40,11 +38,9 @@ function useIsDesktop(): boolean {
 
 export function App() {
   return (
-    <ChannelsProvider>
-      <WorkspacesProvider>
-        <AppShell />
-      </WorkspacesProvider>
-    </ChannelsProvider>
+    <WorkspacesProvider>
+      <AppShell />
+    </WorkspacesProvider>
   )
 }
 
@@ -122,6 +118,7 @@ function AppShell() {
   return (
     <div className="flex flex-col h-full">
       {import.meta.env.VITE_DEMO_MODE && <DemoBanner />}
+      {import.meta.env.VITE_DEMO_MODE && <DemoAnalytics />}
       <UpdateBanner />
       <div className="flex flex-1 min-h-0">
         <ActivityBar
@@ -185,7 +182,6 @@ function AppShell() {
         )}
 
         <UrlAdopter />
-        <ChannelDialogMount />
       </div>
     </div>
   )
@@ -238,15 +234,3 @@ function MobileSecondaryDrawer({ open, section, onClose, onBack }: MobileSeconda
   )
 }
 
-/** Reads dialog state from ChannelsContext and mounts the modal accordingly. */
-function ChannelDialogMount() {
-  const { channelDialog, closeDialog, onChannelSaved } = useChannels()
-  if (!channelDialog) return null
-  return (
-    <ChannelConfigModal
-      channel={channelDialog.mode === 'edit' ? channelDialog.channel : undefined}
-      onClose={closeDialog}
-      onSaved={onChannelSaved}
-    />
-  )
-}

@@ -1,6 +1,5 @@
 import { useState, type MouseEvent, type WheelEvent } from 'react'
 import { X } from 'lucide-react'
-import { useChannels } from '../contexts/ChannelsContext'
 import { useWorkspaces } from '../contexts/WorkspacesContext'
 import { useWorkspace } from '../tabs/store'
 import { getView } from '../tabs/registry'
@@ -22,7 +21,6 @@ import { ContextMenu, type ContextMenuItem } from './ContextMenu'
  * would just be noise.
  */
 export function TabStrip() {
-  const { channels } = useChannels()
   const { workspaces } = useWorkspaces()
   const tabIds = useWorkspace((state) =>
     state.tree.kind === 'leaf' ? state.tree.group.tabIds : [],
@@ -103,7 +101,7 @@ export function TabStrip() {
           const tab = tabsMap[id]
           if (!tab) return null
           const view = getView(tab.spec.kind)
-          const title = view.title(tab.spec as never, { channels, workspaces })
+          const title = view.title(tab.spec as never, { workspaces })
           const isActive = id === activeTabId
           return (
             <TabButton

@@ -1,9 +1,13 @@
+import { rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import type { CliAdapter, SpawnContext } from '../cli-adapter.js';
+import type { CliAdapter, SpawnContext, WorkspaceAiCred } from '../cli-adapter.js';
+import { readWorkspaceFile, writeWorkspaceFile } from '../file-service.js';
 
 const SESSION_FILE_RE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i;
+
+const CLAUDE_SETTINGS_PATH = '.claude/settings.local.json';
 
 /** dashed-cwd convention used by Claude Code's project store. */
 function projectKey(workspaceDir: string): string {
@@ -50,6 +54,56 @@ export const claudeAdapter: CliAdapter = {
       );
     }
     return [...base, '--resume', ctx.resume.sessionId];
+  },
+
+  async writeAiConfig(cwd: string, cred: WorkspaceAiCred): Promise<void> {
+    const hasAny = cred.baseUrl || cred.apiKey || cred.model;
+    if (!hasAny) {
+      // Reset: delete the settings file so claude falls back to its global
+      // OAuth / settings. We don't leave an empty `{}` behind — workspace
+      // files exist only when there's an actual override.
+      const filePath = join(cwd, CLAUDE_SETTINGS_PATH);
+      await rm(filePath, { force: true });
+      return;
+    }
+    const out: Record<string, unknown> = {};
+    const env: Record<string, string> = {};
+    if (cred.baseUrl) env['ANTHROPIC_BASE_URL'] = cred.baseUrl;
+    // Write the key into exactly one env var. Bearer-mode gateways (MiniMax
+    // international, proxy front-ends) read ANTHROPIC_AUTH_TOKEN → the CLI sends
+    // `Authorization: Bearer`. Default x-api-key mode uses ANTHROPIC_API_KEY.
+    // Never write both: Claude Code warns on dual-set, and the two headers
+    // together can be rejected as ambiguous auth.
+    if (cred.apiKey) {
+      if (cred.authMode === 'bearer') env['ANTHROPIC_AUTH_TOKEN'] = cred.apiKey;
+      else env['ANTHROPIC_API_KEY'] = cred.apiKey;
+    }
+    if (Object.keys(env).length > 0) out['env'] = env;
+    if (cred.model) out['model'] = cred.model;
+    await writeWorkspaceFile(cwd, CLAUDE_SETTINGS_PATH, JSON.stringify(out, null, 2) + '\n');
+  },
+
+  async readAiConfig(cwd: string): Promise<WorkspaceAiCred | null> {
+    const raw = await readWorkspaceFile(cwd, CLAUDE_SETTINGS_PATH);
+    if (raw === null) return null;
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+    const env = (parsed['env'] ?? {}) as Record<string, unknown>;
+    const baseUrl = typeof env['ANTHROPIC_BASE_URL'] === 'string' ? (env['ANTHROPIC_BASE_URL'] as string) : null;
+    // The key lives in exactly one of two env vars depending on auth mode:
+    // ANTHROPIC_API_KEY → x-api-key header, ANTHROPIC_AUTH_TOKEN → Bearer.
+    // Which one is present tells us the mode to surface back to the modal.
+    const xApiKey = typeof env['ANTHROPIC_API_KEY'] === 'string' ? (env['ANTHROPIC_API_KEY'] as string) : null;
+    const authToken = typeof env['ANTHROPIC_AUTH_TOKEN'] === 'string' ? (env['ANTHROPIC_AUTH_TOKEN'] as string) : null;
+    const authMode: 'x-api-key' | 'bearer' = authToken !== null ? 'bearer' : 'x-api-key';
+    const apiKey = authToken ?? xApiKey;
+    const model = typeof parsed['model'] === 'string' ? (parsed['model'] as string) : null;
+    if (baseUrl === null && apiKey === null && model === null) return null;
+    return { baseUrl, apiKey, model, authMode };
   },
 
   transcriptDir(cwd: string): string {

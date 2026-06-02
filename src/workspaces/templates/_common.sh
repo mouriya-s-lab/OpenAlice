@@ -31,53 +31,9 @@ extract_ws_id() {
   basename "$out_dir"
 }
 
-# write_mcp_config <ws_id> <template_files_dir>
-# Reads $template_files_dir/mcp.json, substitutes __WS_ID__ -> $ws_id,
-# writes result to ./.mcp.json in the current dir. ${OPENALICE_MCP_URL}
-# placeholder is left intact for the agent CLI to evaluate at spawn time.
-write_mcp_config() {
-  local ws_id="${1:?write_mcp_config: ws_id required}"
-  local files_dir="${2:?write_mcp_config: template_files_dir required}"
-  local src="$files_dir/mcp.json"
-  if [[ ! -f "$src" ]]; then
-    echo "write_mcp_config: missing $src" >&2
-    exit 3
-  fi
-  sed "s|__WS_ID__|$ws_id|g" "$src" > .mcp.json
-}
-
-# compose_persona_claude_md <template_files_dir> [repo_root]
-# Composes ./CLAUDE.md as: Alice persona + "---" separator + template CLAUDE.md.
-# Persona source: prefers $repo_root/data/brain/persona.md (live user edit),
-# falls back to $repo_root/default/persona.default.md (shipped default).
-# If $repo_root is unset/missing, skips persona prepend gracefully — the
-# template's own CLAUDE.md is still written. Also copies the result to
-# AGENTS.md so Codex / other AGENTS.md-aware CLIs see the same identity.
-compose_persona_claude_md() {
-  local files_dir="${1:?compose_persona_claude_md: template_files_dir required}"
-  local repo_root="${2:-${AQ_LAUNCHER_REPO_ROOT:-}}"
-  local template_md="$files_dir/CLAUDE.md"
-  if [[ ! -f "$template_md" ]]; then
-    echo "compose_persona_claude_md: missing $template_md" >&2
-    exit 4
-  fi
-  local persona_src=""
-  if [[ -n "$repo_root" ]]; then
-    if [[ -f "$repo_root/data/brain/persona.md" ]]; then
-      persona_src="$repo_root/data/brain/persona.md"
-    elif [[ -f "$repo_root/default/persona.default.md" ]]; then
-      persona_src="$repo_root/default/persona.default.md"
-    fi
-  fi
-  {
-    if [[ -n "$persona_src" ]]; then
-      cat "$persona_src"
-      printf '\n\n---\n\n'
-    fi
-    cat "$template_md"
-  } > CLAUDE.md
-  cp CLAUDE.md AGENTS.md
-}
+# write_mcp_config + compose_persona_claude_md moved into the launcher
+# (src/workspaces/context-injector.ts) — the launcher now owns MCP and persona
+# injection, gated per template by template.json flags.
 
 # copy_readme [template_root]
 # Copies $template_root/README.md into the current dir (the workspace root)
@@ -108,6 +64,8 @@ copy_readme() {
 # Always includes:
 #   - .claude/settings.local.json   (workspace-specific Claude config)
 #   - .codex/auth.json              (workspace-local Codex auth)
+#   - .codex/env.json               (workspace-local Codex API-key bridge)
+#   - .codex/config.toml            (workspace-local Codex provider config)
 # Extra paths passed as args are appended too — useful for templates that
 # clone third-party content (e.g. finance-research clones .finance-skills/
 # and doesn't want git add . to swallow it).
@@ -120,21 +78,14 @@ setup_git_excludes() {
   {
     echo '.claude/settings.local.json'
     echo '.codex/auth.json'
+    echo '.codex/env.json'
+    echo '.codex/config.toml'
     for extra in "$@"; do
       echo "$extra"
     done
   } >> .git/info/exclude
 }
 
-# commit_initial <tag> <template_name>
-# `git add . && git commit` with a launcher-stamped author. Used by templates
-# that init their own git repo (chat, finance-research). auto-quant doesn't
-# call this — its `git clone --local` already produces a working tree at
-# the source's HEAD, and its bootstrap creates a new branch instead.
-commit_initial() {
-  local tag="${1:?commit_initial: tag required}"
-  local template_name="${2:?commit_initial: template_name required}"
-  git add .
-  git -c user.email=launcher@local -c user.name=launcher \
-      commit -q -m "$template_name: $tag"
-}
+# commit_initial moved into the launcher (workspace-creator.ts `commitInitial`).
+# Every workspace's initial commit is now made uniformly by the launcher after
+# context injection — the "Harness rule": fresh git, one clean initial commit.

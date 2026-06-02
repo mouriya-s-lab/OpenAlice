@@ -143,6 +143,9 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
       templateDir: '',
       version: '0.0.0',
       defaultAgents: ['claude'],
+      injectMcp: false,
+      injectPersona: false,
+      bundledSkills: [],
     });
   }
 
