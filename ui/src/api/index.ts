@@ -8,7 +8,6 @@ import { cronApi } from './cron'
 import { heartbeatApi } from './heartbeat'
 import { tradingApi } from './trading'
 import { marketDataApi } from './openbb'
-import { devApi } from './dev'
 import { toolsApi } from './tools'
 import { agentStatusApi } from './agentStatus'
 import { personaApi } from './persona'
@@ -16,6 +15,7 @@ import { newsApi } from './news'
 import { topologyApi } from './topology'
 import { marketApi } from './market'
 import { inboxApi } from './inbox'
+import { entitiesApi } from './entities'
 import { versionApi } from './version'
 export const api = {
   config: configApi,
@@ -24,7 +24,6 @@ export const api = {
   heartbeat: heartbeatApi,
   trading: tradingApi,
   marketData: marketDataApi,
-  dev: devApi,
   tools: toolsApi,
   agentStatus: agentStatusApi,
   persona: personaApi,
@@ -32,6 +31,7 @@ export const api = {
   topology: topologyApi,
   market: marketApi,
   inbox: inboxApi,
+  entities: entitiesApi,
   version: versionApi,
 }
 
