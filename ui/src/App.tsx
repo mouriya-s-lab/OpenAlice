@@ -11,6 +11,7 @@ import { findSectionForActivity } from './sections'
 import { UrlAdopter } from './tabs/UrlAdopter'
 import { useWorkspace } from './tabs/store'
 import { getFocusedTab } from './tabs/types'
+import { useLocale } from './i18n/useLocale'
 
 /**
  * Activity-bar pages — only items that appear as icons in the ActivityBar.
@@ -45,6 +46,9 @@ export function App() {
 }
 
 function AppShell() {
+  // Re-render the shell on a language switch so formatter-only subtrees
+  // (charts, money/date labels that don't call t()) refresh too.
+  useLocale()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [secondaryOpen, setSecondaryOpen] = useState(false)
   const selectedSidebar = useWorkspace((state) => state.selectedSidebar)

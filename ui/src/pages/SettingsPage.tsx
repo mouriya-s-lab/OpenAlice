@@ -7,6 +7,36 @@ import { ConfigSection, Field, inputClass } from '../components/form'
 import { useAutoSave } from '../hooks/useAutoSave'
 import { PageHeader } from '../components/PageHeader'
 import { PageLoading, EmptyState } from '../components/StateViews'
+import { useTranslation } from 'react-i18next'
+import { useLocale, useSetLocale, LOCALE_LABELS } from '../i18n/useLocale'
+
+// ==================== Language ====================
+
+function LanguageSection() {
+  const { t } = useTranslation()
+  const locale = useLocale()
+  const setLocale = useSetLocale()
+  return (
+    <ConfigSection title={t('settings.language.title')} description={t('settings.language.description')}>
+      <div className="flex gap-2 py-1">
+        {(['en', 'zh', 'ja'] as const).map((l) => (
+          <button
+            key={l}
+            type="button"
+            onClick={() => setLocale(l)}
+            className={`px-3 py-1.5 text-sm rounded border transition-colors ${
+              locale === l
+                ? 'border-accent text-accent bg-accent/10'
+                : 'border-border text-text-muted hover:text-text'
+            }`}
+          >
+            {LOCALE_LABELS[l]}
+          </button>
+        ))}
+      </div>
+    </ConfigSection>
+  )
+}
 
 // ==================== Settings Section ====================
 
@@ -22,6 +52,9 @@ function SettingsSection() {
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-[880px] mx-auto">
+        {/* Language */}
+        <LanguageSection />
+
         {/* Agent */}
         <ConfigSection title="Agent" description="Controls file-system and tool permissions for the AI. Changes apply on the next request.">
           <div className="flex items-center justify-between gap-4 py-1">
@@ -380,30 +413,31 @@ function ToolGroupCard({
 
 type Tab = 'settings' | 'tools'
 
-const TABS: { key: Tab; label: string }[] = [
-  { key: 'settings', label: 'Settings' },
-  { key: 'tools', label: 'Tools' },
+const TABS: { key: Tab; labelKey: 'settings.tab.settings' | 'settings.tab.tools' }[] = [
+  { key: 'settings', labelKey: 'settings.tab.settings' },
+  { key: 'tools', labelKey: 'settings.tab.tools' },
 ]
 
 export function SettingsPage() {
+  const { t } = useTranslation()
   const [tab, setTab] = useState<Tab>('settings')
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <PageHeader title="Settings" />
+      <PageHeader title={t('settings.title')} />
 
       <div className="px-4 md:px-6 border-b border-border/60">
         <div className="flex gap-1">
-          {TABS.map((t) => (
+          {TABS.map((item) => (
             <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
+              key={item.key}
+              onClick={() => setTab(item.key)}
               className={`px-3 py-2 text-sm font-medium transition-colors relative ${
-                tab === t.key ? 'text-accent' : 'text-text-muted hover:text-text'
+                tab === item.key ? 'text-accent' : 'text-text-muted hover:text-text'
               }`}
             >
-              {t.label}
-              {tab === t.key && (
+              {t(item.labelKey)}
+              {tab === item.key && (
                 <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-accent rounded-t" />
               )}
             </button>
