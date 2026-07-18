@@ -6,6 +6,7 @@ import { buildStaticManifest } from './static-inventory.js'
 import type { StaticColorManifest, StaticColorOccurrence } from './types.js'
 
 const ATTRIBUTE = 'data-openalice-color-audit'
+const VISUAL_SOURCE_ATTRIBUTE = 'data-openalice-visual-source'
 const VALUE_HOOK = '__OPENALICE_THEME_COLOR_CONSUME__'
 const WINNER_PREFIX = '--openalice-audit-winner-'
 
@@ -17,12 +18,19 @@ const AUDIT_OVERRIDE_PATHS = new Set([
 
 export function applyAuditRuntimeOverrides(path: string, code: string): string {
   if (path === 'ui/src/App.tsx') {
-    return code.replace("const firstRunGuideEnabled = import.meta.env.VITE_OPENALICE_FIRST_RUN_GUIDE === '1'", 'const firstRunGuideEnabled = true')
+    return `import { VisualCoverageHarness } from './demo/VisualCoverageHarness'\n${code}`
+      .replace("const firstRunGuideEnabled = import.meta.env.VITE_OPENALICE_FIRST_RUN_GUIDE === '1'", 'const firstRunGuideEnabled = true')
+      .replace('function AppShell() {', "function AppShell() {\n  if (new URLSearchParams(globalThis.location.search).get('visualCoverageHarness') === '1') return <VisualCoverageHarness />")
   }
   if (path === 'ui/src/components/FirstRunGuide.tsx') {
     return code
       .replace("const ONBOARDING_TEST_MODE = import.meta.env.VITE_OPENALICE_ONBOARDING_TEST === '1'", 'const ONBOARDING_TEST_MODE = true')
       .replace('parseFirstRunStepOverride(window.location.search, ONBOARDING_TEST_MODE)', "parseFirstRunStepOverride(window.location.search || window.sessionStorage.getItem('__OPENALICE_AUDIT_ONBOARDING_SEARCH__') || '', ONBOARDING_TEST_MODE)")
+  }
+  if (path === 'ui/src/components/UpdateBanner.tsx') {
+    return code
+      .replace('useState<VersionInfo | null>(null)', "useState<VersionInfo | null>(() => new URLSearchParams(location.search).get('updateBanner') === '1' ? { current: '0.1.0', latest: '9.9.9', hasUpdate: true, releaseUrl: 'https://example.invalid/release', publishedAt: '2026-07-18T00:00:00Z' } : null)")
+      .replace("api.version.get().then(setInfo).catch(() => {})", "if (new URLSearchParams(location.search).get('updateBanner') !== '1') api.version.get().then(setInfo).catch(() => {})")
   }
   if (path === 'ui/src/components/workspace/Terminal.tsx') {
     return code
@@ -96,6 +104,20 @@ function transformTs(path: string, code: string, occurrences: readonly StaticCol
   return replacements.sort((a, b) => b.start - a.start).reduce((result, item) => result.slice(0, item.start) + item.text + result.slice(item.end), code)
 }
 
+function instrumentVisualSources(path: string, code: string): string {
+  if (!path.endsWith('.tsx') || (!path.startsWith('ui/src/components/') && !path.startsWith('ui/src/pages/'))) return code
+  const file = ts.createSourceFile(path, code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  const insertions: number[] = []
+  const visit = (node: ts.Node): void => {
+    if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && /^[a-z]/.test(node.tagName.getText(file))) {
+      if (!node.attributes.properties.some((property) => ts.isJsxAttribute(property) && property.name.getText(file) === VISUAL_SOURCE_ATTRIBUTE)) insertions.push(node.attributes.end)
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(file)
+  return insertions.sort((a, b) => b - a).reduce((result, offset) => result.slice(0, offset) + ` ${VISUAL_SOURCE_ATTRIBUTE}=${JSON.stringify(path)}` + result.slice(offset), code)
+}
+
 function transformCss(path: string, code: string, occurrences: readonly StaticColorOccurrence[]): string {
   const root = postcss.parse(code, { from: path })
   const declarations: import('postcss').Declaration[] = []
@@ -125,8 +147,10 @@ export function themeColorAuditPlugin(repoRoot: string): Plugin {
       if (!id.startsWith(resolve(repoRoot, 'ui/src'))) return null
       const path = repoPath(repoRoot, id)
       const occurrences = manifest.occurrences.filter((entry) => entry.sourceClass === 'runtime' && entry.role === 'color-consumer' && entry.path === path)
-      if (occurrences.length === 0 && !AUDIT_OVERRIDE_PATHS.has(path)) return null
+      const visualSource = path.endsWith('.tsx') && (path.startsWith('ui/src/components/') || path.startsWith('ui/src/pages/'))
+      if (occurrences.length === 0 && !AUDIT_OVERRIDE_PATHS.has(path) && !visualSource) return null
       let transformed = occurrences.length === 0 ? code : path.endsWith('.css') ? transformCss(path, code, occurrences) : transformTs(path, code, occurrences)
+      transformed = instrumentVisualSources(path, transformed)
       if (path === 'ui/src/index.css') {
         const utilities = [...new Set(manifest.occurrences.filter((entry) => entry.syntaxKind === 'tailwind-palette-utility').map((entry) => entry.sourceText))]
         transformed += `\n@source inline(${JSON.stringify(utilities.join(' '))});\n`
