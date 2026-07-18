@@ -74,7 +74,14 @@ async function capture(): Promise<void> {
       const name = `${safe(owner.source)}--${safe(scenario.scenarioId)}--${theme}.png`; const path = resolve(outputRoot, 'images', name)
       const locator = page.locator(owner.selector).filter({ visible: true }).first(); const box = await locator.boundingBox()
       if (!box || box.width <= 0 || box.height <= 0) throw new Error(`zero or hidden target: ${visualUnitId}`)
-      const buffer = await locator.screenshot({ type: 'png' }); await writeFile(path, buffer)
+      await locator.evaluate((element, labelText) => {
+        const label = document.createElement('span'); label.dataset['openaliceVisualCaptureLabel'] = '1'; label.textContent = labelText
+        Object.assign(label.style, { position: 'absolute', inset: '2px auto auto 2px', zIndex: '2147483647', maxWidth: '90%', overflow: 'hidden', padding: '2px 4px', background: 'rgb(255,45,85)', color: 'white', font: 'bold 10px/12px ui-monospace, monospace', pointerEvents: 'none' })
+        const html = element as HTMLElement; if (getComputedStyle(html).position === 'static') html.style.position = 'relative'; html.style.outline = '3px solid rgb(255,45,85)'; html.append(label)
+      }, visualUnitId)
+      const buffer = await locator.screenshot({ type: 'png' })
+      await locator.evaluate((element) => { element.querySelector('[data-openalice-visual-capture-label]')?.remove(); const html = element as HTMLElement; html.style.removeProperty('outline'); html.style.removeProperty('position') })
+      await writeFile(path, buffer)
       screenshots.push({ source: owner.source, visualUnitId, scenarioId: scenario.scenarioId, state: scenario.state, fixture: scenario.fixtureProfile, actions: scenario.actions, theme, viewport: scenario.viewport, surface: scenario.expectedSurface, selector: owner.selector, bounds: box, path: `images/${name}`, sha256: hash(buffer), pixelWidth: Math.round(box.width), pixelHeight: Math.round(box.height) })
     }
   }
