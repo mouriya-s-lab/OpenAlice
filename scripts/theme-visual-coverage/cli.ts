@@ -65,10 +65,9 @@ async function visibleOwners(page: Page): Promise<Array<{ source: string; select
 
 async function capture(): Promise<void> {
   await rm(outputRoot, { recursive: true, force: true }); await mkdir(resolve(outputRoot, 'images'), { recursive: true })
-  const list = await buildVisualCandidates(); const screenshots: Shot[] = []; const scenarioErrors: Array<{ scenarioId: string; theme: string; error: string }> = []
-  await buildBindings({ scenarios: themeVisualScenarios, skipBindingCompleteness: true, onScenarioError: async (scenario, theme, error) => {
-    scenarioErrors.push({ scenarioId: scenario.scenarioId, theme, error: error instanceof Error ? error.message : String(error) })
-  }, onScenario: async (page, scenario, theme) => {
+  const list = await buildVisualCandidates(); const screenshots: Shot[] = []; const errorByRun = new Map<string, { scenarioId: string; theme: string; error: string }>()
+  const onScenario = async (page: Page, scenario: (typeof themeVisualScenarios)[number], theme: 'light' | 'dark'): Promise<void> => {
+    errorByRun.delete(`${scenario.scenarioId}:${theme}`)
     for (const owner of await visibleOwners(page)) {
       const visualUnitId = `${owner.source}::${scenario.state}::${scenario.viewport.width}x${scenario.viewport.height}::${scenario.expectedSurface}`
       if (screenshots.some((item) => item.visualUnitId === visualUnitId && item.theme === theme)) continue
@@ -78,7 +77,15 @@ async function capture(): Promise<void> {
       const buffer = await locator.screenshot({ type: 'png' }); await writeFile(path, buffer)
       screenshots.push({ source: owner.source, visualUnitId, scenarioId: scenario.scenarioId, state: scenario.state, fixture: scenario.fixtureProfile, actions: scenario.actions, theme, viewport: scenario.viewport, surface: scenario.expectedSurface, selector: owner.selector, bounds: box, path: `images/${name}`, sha256: hash(buffer), pixelWidth: Math.round(box.width), pixelHeight: Math.round(box.height) })
     }
-  } })
+  }
+  const run = async (scenarios: readonly (typeof themeVisualScenarios)[number][]): Promise<void> => buildBindings({ scenarios, skipBindingCompleteness: true,
+    onScenarioError: async (scenario, theme, error) => { errorByRun.set(`${scenario.scenarioId}:${theme}`, { scenarioId: scenario.scenarioId, theme, error: error instanceof Error ? error.message : String(error) }) },
+    onScenario,
+  }).then(() => undefined)
+  await run(themeVisualScenarios)
+  const failedIds = new Set([...errorByRun.values()].map((item) => item.scenarioId))
+  if (failedIds.size) await run(themeVisualScenarios.filter((scenario) => failedIds.has(scenario.scenarioId)))
+  const scenarioErrors = [...errorByRun.values()]
   const visual = list.filter((item) => item.classification === 'visual'); const covered = new Set(screenshots.map((item) => item.source)); const uncovered = visual.filter((item) => !covered.has(item.source))
   const manifest: Manifest = { schemaVersion: 1, sourceCommit: sourceCommit(), candidates: list, screenshots, summary: { total: visual.length, covered: covered.size, uncovered: uncovered.length, excluded: list.length - visual.length } }
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
