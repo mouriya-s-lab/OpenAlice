@@ -212,7 +212,7 @@ const allThemeColorScenarios = [
     stateDriver: "fixture",
     themes,
     viewport: desktop,
-    ready: { role: "button", name: "Resume p-audit" },
+    ready: { role: "main" },
     actions: [{ kind: "click", role: "button", name: "Resume p-audit" }],
     expectedSurface: "dom-or-css",
     inventoryIds: ids["workspace-terminal"],
