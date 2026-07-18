@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { readAppearancePreferences, saveAppearancePreferences } from '../preferences.js'
-import { migrateThemeFileState } from '../../migrations/0024_theme_file_state/index.js'
+import { migrateThemeFileState } from '../../migrations/0025_theme_file_state/index.js'
 import { createThemeRoutes } from '../../webui/routes/themes.js'
 import {
   deleteThemeFamily,

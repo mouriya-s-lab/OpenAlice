@@ -14,10 +14,12 @@ import {
 import { attachWebglRenderer } from './renderer';
 import {
   describeTerminalInput,
-  keySignature,
   TERMINAL_FONT_FAMILY,
-  type KeyMap,
 } from './terminalInput';
+import {
+  installTerminalKeyboardController,
+} from './terminal-keyboard-controller';
+import { TerminalKittyKeyboardModeTracker } from './terminal-kitty-keyboard-mode-tracker';
 import {
   applyTerminalTheme,
   useResolvedTerminalTheme,
@@ -33,9 +35,7 @@ const DemoTerminalReplay = lazy(() =>
   import('../../demo/DemoTerminalReplay').then((m) => ({ default: m.DemoTerminalReplay })),
 );
 
-export type { KeyMap } from './terminalInput';
-
-type Status = 'connecting' | 'reconnecting' | 'connected' | 'closed' | 'kicked' | 'locked';
+type Status = 'connecting' | 'reconnecting' | 'connected' | 'closed' | 'error' | 'kicked' | 'locked';
 
 interface SocketMessageEventLike {
   readonly data: unknown;
@@ -177,11 +177,6 @@ export interface TerminalViewProps {
   readonly label?: string;
   /** WebSocket URL base. Defaults to `${ws/wss}://${location.host}/pty`. */
   readonly wsUrl?: string;
-  /**
-   * Pre-xterm keydown interceptor. See `KeyMap`. Changing this prop does NOT
-   * tear down the WebSocket — updates apply on the next keystroke.
-   */
-  readonly keyMap?: KeyMap;
   /** OpenTUI currently corrupts to an all-black canvas in xterm's WebGL addon. */
   readonly renderer?: 'auto' | 'dom';
   /**
@@ -219,8 +214,6 @@ export function TerminalView(props: TerminalViewProps): ReactElement {
   const controllerIdRef = useRef<string>('');
   if (!controllerIdRef.current) controllerIdRef.current = getTerminalControllerId();
 
-  const keyMapRef = useRef<KeyMap | undefined>(props.keyMap);
-  keyMapRef.current = props.keyMap;
   const onAttachedRef = useRef<TerminalViewProps['onAttached']>(props.onAttached);
   onAttachedRef.current = props.onAttached;
   const onSessionLostRef = useRef<TerminalViewProps['onSessionLost']>(props.onSessionLost);
@@ -258,8 +251,15 @@ export function TerminalView(props: TerminalViewProps): ReactElement {
       cursorBlink: true,
       allowProposedApi: true,
       scrollback: 10_000,
-      macOptionIsMeta: true,
+      // Keep Option available to non-US layouts for composed text. Kitty
+      // reporting handles modified keys without treating Option as Meta.
+      macOptionIsMeta: false,
       convertEol: false,
+      // Advertise enhanced keyboard support so terminal apps can negotiate
+      // CSI-u key reporting (notably Shift+Enter and key release handling).
+      vtExtensions: {
+        kittyKeyboard: true,
+      },
       // OpenCode/OpenTUI requests the text-area pixel geometry (CSI 14 t)
       // before completing a redraw. xterm.js gates these reports off by
       // default because some window queries may expose host information. These
@@ -286,8 +286,9 @@ export function TerminalView(props: TerminalViewProps): ReactElement {
     let lastRows = term.rows;
 
     // Always cold attach: each TerminalView mount creates a fresh xterm
-    // instance with no in-memory history, so the server must replay the full
-    // buffer every time. (An earlier `since=<lastSeq>` localStorage scheme
+    // instance with no in-memory history, so the server must restore its
+    // authoritative headless snapshot every time. (An earlier
+    // `since=<lastSeq>` localStorage scheme
     // was wrong: it would correctly skip bytes the xterm already had, but
     // since the xterm was newly mounted there were none to skip — the user
     // ended up with a blank pane after switching workspaces.)
@@ -320,6 +321,8 @@ export function TerminalView(props: TerminalViewProps): ReactElement {
     };
 
     const encoder = new TextEncoder();
+    let kittyKeyboardDecoder = new TextDecoder();
+    const kittyKeyboardMode = new TerminalKittyKeyboardModeTracker();
     const debugInput = (): boolean => {
       try {
         return localStorage.getItem('openalice.terminal.debugInput') === '1';
@@ -348,6 +351,7 @@ export function TerminalView(props: TerminalViewProps): ReactElement {
     };
 
     const writeToTerm = (data: Uint8Array): void => {
+      kittyKeyboardMode.scan(kittyKeyboardDecoder.decode(data, { stream: true }));
       try {
         term.write(data);
       } catch (err) {
@@ -364,47 +368,24 @@ export function TerminalView(props: TerminalViewProps): ReactElement {
       }
     };
 
-    let suppressNextKeypress = false;
-    let suppressNextKeypressTimer: ReturnType<typeof setTimeout> | undefined;
-
-    const armSuppressNextKeypress = (): void => {
-      suppressNextKeypress = true;
-      if (suppressNextKeypressTimer) clearTimeout(suppressNextKeypressTimer);
-      suppressNextKeypressTimer = setTimeout(() => {
-        suppressNextKeypress = false;
-        suppressNextKeypressTimer = undefined;
-      }, 50);
-    };
-
-    const clearSuppressNextKeypress = (): void => {
-      suppressNextKeypress = false;
-      if (suppressNextKeypressTimer) clearTimeout(suppressNextKeypressTimer);
-      suppressNextKeypressTimer = undefined;
-    };
-
-    term.attachCustomKeyEventHandler((event) => {
-      if (event.type !== 'keydown') return true;
-      const signature = keySignature(event);
-      const map = keyMapRef.current;
-      if (map === undefined) return true;
-      const bytes = map[signature];
-      if (bytes === undefined) return true;
-      armSuppressNextKeypress();
-      event.preventDefault();
-      event.stopPropagation();
-      logInput(`key:${signature}`, bytes);
-      sendStdin(bytes);
-      return false;
+    const keyboardController = installTerminalKeyboardController({
+      terminalElement: term.element,
+      hasSelection: () => term.hasSelection(),
+      isKittyKeyboardActive: () => kittyKeyboardMode.flags > 0,
+      sendInput: (data, source) => {
+        logInput(source, data);
+        const ws = activeWs;
+        if (ws && ws.readyState === ws.OPEN) ws.send(encoder.encode(data));
+      },
+      resetKittyProtocol: () => {
+        // A TUI can exit on Ctrl+C before restoring its negotiated renderer
+        // flags. Reset xterm's local keyboard state for the resumed shell.
+        queueMicrotask(() => {
+          if (!teardown) term.write('\x1b[<99u\x1b[=0u');
+        });
+      },
     });
-
-    const suppressMappedKeypress = (event: KeyboardEvent): void => {
-      if (!suppressNextKeypress) return;
-      clearSuppressNextKeypress();
-      event.preventDefault();
-      event.stopPropagation();
-    };
-
-    container.addEventListener('keypress', suppressMappedKeypress, true);
+    term.attachCustomKeyEventHandler(keyboardController.handle);
 
     const handleResize = (): void => {
       safeFit(fit);
@@ -436,6 +417,8 @@ export function TerminalView(props: TerminalViewProps): ReactElement {
 
     function connect(): void {
       if (teardown) return;
+      kittyKeyboardMode.reset();
+      kittyKeyboardDecoder = new TextDecoder();
       const previousWs = activeWs;
       activeWs = null;
       try {
@@ -463,9 +446,9 @@ export function TerminalView(props: TerminalViewProps): ReactElement {
         attempts = 0;
         takeoverNextAttachRef.current = false;
         // A reconnect re-attaches to a live xterm that already shows the
-        // pre-drop screen, but the server cold-replays its full ring buffer on
-        // every attach. Reset first so the replay repaints cleanly instead of
-        // duplicating scrollback. (First connect: xterm is already blank.)
+        // pre-drop screen, but the server restores its current snapshot on
+        // every attach. Reset first so the snapshot repaints cleanly instead
+        // of duplicating scrollback. (First connect: xterm is already blank.)
         if (hasConnectedOnce) term.reset();
         hasConnectedOnce = true;
         setStatus('connected');
@@ -483,6 +466,7 @@ export function TerminalView(props: TerminalViewProps): ReactElement {
             case 'attached':
               setPid(msg.pid);
               setScrollbackTruncated(msg.scrollbackTruncated);
+              kittyKeyboardMode.scan(`\x1b[=${msg.kittyKeyboardFlags};1u`);
               onAttachedRef.current?.(msg.sessionId);
               break;
             case 'cursor':
@@ -577,9 +561,8 @@ export function TerminalView(props: TerminalViewProps): ReactElement {
       if (pendingWriteFrame !== undefined) cancelAnimationFrame(pendingWriteFrame);
       stdinSub.dispose();
       binarySub.dispose();
-      clearSuppressNextKeypress();
+      keyboardController.dispose();
       resizeObserver?.disconnect();
-      container.removeEventListener('keypress', suppressMappedKeypress, true);
       window.removeEventListener('resize', handleResize);
       try {
         activeWs?.close();

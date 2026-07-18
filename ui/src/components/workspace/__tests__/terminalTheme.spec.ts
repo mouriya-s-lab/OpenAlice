@@ -94,7 +94,7 @@ describe('terminal theme helpers', () => {
     ])
     expect(profile.statusColors).toEqual({
       connecting: '#f7ca88', reconnecting: '#f7ca88',
-      connected: '#a1b56c', closed: '#101010',
+      connected: '#a1b56c', closed: '#101010', error: '#ab4642',
       kicked: '#ba8baf', locked: '#ba8baf',
     })
   })

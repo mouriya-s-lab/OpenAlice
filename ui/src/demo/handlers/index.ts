@@ -17,7 +17,7 @@ import { headlessHandlers } from './headless'
 import { preferencesHandlers } from './preferences'
 import { inquiryHandlers } from './inquiries'
 import { themesHandlers } from './themes'
-import { connectorHandlers } from './connectors'
+import { connectorsHandlers } from './connectors'
 import { catchAllHandlers } from './catchAll'
 
 // Order matters: catchAll must be LAST. MSW resolves handlers in registration
@@ -43,6 +43,6 @@ export const handlers = [
   ...preferencesHandlers,
   ...inquiryHandlers,
   ...themesHandlers,
-  ...connectorHandlers,
+  ...connectorsHandlers,
   ...catchAllHandlers,
 ]
