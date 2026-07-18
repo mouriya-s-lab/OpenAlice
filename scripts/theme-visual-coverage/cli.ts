@@ -64,7 +64,9 @@ async function visibleOwners(page: Page): Promise<Array<{ source: string; select
 }
 
 async function capture(): Promise<void> {
-  await rm(outputRoot, { recursive: true, force: true }); await mkdir(resolve(outputRoot, 'images'), { recursive: true })
+  const resume = process.env['VISUAL_RESUME'] === '1'
+  if (!resume) await rm(outputRoot, { recursive: true, force: true })
+  await mkdir(resolve(outputRoot, 'images'), { recursive: true })
   const list = await buildVisualCandidates(); const screenshots: Shot[] = []; const errorByRun = new Map<string, { scenarioId: string; theme: string; error: string }>()
   const onScenario = async (page: Page, scenario: (typeof themeVisualScenarios)[number], theme: 'light' | 'dark'): Promise<void> => {
     errorByRun.delete(`${scenario.scenarioId}:${theme}`)
@@ -74,6 +76,13 @@ async function capture(): Promise<void> {
       const name = `${safe(owner.source)}--${safe(scenario.scenarioId)}--${theme}.png`; const path = resolve(outputRoot, 'images', name)
       const locator = page.locator(owner.selector).filter({ visible: true }).first(); const box = await locator.boundingBox()
       if (!box || box.width <= 0 || box.height <= 0) throw new Error(`zero or hidden target: ${visualUnitId}`)
+      if (resume) {
+        const existing = await readFile(path).catch(() => null)
+        if (existing) {
+          screenshots.push({ source: owner.source, visualUnitId, scenarioId: scenario.scenarioId, state: scenario.state, fixture: scenario.fixtureProfile, actions: scenario.actions, theme, viewport: scenario.viewport, surface: scenario.expectedSurface, selector: owner.selector, bounds: box, path: `images/${name}`, sha256: hash(existing), pixelWidth: Math.round(box.width), pixelHeight: Math.round(box.height) })
+          continue
+        }
+      }
       await locator.evaluate((element, labelText) => {
         const label = document.createElement('span'); label.dataset['openaliceVisualCaptureLabel'] = '1'; label.textContent = labelText
         Object.assign(label.style, { position: 'absolute', inset: '2px auto auto 2px', zIndex: '2147483647', maxWidth: '90%', overflow: 'hidden', padding: '2px 4px', background: 'rgb(255,45,85)', color: 'white', font: 'bold 10px/12px ui-monospace, monospace', pointerEvents: 'none' })
