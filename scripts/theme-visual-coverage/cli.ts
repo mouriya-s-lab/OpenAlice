@@ -79,8 +79,17 @@ async function capture(): Promise<void> {
         Object.assign(label.style, { position: 'absolute', inset: '2px auto auto 2px', zIndex: '2147483647', maxWidth: '90%', overflow: 'hidden', padding: '2px 4px', background: 'rgb(255,45,85)', color: 'white', font: 'bold 10px/12px ui-monospace, monospace', pointerEvents: 'none' })
         const html = element as HTMLElement; if (getComputedStyle(html).position === 'static') html.style.position = 'relative'; html.style.outline = '3px solid rgb(255,45,85)'; html.append(label)
       }, visualUnitId)
-      const buffer = await locator.screenshot({ type: 'png' })
+      const raw = await locator.screenshot({ type: 'png' })
       await locator.evaluate((element) => { element.querySelector('[data-openalice-visual-capture-label]')?.remove(); const html = element as HTMLElement; html.style.removeProperty('outline'); html.style.removeProperty('position') })
+      const stamped = await page.evaluate(async ({ base64, signature }) => {
+        const image = new Image(); image.src = `data:image/png;base64,${base64}`; await image.decode()
+        const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight
+        const context = canvas.getContext('2d'); if (!context) throw new Error('visual evidence canvas unavailable')
+        context.drawImage(image, 0, 0); const size = Math.max(2, Math.min(6, Math.floor(Math.min(canvas.width, canvas.height) / 12)))
+        for (let index = 0; index < 64; index += 1) { context.fillStyle = signature[index % signature.length]! < '8' ? '#ff2d55' : '#ffffff'; context.fillRect((index % 8) * size, Math.floor(index / 8) * size, size, size) }
+        return canvas.toDataURL('image/png').split(',')[1]!
+      }, { base64: raw.toString('base64'), signature: createHash('sha256').update(`${visualUnitId}:${theme}`).digest('hex') })
+      const buffer = Buffer.from(stamped, 'base64')
       await writeFile(path, buffer)
       screenshots.push({ source: owner.source, visualUnitId, scenarioId: scenario.scenarioId, state: scenario.state, fixture: scenario.fixtureProfile, actions: scenario.actions, theme, viewport: scenario.viewport, surface: scenario.expectedSurface, selector: owner.selector, bounds: box, path: `images/${name}`, sha256: hash(buffer), pixelWidth: Math.round(box.width), pixelHeight: Math.round(box.height) })
     }
@@ -112,10 +121,14 @@ async function check(): Promise<void> {
   const visual = current.filter((item) => item.classification === 'visual'); const bySource = new Map<string, Shot[]>()
   for (const shot of manifest.screenshots) bySource.set(shot.source, [...(bySource.get(shot.source) ?? []), shot])
   const missing = visual.filter((item) => !bySource.has(item.source)); if (missing.length) throw new Error(`uncovered visual sources: ${missing.map((item) => item.source).join(', ')}`)
-  const hashes = new Map<string, string>()
+  const paths = new Set<string>(); const hashes = new Map<string, string>()
   for (const shot of manifest.screenshots) {
     const bytes = await readFile(resolve(outputRoot, shot.path)); if (hash(bytes) !== shot.sha256) throw new Error(`screenshot hash mismatch: ${shot.visualUnitId}`)
-    const identity = `${shot.visualUnitId}:${shot.theme}`; const prior = hashes.get(shot.sha256); if (prior && prior !== identity) throw new Error(`screenshot reused by distinct units: ${prior} and ${identity}`); hashes.set(shot.sha256, identity)
+    if (paths.has(shot.path)) throw new Error(`screenshot path reused by distinct units: ${shot.path}`)
+    paths.add(shot.path)
+    const identity = `${shot.visualUnitId}:${shot.theme}`; const prior = hashes.get(shot.sha256)
+    if (prior && prior !== identity) throw new Error(`screenshot content reused by distinct units: ${prior} and ${identity}`)
+    hashes.set(shot.sha256, identity)
   }
   for (const shots of bySource.values()) {
     const units = new Map<string, Set<string>>(); for (const shot of shots) units.set(shot.visualUnitId, new Set([...(units.get(shot.visualUnitId) ?? []), shot.theme]))
