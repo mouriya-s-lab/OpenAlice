@@ -31,7 +31,7 @@ export async function migrateThemeFileState(dataDirectory: string): Promise<bool
 }
 
 export const migration: Migration = {
-  id: '0024_theme_file_state',
+  id: '0025_theme_file_state',
   appVersion: '0.83.0-beta',
   introducedAt: '2026-07-18',
   affects: ['data/preferences.json', 'data/themes/*.json'],

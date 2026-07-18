@@ -26,6 +26,7 @@ export interface TerminalStatusColors {
   readonly reconnecting: RgbHex
   readonly connected: RgbHex
   readonly closed: RgbHex
+  readonly error: RgbHex
   readonly kicked: RgbHex
   readonly locked: RgbHex
 }
@@ -106,6 +107,7 @@ export function terminalThemeProfileForVariant(variant: ThemeVariant): TerminalT
       reconnecting: variant.palette.base0A,
       connected: variant.palette.base0B,
       closed: variant.palette.base00,
+      error: variant.tokens.danger,
       kicked: variant.palette.base0E,
       locked: variant.palette.base0E,
     },

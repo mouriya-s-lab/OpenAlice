@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { migrateThemeFileState } from './0024_theme_file_state/index.js'
+import { migrateThemeFileState } from './0025_theme_file_state/index.js'
 
 const roots: string[] = []
 
@@ -11,7 +11,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 })
 
-describe('0024 theme file state migration', () => {
+describe('0025 theme file state migration', () => {
   it('creates theme storage and seeds appearance without disturbing preferences', async () => {
     const data = await makeData()
     await writeFile(join(data, 'preferences.json'), JSON.stringify({
