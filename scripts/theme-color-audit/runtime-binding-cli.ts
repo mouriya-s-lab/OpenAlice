@@ -215,6 +215,10 @@ export interface RuntimeCaptureEvent {
 
 export interface RuntimeBindingOptions {
   readonly onBinding?: (event: RuntimeCaptureEvent) => Promise<void>
+  readonly onScenario?: (page: Page, scenario: ThemeColorScenario, theme: 'light' | 'dark') => Promise<void>
+  readonly scenarios?: readonly ThemeColorScenario[]
+  readonly onScenarioError?: (scenario: ThemeColorScenario, theme: 'light' | 'dark', error: unknown) => Promise<void>
+  readonly skipBindingCompleteness?: boolean
 }
 
 export async function buildBindings(options: RuntimeBindingOptions = {}): Promise<RuntimeBindingManifest> {
@@ -232,9 +236,10 @@ export async function buildBindings(options: RuntimeBindingOptions = {}): Promis
     await waitForServer(); const browser = await chromium.launch({ headless: true, channel: process.env['PLAYWRIGHT_CHANNEL'] ?? 'chrome' })
     const bindings: RuntimeColorBinding[] = []
     try {
+      const requestedScenarios = options.scenarios ?? themeColorScenarios
       const selectedScenarios = process.env['AUDIT_SCENARIO']
-        ? themeColorScenarios.filter((scenario) => scenario.scenarioId === process.env['AUDIT_SCENARIO'])
-        : themeColorScenarios
+        ? requestedScenarios.filter((scenario) => scenario.scenarioId === process.env['AUDIT_SCENARIO'])
+        : requestedScenarios
       for (const scenario of selectedScenarios) for (const theme of scenario.themes) {
         console.log(`binding ${scenario.scenarioId} ${theme}`)
         const context = await browser.newContext({ viewport: scenario.viewport, colorScheme: theme })
@@ -291,6 +296,7 @@ export async function buildBindings(options: RuntimeBindingOptions = {}): Promis
           // intentionally an origin-less sandbox, where storage access throws.
           if (globalThis === globalThis.top) localStorage.setItem('openalice.color-theme', selectedTheme)
         }, theme)
+        if (scenario.scenarioId === 'visual-tab-strip') await page.addInitScript(() => localStorage.setItem('openalice.editor-tabs.v1', JSON.stringify({ state: { showEditorTabs: true }, version: 1 })))
         const route = scenario.fixtureProfile === 'demo'
           ? scenario.route
           : `${scenario.route}${scenario.route.includes('?') ? '&' : '?'}themeAuditFixture=${encodeURIComponent(scenario.fixtureProfile)}`
@@ -300,6 +306,7 @@ export async function buildBindings(options: RuntimeBindingOptions = {}): Promis
         if (!scenario.collectBeforeNetworkIdle) await page.waitForLoadState('networkidle')
         await page.waitForTimeout(scenario.collectBeforeNetworkIdle ? 50 : scenario.fixtureProfile.startsWith('terminal-') ? 1_000 : 150)
         const scenarioIds = new Set<string>(scenario.inventoryIds)
+        if (options.onScenario) await options.onScenario(page, scenario, theme)
         const collected = await collect(page, scenario.scenarioId, theme, metadataForDeclaredIds(allMetadata, [...scenarioIds]))
         bindings.push(...collected)
         if (options.onBinding) {
@@ -309,13 +316,16 @@ export async function buildBindings(options: RuntimeBindingOptions = {}): Promis
             if (occurrence) await options.onBinding({ page, binding, occurrence, scenario })
           }
         }
+        } catch (error) {
+          if (!options.onScenarioError) throw error
+          await options.onScenarioError(scenario, theme, error)
         } finally { await context.close() }
       }
     } finally { await browser.close() }
     const unique = [...new Map(bindings.map((entry) => [`${entry.inventoryId}:${entry.scenarioId}:${entry.theme}`, entry])).values()]
-    assertBindingIntegrity(unique, allMetadata)
+    if (!options.skipBindingCompleteness) assertBindingIntegrity(unique, allMetadata)
     await mkdir(resolve(output, '..'), { recursive: true }); await writeFile(output, `${JSON.stringify({ schemaVersion: 3, sourceCommit: staticManifest.sourceCommit, bindings: unique }, null, 2)}\n`)
-    if (!process.env['AUDIT_SCENARIO']) assertEveryTarget(runtime.map((entry) => entry.inventoryId), unique, 'complete manifest')
+    if (!process.env['AUDIT_SCENARIO'] && !options.skipBindingCompleteness) assertEveryTarget(runtime.map((entry) => entry.inventoryId), unique, 'complete manifest')
     const manifest: RuntimeBindingManifest = { schemaVersion: 3, sourceCommit: staticManifest.sourceCommit, bindings: unique }
     return manifest
   } finally { stopServer(server) }

@@ -1890,6 +1890,29 @@ const allThemeColorScenarios = [
     expectedSurface: "dom-or-css",
     inventoryIds: ids["onboarding-design"],
   },
+  ...[
+    ["visual-settings-general", "/settings"],
+    ["visual-settings-issues", "/settings/issues"],
+    ["visual-settings-mcp", "/settings/mcp"],
+    ["visual-settings-market-data", "/settings/market-data"],
+    ["visual-settings-news-collector", "/settings/news-collector"],
+    ["visual-news", "/news"],
+    ["visual-tracked", "/tracked"],
+    ["visual-tracked-detail", "/tracked/issues/demo-ws-auto-quant/morning-scan"],
+    ["visual-dev-logs", "/dev/logs"],
+    ["visual-market-generic", "/market/crypto/BTC-USD"],
+    ["visual-independent-harness", "/?visualCoverageHarness=1"],
+    ["visual-desktop-update", "/settings?updatePrompt=1"],
+    ["visual-update-banner", "/settings?updateBanner=1"],
+    ["visual-tab-strip", "/settings"],
+    ["visual-template-catalog", "/workspaces/templates"],
+    ["visual-template-detail", "/workspaces/templates/chat"],
+  ].map(([scenarioId, route]) => ({
+    scenarioId: scenarioId!, route: route!, fixtureProfile: "demo", state: "normal",
+    themes, viewport: desktop, ready: { role: "main" as const }, actions: [],
+    expectedSurface: "dom-or-css" as const, inventoryIds: [] as string[],
+  })),
 ] as const satisfies readonly ThemeColorScenario[];
 
 export const themeColorScenarios: readonly ThemeColorScenario[] = allThemeColorScenarios.filter((scenario) => scenario.inventoryIds.length > 0)
+export const themeVisualScenarios: readonly ThemeColorScenario[] = allThemeColorScenarios
