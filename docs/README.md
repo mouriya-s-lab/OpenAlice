@@ -34,6 +34,7 @@ GitHub navigation.
 | [[docs/workspace-issues-and-scheduling.md]] | [Workspace issues and scheduling](workspace-issues-and-scheduling.md) | Markdown issue contract, global board, schedule scanner, headless execution, Inbox delivery |
 | [[docs/conversation-provenance.md]] | [Workspace Session and artifact provenance](conversation-provenance.md) | `resumeId` identity, artifact trails, Issue execution responsibility, and provenance-before-collaboration sequencing |
 | [[docs/event-system.md]] | [Event-system retirement note](event-system.md) | Removed Alice event-bus scheduler and the remaining UTA journal boundary |
+| [[docs/uta-effect-runtime-architecture.md]] | [UTA Effect Runtime architecture](uta-effect-runtime-architecture.md) · [简体中文](uta-effect-runtime-architecture.zh-CN.md) · [源码替代映射](uta-effect-runtime-mapping/coverage.md) | Target typed-effect kernel, transaction protocol, durability, scheduling, broker SPI, recovery boundaries, and chapter-by-chapter legacy replacement map |
 | [[docs/uta-live-testing.md]] | [UTA live testing](uta-live-testing.md) | Real broker/demo acceptance scenarios and trading invariants |
 | [[docs/ibkr-wire-protocol.md]] | [IBKR wire protocol](ibkr-wire-protocol.md) | TWS/Gateway inbound framing, payload-only decoder contract, failure isolation, and verification |
 | [[docs/market-data-architecture.md]] | [Market data architecture](market-data-architecture.md) | TraderHub/reference data, BarService K-lines, and the private provider compatibility layer |
