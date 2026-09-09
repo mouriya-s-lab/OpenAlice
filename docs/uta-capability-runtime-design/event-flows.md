@@ -73,7 +73,7 @@
 
 因此，“slot 派生”指 item/failure/lifecycle 的 schema 与 runtime binding 参数共同构造事件 envelope；它不建立另一套手写 payload DTO。provider 没声明的 item extension、correction 或 retraction 不能仅因 kernel 认识该 tag 就被制造。
 
-**透明 1:1 投影判定。** 只有在系统性重绑定 payload（包括重新编码 provider extension）且保持 source、scope、顺序、control-kind、最终性、coverage 和终态不变时，才是透明投影。event/frame 身份会改变，但必须保存 `sourceEventId`/lineage；不能声称 raw-byte 相同。任何 predicate/filter、失败转换、window、join、merge、执行策略改变都不是透明扩展，必须拥有自己的 operator binding、revision、失败和终态策略。
+**透明 1:1 投影判定。** 值投影须总定义，事件须系统性重绑定并保持 source、scope、顺序、control-kind、finality、coverage、终态及 sourceEventId/lineage；这不等于 raw-byte 相同。动态规律以[主书 §16.5](../uta-capability-runtime-design.md#projection-laws)的入口、状态关系与观察面为准：富入口独立接纳的轨迹必须有相容的基础消费；契约不观察的精确重复可以不再投递。若投影要取代验证入口，还须在包括状态冲突的候选上另证接纳/拒绝相容。业务谓词沿投影保持同一语义才可声称透明；改变 predicate/filter、失败转换、window、join、merge 或执行策略的计算拥有自己的 operator binding、revision、失败和终态策略。
 
 **组合终态。** `merge` 在 operator 内部消费每个 child terminal；`ItemFailure` 只可表示声明为 recoverable 的单 item error。child `Failed` 默认使 outer `Failed`；只有 partial-result profile 才能在 declared output 中保留 `MemberOutcome{sourceBinding, terminal, failure}`/`Partial`，不能把 source terminal 伪装成 `ItemFailure`。不发明一个全局 `SourceClosed` 来补齐 child 语义。
 
@@ -256,6 +256,44 @@ sequenceDiagram
 3. `Partial` 需要声明的 partial policy（例如多钱包读取允许单 namespace failure）；未声明的 child failure 只能是 `Failed/Unavailable`，不能擅自“最佳努力”。
 4. 外部 payload 解码失败属于 source observation/decode failure；不把失败变成 zero/default/empty。普通 query 失败不回滚已收到的独立 source event。
 5. `asOf` 是 caller 的读锚点，`observedAt` 是 source 事实时间，`receivedAt` 是本地接收时间；后两个都不能互换。
+
+### EF02 前段结果怎样成为后继计算
+
+固定业务为同来源 Candle 有限读取，外层输入已给窗口/interval。程序先解释 Instrument 查询，消费其成功结果中的来源内引用；纯后继函数据此实例化同来源 Candle 定义及输入。Instrument 身份参与构造，不能自己充当任意操作或授权。后继需要额外目录事实时，将其查询显式组合；没有这种需要时不强迫第二次公共 discover。
+
+```mermaid
+sequenceDiagram
+  participant Caller as 程序调用者
+  participant Interpreter as 组合解释器
+  participant Instrument as Instrument 查询解释器
+  participant Construct as 纯后继构造
+  participant Candle as 选中 Candle 解释器
+  Caller->>Interpreter: 绑定程序与窗口输入
+  Interpreter->>Instrument: 验证首段关联与权限后执行
+  Instrument-->>Interpreter: 首段结果
+  alt 首段失败
+    Interpreter-->>Caller: 首段失败 不构造后继
+  else 首段成功
+    Interpreter->>Construct: 成功值与声明的后继关系
+    Construct-->>Interpreter: 同来源计算或构造失败
+    alt 构造失败
+      Interpreter-->>Caller: 构造失败 不解释后继
+    else 合法的后继计算
+      Interpreter->>Candle: 按选中 binding 复核输入 scope 当前权限
+      alt 后继合法且可用
+        Candle-->>Interpreter: 精确结果 关联来源与 coverage
+        Interpreter-->>Caller: 已声明的共同投影或动态关联文档
+      else 过期 不可用 未获准或声明失败
+        Candle-->>Interpreter: 保留选中关联的失败
+        Interpreter-->>Caller: 后继失败 不冒称首段未执行
+      end
+    end
+  end
+```
+
+若 discovery 后来源失去支持，失败属于这一后继，不能把已选 barId 退回裸 symbol、将失踪 UTA 重新解释为 vendor，或借另一来源的数据补齐成功。普通复合调用可以不公开首段敏感值；它仍须准确区分构造、授权及读取失败，不强制持久化每个中间结果。
+
+当后继是同一 Pull 的下一页时，cursor 只在原 binding、查询和窗口关联下消费；到达调用者边界或预算可以停止并返回已声明 Partial。cursor 为空不单独证明 Complete；完成性仍须来自来源契约和已检查的覆盖证据。若调用者必须先看分支特有输入再构造请求，则把选择结果公开为已绑定描述；这是一次有明确用途的业务交互，不是所有高阶组合的固定模式。
 
 ---
 
@@ -629,11 +667,11 @@ sequenceDiagram
 4. `DispatchStarted` 后的 response loss、crash、timeout、lease expiry 必须由 writer 读取已有 observation/criterion 决定：证据不足时进入 `OutcomeUnknown`/`RecoveryRequired`，已有可靠 criterion 时只追加 transport-loss 诊断并保留结论；普通同步、listing、投影不能创建第二 attempt。
 5. reservation 只有在 no-effects/terminal/recovery-owner handoff 有具名证据时才能释放。
 
-### 受控效果与激活上下文的共用约定
+### 设计依据与旧行为证据
 
-- 主书规定纯 `decide/evolve`、writer 原子写集、plan/approval 分离、`DispatchStarted` 先于 native write，以及 Unknown/recovery 边界：[../uta-capability-runtime-design.md:374-418](../uta-capability-runtime-design.md#L374-L418)、[../uta-capability-runtime-design.md:457-523](../uta-capability-runtime-design.md#L457-L523)。
-- 主书规定 batch policy、reservation、同步与敞口释放：[../uta-capability-runtime-design.md:525-543](../uta-capability-runtime-design.md#L525-L543)。
-- 主书规定 deferred relation、checkpoint、correction/retraction、disposition 与 Alice durable admission：[../uta-capability-runtime-design.md:551-592](../uta-capability-runtime-design.md#L551-L592)。
+- 主书规定纯 `decide/evolve`、writer 原子写集、plan/approval 分离、`DispatchStarted` 先于 native write，以及 Unknown/recovery 边界：[第9章：纯决策、持久值与重新绑定](../uta-capability-runtime-design.md#a5)、[第10章：受控金融效果协议](../uta-capability-runtime-design.md#a6)。
+- 主书规定 batch policy、reservation、同步与敞口释放：[第10章 §§10.4–10.5](../uta-capability-runtime-design.md#a6)。
+- 主书规定 deferred relation、checkpoint、correction/retraction、disposition 与 Alice durable admission：[第11章：外部激活与可恢复决策](../uta-capability-runtime-design.md#a7)。
 - 当前 `TradingGit.push` 仍在内存中逐个执行 operation，再 snapshot、append commit、`onCommit`：[services/uta/src/domain/trading/git/TradingGit.ts:119-183](../../services/uta/src/domain/trading/git/TradingGit.ts#L119-L183)。因此“旧 marker 不存在”不证明没有 remote side effect。
 - 当前 guard pipeline 读取 broker snapshot 后顺序调用 mutable guard，拒绝用字符串返回：[services/uta/src/domain/trading/guards/guard-pipeline.ts:20-35](../../services/uta/src/domain/trading/guards/guard-pipeline.ts#L20-L35)。这只证明迁移前行为，不能作为新 writer 的实现证据。
 - 当前 close staging 只记录意图；真正数量检查在 dispatch 前读取 position：[services/uta/src/domain/trading/UnifiedTradingAccount.ts:565-595](../../services/uta/src/domain/trading/UnifiedTradingAccount.ts#L565-L595)、[services/uta/src/domain/trading/UnifiedTradingAccount.ts:693-765](../../services/uta/src/domain/trading/UnifiedTradingAccount.ts#L693-L765)。

@@ -29,7 +29,7 @@ the durable truth after it changes. Git history is the archive.
 
 ## Active
 
-- [[plans/uta-core-design-research.md]] — UTA 核心设计的渐进研究：依据已对齐方法论，小样本比较与 Main 裁决后才扩大调查；工作留在 `docs/uta-effect-runtime-architecture`，不以固定模板或映射计数验收设计。
+- [[plans/uta-core-design-research.md]] — UTA 候选核心设计已整合：由渐进调查形成后继构造、解释与消费关系，并保留逐项裁决及可复现实验证据；`docs/uta-effect-runtime-architecture` 保持维护者审阅 hold，不以模板、覆盖计数或局部样例冒称实现完成。
 
 - [[plans/unified-page-topbar.md]] — Unifies navigator and content toolbars
   across the UI, with fixed page actions and content-owned sidebar restoration.

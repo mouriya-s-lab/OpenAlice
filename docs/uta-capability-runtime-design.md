@@ -1,6 +1,6 @@
 # UTA Capability Runtime 设计书
 
-本文定义 UTA 的目标抽象、组合语义、解释器与持久控制边界，并与[旧能力详细承接](uta-capability-runtime-design/legacy-accommodation.md)共同构成完整设计。它是实施规格，不是当前运行时已经完成迁移的声明。
+本文提出 UTA 的候选核心设计：目标抽象、函数与组合关系、解释器和持久控制边界。[旧能力详细承接](uta-capability-runtime-design/legacy-accommodation.md)提供现实契约与候选承接输入；[研究实践](uta-capability-runtime-design/research-practice.md)记录论证、反例及其证据边界。设计判断不等于维护者已接受，也不表示当前运行时已经迁移。
 
 [初版架构](uta-effect-runtime-architecture.md)、[初版中文架构](uta-effect-runtime-architecture.zh-CN.md)、[初步源码映射](uta-effect-runtime-mapping/coverage.md)和[调整后的完整逐项调查](uta-effect-runtime-design/solutions/index.md)保留原有身份。逐项调查中的旧行为、候选方案、问题、评审与补充发现都是本设计的输入；其中的候选模型不因被保留而自动成为本设计的规则。本文使用独立路径，不接管已撤销总设计的历史章节编号。
 
@@ -223,6 +223,12 @@ UTA 的扩展单位是 **schema-bound capability definition（绑定 schema 的�
 - `src/domain/market-data/bars/types.ts:140–168` 已有窄 `UtaBarAccount` 结构端口；`src/domain/market-data/bars/bar-service.ts:237–274` 的历史行情调用不是交易提交。该方向保留，不能用一套订单事务模型覆盖数据读取。
 - `src/server/cli.ts:225–235` 的现有 schema 导出允许不可表达类型降级，失败后保留空 schema。目标契约必须在载入时拒绝这种失真，而不是生成看似可调用的未知输入。
 
+这些问题共同要求的是**跨计算保持关联**，不是更多统一对象。Instrument 的来源结果要能约束后继 Candle 读取；读取结果进入业务函数时不能失去单位、失败与来源；业务判断进入受控命令时又不能自带发送权。相同构造规则因此有用：作者组合的是带契约的计算及其消费者，而不是让核心逐个识别证券、新闻或某家 SDK。
+
+实际来源选择也暴露了这种连续性的重要性：`src/tool/source-resolve.ts:33–59` 从候选保留 barId 和已知 assetClass，但没有保留候选 source kind；`bar-service.ts:377–387` 又用当前 `utaManager.has(sourceId)` 将其分类。UTA 来源消失且 assetClass 存在时可以进入 vendor 分支；这证明分支可达，不证明该 vendor 请求会成功。新设计保留“选择后固定来源”的契约，不能把当前查不到某来源当作它属于另一种来源的证据。
+
+不同的消费后果决定了共同机制的边界。普通读取失败可以结束当前计算并保留已观察事实；纯风险判断先提出局部状态变化，整体接纳前不发布；可能已经发出的订单不能靠后继失败或函数退出回滚。因而共享类型关联、纯构造和作用域化解释，分别保留数据交付、本地原子决定与外部效果恢复协议。增加业务函数可以改变选择、判断、转换或策略；只有改变公共控制语义才需要改变核心协议。
+
 ```mermaid
 flowchart LR
   Unit[语义单元与约束] -->|定义值的含义| Definition[能力定义]
@@ -267,6 +273,8 @@ flowchart LR
 `Recipe<I,Prepared,Ack,Observation,E,R,P>` 是私有受控效果关联。它还有编译器、观察器、补偿协议、原生身份和成功判据的绑定。它不是可被 `invoke` 当成 Query 执行的对象。
 
 `Definition` 保存关联，`Binding` 指向关联的具体版本，`Interpretation` 提供实现，`Program` 组合这些能力。目录只能包装完整关联，不能先擦除类型，再靠调用者断言把它拼回来。
+
+`Program` 也可以包含普通的纯函数和高阶后继构造，不要求每个中间值都成为目录叶子。运行中的计算携带静态关联或已认证的动态关联；可公开发现的能力另须具有从同一声明派生的可移植契约。这个区分不允许出口另手写一份“看起来正确”的 schema，更不允许把任意闭包反射成完整说明。能力的公开形状、运行中的函数与持久编码是相关的三件事，不是同一个通用 DTO。
 
 ### 3.3 两种有限性
 
@@ -373,7 +381,19 @@ combine(Query<I,A,E1,R1,P1>, Query<I,B,E2,R2,P2>, JoinPolicy<F>)
   : Query<I,Joined<A,B>,E1 + E2 + F,R1 + R2,P1 ∪ P2>
 ```
 
-`flatMap` 保留错误、服务和权限的联合。加入动态分支时，声明必须覆盖所有可选分支；不能让执行时才出现的能力绕过权限计算。`combine` 明确部分失败策略、来源和一致性窗口；联合结果不是一个声称原子拍摄的账户快照。
+这里 `k : A -> Query<I,B,E2,R2,P2>` 是后继**构造函数**：前段成功以后，它利用 A 构造后段，后段继续消费同一次程序的 I。构造自身不读取网络、时钟或秘密；若选择需要查询目录或额外事实，那项 IO 必须显式成为计算的一步。解释器执行构造出的计算，失败则按声明短路。`flatMap` 的联合描述前后两段可能要求什么，不表示两段已经执行，也不表示后段已获准。
+
+**自描述的范围。** 公开的组合能力必须约束 k 的余域：可以是几个已知定义的选择、一个带参数的声明族，或选择后仍保留精确 binding/slot 的动态关联。稳定描述可以说明这种参数关系，不要求预先知道实际 Instrument 值，也不要求有限枚举全部叶子。类型、校验和描述仍消费同一组 Unit、schema、后继关系及版本化构造声明；不从任意回调源码推断业务语义，不另抄最终结果接口。内部仅有普通函数的程序可以执行，但不能在没有这项声明关联时冒充已经可发现的公共能力。
+
+静态已知 k 的余域时，组合器由前后定义推导成功、失败和要求；不同后继结果要么形成明确的和，要么经已声明投影进入共同 B。运行时才知道输出 schema 时，稳定的公开结果可以是依所选 binding 认证的 `BoundDocument`，失败也保持对应的失败槽位及调用阶段。要无新增失败地提供已知 CommonCandle，须有选中单元的总基础投影；另行声明的可失败转换也能产生已知成功类型，但必须保留转换失败和信息损失，不能称为透明总投影。没有这两种合法转换时保持动态结果，不能补造共同字段。关联可以保存在静态类型、调用上下文或句柄中，不要求每个纯业务值附加完整 wire envelope。
+
+**要求、许可和资源获取。** R 是 Effect 的静态服务要求；若后继的静态环境是一个联合，它不会因最后只选择一个分支而自动消失。提供一个惰性的、精确类型的资源获取服务，可以让未选中的原生连接不打开，但仍须满足该服务自身的 R。已安装解释器可以封装它负责的原生依赖；动态选择则保留完整的解释关联及失败，不能用返回裸 JSON 的 service locator 假装依赖已被证明消解。
+
+P 可以描述依赖输入、来源或 scope 的要求关系。每个实际叶子在解释前依据选中关联计算并验证当前权限，组合节点不得把子要求改成一个任意的外层权限字符串。要求的并集不是授权的并集：普通顺序读取允许前段成功而后段被拒绝；需要“开始前所有成员均可获准”的业务必须另声明该前置政策。主体有 B、没有 C 权限，而实际只选 B，是区分两种政策的场景；不能从 `P1 ∪ P2` 自动选择其一。存在服务或发现成功也都不是 permission witness。
+
+**描述何时对外可见由消费需要决定。** 对“按已提供窗口读取选中来源 Candle”的程序，调用者可以只消费最终精确结果或关联失败，内部选择无需另开一次公共 discover。若 AI 必须先看到所选叶子的额外输入 schema、费用或权限范围，才能构造读取请求，则先公开返回已选择关联，再让它发起后继调用。两种程序使用相同绑定规则；区别是调用者是否需要在后继 IO 前参与构造，不是动态 schema 必然强迫所有程序拆成两次调用。
+
+**顺序失败不制造回滚。** 前段 Q0 已经执行而 k 的构造、授权或后继读取失败时，整体可以返回相应失败；不能说 Q0 从未发生，也不能隐式重试或静默切换来源。是否公开中间值、保留 Partial 或持久捕获，由成功/失败及证据契约决定；普通 `flatMap` 不因此保存所有读取的 WAL。`combine` 同样声明部分失败策略、来源和一致性窗口，联合结果不是声称原子拍摄的账户快照。
 
 流组合还需声明 ordering、buffer bound、overflow、replay 和 cancel ownership。按到达时间合并不能冒充交易所全序。丢弃更新必须通过 gap 或可验证的最新值策略表达；不能静默改变统计语义。一个订阅者释放，只释放其拥有的引用；最后一个拥有者退出才关闭共享连接。
 
@@ -392,6 +412,19 @@ deferUntil(NotStartedIntentRevision<Association>, SourceBinding<S>,
 `Controlled` 没有擦除 Recipe：它从 Association 派生提交输入、`Receipt<Binding>`、控制查询/观察结果以及 prepare、dispatch、observe、compensation 的各阶段失败 schema。`AdmissionContract` 另行声明接纳需要的服务、权限与失败。安装解释器可以消解 native 服务要求，但不能消去执行权限；发送时仍按冻结范围与当前策略取得许可。receipt 是原关联的持久句柄，不是所有叶子共用、无法追溯结果类型的通用成功对象。
 
 `deferUntil` 只关联一个尚未开始发送的意图版本与一个激活拥有者。多个数据源在该拥有者内部组合，不注册多个可重复消费同一意图的等待任务。它不是 Agent 工作流图；外部 Agent 的推理、项目、任务分解仍由 Workspace 负责。
+
+后继函数也可以构造一个 Controlled **接纳命令**。在解释层，关系是：
+
+```text
+query : I -> Effect<A, Eq, Rq>
+buildAdmission : (I, A) -> Result<J, Ec>
+admit : J -> Effect<Receipt<Association>, Ea, Ra>
+sequenceInterpretations : I -> Effect<Receipt<Association>, Eq + Ec + Ea, Rq + Ra>
+```
+
+这些是应用程序的函数关系，不是新增公共 SDK 签名；query 与 admit 各自实施所声明的权限边界。普通 Effect 组合保留结果、错误和服务要求，不能替 UTA 推导业务上的只读分类。这个程序执行了受控接纳，不能发布为 read-only Query；第5.4节的 Query 组合仍要求后继是 Query。公共化混合操作时必须另有真实的接纳/结果及效果声明，不能只换一个输出 schema。
+
+因此可以共享高阶顺序构造，而不共享外部交易原子性。receipt 证明相应本地接纳，不证明 native start、ack 或成交，也不让先前读取可回滚。错误边界是直接调用私有 native dispatch、将发送 handler 伪装为 Pull，或用 receipt 冒充原生事实，不是 `flatMap` 本身。长时间等待与跨进程恢复继续使用明确的 deferred/control 关联，不把这个运行中的组合闭包自动变成持久工作流。
 
 ### 5.6 不变量与拒绝条件
 
@@ -439,6 +472,12 @@ InstrumentRef 指向来源内对象；解析结果携带资产类别、币种、
 News 包含来源、发布/观察时间、内容或内容引用、事件身份，以及能由来源支持的修订、纠正或撤回关系。当前 RSS 存储按 GUID/link 去重，不能仅因新模型支持 correction 就宣称旧来源会报告修订。
 
 NewsGroup 是有身份、有选择或成员语义的新闻集合，附带 as-of/revision/coverage。它可以由多个 News 查询纯组合，也可以由独立 Provider 提供；组成员改变不等于一组交易同时成功。内容体量由分页、引用与保留策略处理，不由交易日志无限保存。
+
+例如业务程序分别读取两个已声明来源，按固定窗口和 `allow partial` 政策构造 NewsGroup，再把成员事实交给一个纯判断函数。某个来源失败时，组保留成功成员、缺失来源和 Partial；它不能通过拼接数组获得同一时刻的完整成员证明。Partial 也不等于所有判断都不可决定：已有一个匹配成员足以支持“至少存在一个匹配”；已有一个反例也可否定“所有成员都匹配”。只有依赖尚未观察部分的结论才继续不确定。哪些观察足以决定结果属于业务函数的语义，不由核心内置新闻关键词或一条“Partial 必拒”规则。
+
+独立 Provider 返回的 group 与上述组合共享“精确 Query 结果供纯函数消费”的关系，却不自动等价。需要对外消费其成员时，还须有成员身份/选择规则、revision、coverage 和到 News 单元的合法读取或投影关系。只声明一个 groupId 或分类标签，不足以让调用者逐成员套用 News 谓词；Provider 可以合法只提供组级事实，其业务函数就消费该组级契约。
+
+旧 RSS 路径提供了具体反例：`src/domain/news/collector/rss.ts:77–101` 对单 feed 失败告警后继续，只返回累计计数；`src/domain/news/store.ts:161–180,281–299` 遇到已见 GUID/link 去重键便丢弃后续记录，即使内容改变也不产生修订事件；`:227–255` 查询保留缓冲并按发布时间截取。因此接入契约不能将这一路径宣称为实时完整全源集合、可靠 correction 流或具有全局顺序。发布时间早于窗口末尾的文章可以晚到；来源名与成员选择必须保留，`asOf` 本身不补造 watermark。修正位于来源适配/覆盖承诺，而非新增一套 NewsGroup 交易协议。
 
 Candle、Instrument、News 与 NewsGroup 可以作为谓词输入。被用于交易决策时，只把确切选中的证据和必要 checkpoint 纳入控制权威，而不是把整个数据域改成订单事务。
 
@@ -528,9 +567,13 @@ Terminal = Completed | Failed | Cancelled
 
 ### 9.1 Decision 与 Evolution
 
-内核保留初版的关系：`decide(state, command, facts, now)` 返回 Rejected，或 Accepted 的 events 与外部工作描述；`evolve(state, event)` 产生下一状态。它们不能启动 Promise、调用 SDK、读取全局时钟或修改共享 guard 对象。时间、价格、余额、权限策略与原生观察先在边界形成有来源的事实，再进入决定。
+内核保留初版的关系：`decide(state, command, facts, now)` 返回 Rejected，或 Accepted 的候选事件与外部工作描述；`evolve(state, event)` 产生下一状态。这里纯函数的 Accepted 表示该决定在给定前提下通过，不是持久接纳 receipt。它们不能启动 Promise、调用 SDK、读取全局时钟或修改共享 guard 对象。时间、价格、余额、权限策略与原生观察先在边界形成有来源的事实，再进入决定。
 
-一条复合命令中的后续决定读取前一步演进后的状态，不能都对同一旧快照独立通过。任何一步被拒绝，属于同一原子本地决定的先前 guard/reservation 变化一并不提交。独立批次则明确保留逐项结果，不能在事后把它描述成全有或全无。
+同一原子复合决定从状态 s0 开始：前一步提出事件后，用同一个纯 `evolve` 计算推测状态 s1，下一步在 s1 上判断，依此推进。最后一次判断通过，也只得到候选写集；writer 复核版本和失效条件、原子提交全部事件、决定性投影、必要的工作/outbox 与 receipt 后，才发布已经接纳的 DomainEvent。任一步拒绝或提交失败，推测状态和该写集都不成为权威。故 `evolve` 既可用于推测，也可用于已接纳历史的重建；关键是权威边界，不是两套 reducer。独立批次另保留逐项结果，不能事后称为全有或全无。
+
+旧 `CooldownGuard` 在 check 中修改 Map，后续 guard 拒绝仍影响下一次检查，展示的是消费时机与共享状态问题，不是否定高阶短路。纯规则把判断、失败与需要消费的业务状态作为声明关联交给控制决定；它不自行提交。批准时消费 cooldown 与 `DispatchStarted` 时消费是两种不同业务政策：前者可以有意保留后来未发出工作的窗口，后者可以把已开始但结果未知的尝试计入窗口。它们都能使用相同纯决定与原子 writer；配置、消费触点、适用性、重启保留与释放条件须由规则明确，不由 FP、某个默认阈值或通用内核替业务选择。
+
+这层关系只用于需要持久控制的决定，不强迫普通 Candle 页也进入 writer。一次决定可以产生零个或多个声明工作；ReturnToAgent 的一次选中只产生对应决定请求，不推出所有计算必须恰好生成一个 outbox。IO 结果以后作为新事实进入下一次决定，而不是持久事件 replay 再执行一遍原 IO。
 
 运行中的 Effect 是工作说明与资源解释；持久的 Plan 是编码值。两者不是同一种可序列化对象。
 
@@ -690,6 +733,12 @@ stateDiagram-v2
 补偿等级沿用初版：Exact、StateRestoring、Economic、None。Exact 是确切逆操作的证据承诺；StateRestoring 恢复指定状态但历史已发生；Economic 只恢复经济敞口并保留滑点、费用与其他残余；None 不应被组合器包装成可回滚。
 
 补偿本身也是受控 Recipe，有自己的批准边界、attempt、Unknown 与观察。不能把一次反向下单当作必然成功的清理函数。组合计划接纳时就明确可接受等级，不等失败后临时把 Exact 降成 Economic。
+
+**两成员推演。** 设 A、B 的 Order 扩展、Prepared、Ack 与 Observation 各自不同。程序取得 `Receipt<A>` 后构造 B 的接纳命令，只建立本地接纳的因果顺序；B 可以被接纳时 A 仍未开始，也不能用这个 receipt 满足“等待 A 成交”的条件。若业务需要后一种依赖，须消费 A 的已声明 criterion/observation，并按其持久控制协议等待。只在调用进程里顺序执行也不保证进程退出后 B 最终被接纳。
+
+A 开始后先收到 fill、后收到 ack 时，先按同一 attempt/native identity 保存填充观察，late ack 只补充关联事实，不使已知填充回退。此时 B 若被可靠地拒绝，A 的成交和敞口仍存在；B 若在开始后结果未知，则保留 B 的恢复责任，不能将其当作零效果。IndependentBatch 按各自结果推进；AllOrCompensate 根据实际已知敞口、允许等级和风险策略构造新的补偿 Recipe，补偿也可能失败或 Unknown；VenueNativeAtomic 则需要该作用域和操作组合的原生证据。共享的是每个成员的关联、决定与解释规则，不是一个 `JoinedOrder` 或共同成功布尔值。
+
+业务作者通过精确 observation 消费函数定义成交、撤销或经济目标，通过补偿规划函数消费 ExposureEvidence 并构造另一受控关联。核心不用识别 A 的 postOnly 或 B 的原生条款；它必须保留这些函数与 Prepared/Observation/Policy 的绑定，不能用收到 ack、错误字符串或 Promise 结束替代业务判据。
 
 ### 10.5 Guard、同步和 reservation
 
@@ -962,6 +1011,8 @@ python3 run-control-evidence.py
 
 样例不是生产实现。它未验证完整 RFC 8785 跨语言 canonicalizer、命名语义 evaluator、完整 Controlled 的所有阶段 schema/权限关联、真实签名与密封存储、补偿/成交/敞口恢复、并发压力、生产权限与凭据配置、foreign Push 协议、Alice 持久接纳及 exact/reconstructed 会话交付。它们仍按本文契约实施并各自验收；不能把样例的窄接口当成允许删除这些要求的理由。
 
+后继研究还明确了原样例的两个限制：`combineReads` 的单字符串 permission 不机械保证子要求联合；`CertifiedDocument.project` 只验证 binding/slot 并按给定 schema 解析，不等于具有单位、版本与信息损失契约的语义投影。Catalog 的 Entry 可以保留绑定上下文，但一次 resolve 不证明调用时权限仍有效。主书要求的公开 k 声明派生、当前权限复核与动态消解必须在完整实现中兑现，不能由这些窄接口自动继承保证。具体反例、补充 CLI/Effect/News store 观察及重放入口见[研究实践](uta-capability-runtime-design/research-practice.md)。
+
 真实 Provider 的原生幂等、完整查询/absence、重放窗口、原子组、最终成交、修订和补偿等级，继续由[逐项问题](uta-capability-runtime-design/legacy-bindings.md)规定的具体证据边界约束。没有完成这些实测，不得声称新运行时已经可以交易、迁移或部署。
 
 初版中英架构与完整逐项调查保持独立且完整。本设计的价值在于给出能承接那些具体能力的统一关系；哈希、条目覆盖、编译或局部场景都不能替代对这些关系的实现和原生验证。
@@ -1068,23 +1119,32 @@ Envelope 是按事件家族构造的 product type，不是所有上下文共用�
 
 Origin 是显式分支：来源自发事实携带 SourceOrigin；由已接纳命令或事件导出的记录携带 CausedBy 引用。跨上下文引用包含 origin/context/partition 与事件身份，不能把 UTA 的数值 sequence 填入 Alice 本地 `causedBy`。request expiry、approval expiry、worker lease、数据 watermark 和历史解释器 retention 各有拥有者与时钟；任一个到期都不能替其他边界作决定。
 
+<a id="projection-laws"></a>
+
 ### 16.5 透明扩展与事件组合的不同规律
 
-对一个有效扩展值，令 `p` 是保留全部基础字段及约束的总投影。将 p 提升为事件投影时，Data/Correction 的 value 使用 p，其他控制含义保持；派生 binding 与 event identity 按 operator 重新建立，并保存源引用。不能直接复制原 binding 宣称这是原生基础事件。
+对一个有效扩展值，令 `p` 是保留全部基础字段及约束的总投影。将 p 提升为事件投影 `P_e` 时，Data/Correction 的 value 使用 p，其他控制含义保持；派生 binding 与 event identity 按 operator 重新建立，并保存源引用。不能直接复制原 binding 宣称这是原生基础事件。总值投影只是第一项前提；行为透明还需要明确入口、状态关系和消费者的观察面。
 
 ```mermaid
 flowchart TB
-  RichValue[有效扩展 Unit 与同一交付契约] -->|派生事件 schema| RichTrace[扩展事件轨迹]
-  RichValue -->|总基础投影 p| BaseValue[基础 Unit]
-  RichTrace -->|提升 p 并保留 lineage| DerivedTrace[重新绑定的基础事件轨迹]
-  BaseValue -->|相同控制协议| BaseTrace[基础事件轨迹]
-  DerivedTrace -->|控制种类 顺序 终态 因果结构相同| Law[透明扩展规律]
-  BaseTrace -->|在明确身份对应下比较| Law
+  RichIngress[富事件权威入口与当前状态] -->|独立接纳候选| RichStep[富状态推进与基础可见观察]
+  RichIngress -->|已接纳事件的总投影及引用重绑定| BaseIngress[基础消费者与相关状态]
+  BaseIngress -->|接纳投递并推进| BaseStep[基础状态与可见观察]
+  RichStep -->|对应的基础值 控制及因果观察| Law[逐步保持状态关系和观察相等]
+  BaseStep -->|不要求内部表示或字节相同| Law
 ```
 
-比较的是明确身份对应下的控制轨迹和基础值，不是 raw bytes 或哈希相等。一个新调用必然可以有新的 invocation id；投影也有新的声明身份。规律要求其 source lineage、相对次序、coverage、finality、权限要求和资源释放责任不被篡改。
+**先固定所比较的行为。** 令 `S(s_r,s_b)` 表示富状态与基础状态的对应关系，`I` 表示事件身份、修订目标和 lineage 的对应；S 不必是一个总状态投影函数。基础可见观察由契约先行规定，例如基础值、来源、控制次序、终态和 correction/retraction 的影响。若去重历史、sequence 或 phase 会改变未来这些观察，状态关系也必须保留相应语义；不要求两端复制同一内部 Map、事件字节或哈希。
 
-这条透明规律还要求失败、服务 R 和权限 P 的要求相同。投影若新增服务、权限、可失败分支或语义约束，必须显式体现在新声明中，便不再是完整意义上的透明投影。merge/join 等组合至少保留所有成员的 R/P 与失败分支，再加入 operator 自身的要求；不能靠合并值类型擦除任何成员的效果要求。
+**已接纳轨迹律。** 定义域是富入口独立接纳的所有有限轨迹，而不是事后筛选“两边都接纳”的交集。初态须相关；对每个相关状态对，富端接纳并推进的一步，投影后必须有合法的基础推进，得到相关的后态及相同的基础可见观察。富端接纳的精确重复若按消费契约不产生可见变化，可以不向基础端投递；这一步要求相关关系保持，并在所比较观察中等价于零步。若重复次数、诊断或分类本身可见，就不能未经说明把它们消掉。以初态为起点，对推进步和允许消去的重复步分别归纳，得到整条轨迹上的观察保持；若富端合法而基础端拒绝，这就是反例，不能缩小定义域将其排除。
+
+这个条件域允许扩展字段变化：例如新身份、递增 sequence 的两条 Candle 分别为 `(close=99,vwap=99)` 和 `(close=99,vwap=101)`。总投影仍保留 close。富消费者若使用 `vwap >= 100`，基础消费者使用 `close >= 100`，决定不同；这是一种合法业务特化，不是透明替换。需要透明的消费者必须在 S、P_e、I 下保持对应的判断、状态推进和输出；可以把同一基础业务函数沿投影提升，不能仅凭“读取字段集合相同”宣称函数等价。
+
+**验证入口替换是另一项义务。** 若要先投影再验证、让基础机取代富入口，或承诺拒绝/重试/去重分类也不变，就必须在入口可能收到的共同 schema 合法、协议成形的候选上证明接纳相容，包括当前状态会拒绝的候选。至少比较接纳与拒绝；advanced/duplicate、错误码和诊断若属于观察面，也须保持对应。去重等价关系必须被投影保持并反射，修订引用不能串绑；双方拒绝后状态仍须相关。这不由已接纳轨迹律推出，也不自动证明不同业务谓词相容。
+
+研究中的实际冲突输入保持 eventId、sequence 和基础值，只改变 vwap：原富控制机返回 `duplicate-id-conflict`，先投影的基础机返回 duplicate。它反驳验证入口可任意交换的强命题，不反驳已接纳轨迹律；归档 CLI 先经富入口、拒绝后不投影，不能据此称其漏检。相反，该 CLI 在成功入口消去精确重复，符合允许零步的下游观察契约。有限样例与条件归纳各有自己的证据强度，不能互相代替。
+
+完整透明性还要求所声称的 coverage、finality、来源、权限与资源释放责任保持。失败、服务 R 和权限 P 若新增，必须体现在派生声明中，就不再是完整意义上的透明投影；局部 value/control 实验不能替这些性质作证。merge/join 等组合至少保留成员的失败、R/P 与来源关系，再加入自身要求，不能靠合并值类型擦除效果要求。
 
 | 组合 | 事件类型怎样派生 | 动态语义与限制 |
 |---|---|---|
@@ -1102,7 +1162,7 @@ merge 消费子流终态，而不把左源 Completed 原样发布为整个组合
 
 外层在拥有者存活且可完成协议时只选择一个 Terminal；进程崩溃可能只有 EOF，没有机会补造终态。部分结果策略决定仍开放的成员如何继续，以及何时关闭组合；外层 Failed 后不能再发 Completed。窗口可以按声明的处理时间 deadline 产生 Partial 结果，但不能据此升级为来源 watermark 或原生 finality。窗口和交易组合会改变事件结构，却不会因为 payload 恰好多了一个字段而换一套控制实现。
 
-对每个可接纳事件，先在扩展状态上推进再投影，与先投影状态和事件再由基础控制机推进，必须得到相同的基础值、控制状态和释放责任。去重身份与修订引用也经过同一对应关系；只比较 tag 数组不足以证明这条规律。
+因此，新增算子先给出它解释什么计算、消费哪些观察、怎样推进自身状态及拥有资源，再声明需要满足哪一条保持关系。透明投影、带过滤的派生计算和改变终态的组合可以复用构造规则，但不能共享一句没有前提的“行为相同”。
 
 ### 16.6 用异常时序检验边界
 
