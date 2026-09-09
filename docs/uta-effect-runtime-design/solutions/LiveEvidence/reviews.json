@@ -1,0 +1,419 @@
+{
+  "group": "LiveEvidence",
+  "designBasis": "capability-composition-v1",
+  "analysesSha256": "f909d1784b51b49fbd6d7d7fa8e1513ba9cb4bb25b38edcb1f301e6964acae72",
+  "designSha256": "f311b9651150c38b84823af8fef479f17571d56b706b7aa42270461fd7c6f314",
+  "contractSha256": "73f5235ae86d3f1c9038dfd214e7207cdfb1833be7bc369f628d7d3f9017dd4f",
+  "entries": [
+    {
+      "id": "MAP-5A0732EC10",
+      "verdict": "accepted",
+      "reason": "The Alpaca setup at lines 22-30 selects the first matching account and freezes a marketOpen boolean. The target is source-consistent because it replaces index selection with an explicit paper RuntimeAccountDescriptor and fresh session/readiness observation, so ambiguity or unavailable clock blocks mutation without claiming native runtime proof."
+    },
+    {
+      "id": "MAP-60855A8312",
+      "verdict": "accepted",
+      "reason": "The Alpaca connectivity slice at lines 34-68 reads account, clock, catalog, and positions but only asserts positive equity/cash and Decimal-shaped positions. The target keeps signed finite AccountSnapshot/PositionSnapshot values, canonical identity, and required scope/currency; it correctly treats reads as projections and binds only selected decision evidence rather than a trading WAL, while the public catalog does not invent AccountScope."
+    },
+    {
+      "id": "MAP-7E7AB00B65",
+      "verdict": "accepted",
+      "reason": "The Alpaca lifecycle at lines 72-109 directly constructs native Contract/Order values and places, queries, batches, and cancels a GTC order. The target cleanly splits provider place/query/cancel leaves, keeps native values adapter-private, and applies withTransaction only to controlled writes with durable dispatch/observation linkage."
+    },
+    {
+      "id": "MAP-415093F05F",
+      "verdict": "accepted",
+      "reason": "The quote scenario at lines 113-130 requires positive numeric bid/ask/last/volume during a cached-open session. The target makes this a finite typed pull with declared Public or Account scope, session/freshness, and field-specific availability, so quote evidence cannot silently authorize stale or incomplete execution."
+    },
+    {
+      "id": "MAP-DA8940C7D3",
+      "verdict": "accepted",
+      "reason": "The market-order slice at lines 132-176 proves only place acknowledgement/order-id shape and a later Filled query; the position read is an observation, not cleanup. The repaired target separates Ack, order observation, and position read, records one operation-owned delta, and explicitly leaves the adjacent close to its own authorized operation instead of inventing inherited compensation."
+    },
+    {
+      "id": "MAP-D684830A67",
+      "verdict": "accepted",
+      "reason": "The close scenario at lines 178-196 consumes the prior test position and invokes generic closePosition without quantity. The target makes ExactQuantity and AllExposure explicit provider variants and gives this standalone cross-test cleanup its own scope, baseline, authorization, dispatch, and recovery boundary, preventing unrelated exposure from being consumed."
+    },
+    {
+      "id": "MAP-0FB902DDBC",
+      "verdict": "accepted",
+      "reason": "The follow-up at lines 198-221 waits, queries getOrders, and closes using process-local ids with no durable receipt. The target keeps query as a finite Account-scoped pull and routes any cancel/close through a separate operation-owned effect job, so mixed-scope batches and ambiguous cleanup are rejected rather than retried blindly."
+    },
+    {
+      "id": "MAP-A9C599CFB8",
+      "verdict": "accepted",
+      "reason": "The Bybit setup at lines 19-34 chooses the first account whose id contains bybit and only logs a missing-account skip. The target requires explicit Sandbox/Demo runtime discovery, scope, readiness epoch, and capability availability, making same-name ambiguity observable rather than an execution choice."
+    },
+    {
+      "id": "MAP-B65B828516",
+      "verdict": "accepted",
+      "reason": "The Bybit account/position/search slice at lines 36-56 asserts positive equity and an array while using exchange symbols without product settlement identity. The target preserves signed account facts, canonical instrument/product distinctions, and a separately declared Public or Account catalog leaf with typed completeness."
+    },
+    {
+      "id": "MAP-68FD1B154A",
+      "verdict": "accepted",
+      "reason": "The Bybit diagnostic slice at lines 58-91 casts to the raw exchange, creates a market order, logs raw fields, closes it, and then uses generic placement. The target distinguishes redacted diagnostics and explicitly authorized S7 ExternalStimulus from ordinary withTransaction order.place, preserving actor/provenance and preventing a second mutation authority."
+    },
+    {
+      "id": "MAP-585A2F9006",
+      "verdict": "accepted",
+      "reason": "The Bybit close at lines 93-109 closes a hard-coded 0.01 after a prior test buy. The target binds an exact reduce-only close to scoped before/after exposure and an operation-owned delta, with approval/idempotency/recovery only around that close effect, so pre-existing exposure remains protected."
+    },
+    {
+      "id": "MAP-32BC46FDBD",
+      "verdict": "accepted",
+      "reason": "The Bybit market flow at lines 111-138 treats generic success as eventual Filled after a fixed five-second sleep and then closes. The target separates Ack, order observation, and position observation into typed jobs with cursor/deadline state, making a deferred or timed-out result observable without duplicate dispatch."
+    },
+    {
+      "id": "MAP-4D4A864108",
+      "verdict": "accepted",
+      "reason": "The Bybit TPSL slice at lines 140-184 computes prices with Number/Math.round and treats optional leg retrieval as enough. The target retains exact provider ProtectionSpec only on a declared bracket leaf and requires separate parent/leg observations; parent-linked capability/fixture confirmation remains the retained empirical obligation rather than a native claim."
+    },
+    {
+      "id": "MAP-E5356E684D",
+      "verdict": "accepted",
+      "reason": "The Bybit trigger slice at lines 186-234 creates a conditional order through raw Exchange, mutates orderSymbolCache, then queries/cancels/closes. The target provides a typed trigger leaf plus observation/cancel, labels retained direct probes S7 ExternalStimulus, and makes the event source non-authorizing; stable native identity after cache invalidation remains empirically retained."
+    },
+    {
+      "id": "MAP-14606B82FF",
+      "verdict": "accepted",
+      "reason": "The Hyperliquid markets setup at lines 18-38 embeds dummy wallet/private-key strings and directly constructs CcxtBroker for a sandbox read. The target admits credential-free Public instrument.list only when declared public and uses opaque CredentialRef plus scoped readiness for private trading, eliminating fabricated credential material without requiring a provider-wide constructor."
+    },
+    {
+      "id": "MAP-444A62C6D5",
+      "verdict": "accepted",
+      "reason": "The Hyperliquid catalog check at lines 40-62 reads an internal exchange map and requires more than 100 markets. The target replaces internal-map/count heuristics with a finite versioned catalog snapshot carrying product, settlement, namespace/cursor coverage, and Complete|Partial|Unavailable, so the source does not overclaim completeness."
+    },
+    {
+      "id": "MAP-301A0F7EF8",
+      "verdict": "accepted",
+      "reason": "The Hyperliquid search at lines 64-79 accepts BTC or a BTC-prefixed local symbol. The target makes the query Public and typed with product/settlement filters and Unique|Ambiguous|NotFound outcomes; a symbol prefix remains display evidence, not canonical identity."
+    },
+    {
+      "id": "MAP-50F731ABB9",
+      "verdict": "accepted",
+      "reason": "The Hyperliquid order setup at lines 35-50 selects the first id containing hyperliquid and skips absent accounts. The target requires scoped sandbox runtime discovery and explicit capability availability, so mainnet or missing-account states cannot silently enter a trading path."
+    },
+    {
+      "id": "MAP-8D31A540CC",
+      "verdict": "accepted",
+      "reason": "The Hyperliquid account/position checks at lines 54-74 require nonnegative equity and approximate quantity-price valuation while allowing mark-price recovery. The target preserves signed exact money and distinguishes native mark from DerivedFromNotional provenance, preventing a derived value from becoming unqualified execution price authority."
+    },
+    {
+      "id": "MAP-5460468AB4",
+      "verdict": "accepted",
+      "reason": "The Hyperliquid search at lines 78-93 requires a CRYPTO_PERP result for BTC and ETH without fully binding product/settlement identity. The target declares a Public perpetual leaf with explicit filters, catalog revision, and typed Unique|Ambiguous|NotFound resolution, including a real NotFound/Blocked branch."
+    },
+    {
+      "id": "MAP-A60C86B58F",
+      "verdict": "accepted",
+      "reason": "The Hyperliquid order at lines 97-129 places 0.001 BTC, expects success, optionally checks execution, then reads position and USD normalization. The target separates constraint evidence, Ack, execution, position, and currency policy behind withTransaction; observed finality and account-mode stablecoin normalization remain empirically retained, so Ack cannot be treated as fill."
+    },
+    {
+      "id": "MAP-914C5731FE",
+      "verdict": "accepted",
+      "reason": "The Hyperliquid slice at lines 131-166 first runs a standalone reduce-only close and only later runs a separate buy/query/close test. The repaired target models the standalone close as separately authorized cleanup and binds compensation to the later buy only when its delta is observed, avoiding a false cross-test approval or inherited baseline."
+    },
+    {
+      "id": "MAP-CCFD876360",
+      "verdict": "accepted",
+      "reason": "The OKX setup at lines 43-58 chooses the first id containing okx while demo is only stated in prose. The target requires verified Demo RuntimeAccount scope, endpoint evidence, readiness, and capabilities, so a live preset or ambiguous match cannot reach order placement."
+    },
+    {
+      "id": "MAP-CC43DAFDFD",
+      "verdict": "accepted",
+      "reason": "The OKX account/position slice at lines 62-82 merges synthesized spot and derivative positions and asserts positive equity. The target keeps separate SpotHolding/DerivativePosition schemas with settlement, valuation provenance, and signed account facts, preserving zero/negative reads without conflating products."
+    },
+    {
+      "id": "MAP-4B824156CE",
+      "verdict": "accepted",
+      "reason": "The OKX search at lines 86-102 relies on exact local-symbol strings for spot/perpetual variants. The target uses a Public or provider-declared catalog leaf with product/settlement filters, revision, and typed ambiguity, while retaining localSymbol as native evidence only."
+    },
+    {
+      "id": "MAP-FBF3A41608",
+      "verdict": "accepted",
+      "reason": "The OKX spot tests at lines 106-161 buy by cash notional and, in a separate test, sell the whole observed BTC quantity under a hard-coded ten-percent dust rule. The repaired target scopes each write with withTransaction, sells only an operation-owned delta under separate cleanup authorization unless one plan explicitly binds both, and retains account-specific residual policy as an empirical question."
+    },
+    {
+      "id": "MAP-7DAC2704FB",
+      "verdict": "accepted",
+      "reason": "The OKX helper at lines 173-195 regex-matches error text 51010 and returns a boolean-like cashMode result. The target uses a provider-declared error variant and separate availability/rejection/unknown outcomes; only the observed 51010/current-mode evidence is non-fatal, while broader mappings remain empirically retained."
+    },
+    {
+      "id": "MAP-0A7103653D",
+      "verdict": "accepted",
+      "reason": "The OKX derivative flow at lines 197-230 skips Cash mode, mode errors, absent positions, and 51205 based on unrelated strings. The target separates order.place and position.close and requires context for NoExposure; malformed or unmapped responses become typed rejection/Unknown recovery rather than passing skips."
+    },
+    {
+      "id": "MAP-C7223C2B36",
+      "verdict": "accepted",
+      "reason": "The OKX derivative helper at lines 234-254 waits after a buy, expects Filled, and closes through derived identity. The target makes place and reduce-only close distinct exact provider effects with durable observation and operation delta, so a delayed position query remains reconciling rather than triggering another buy."
+    },
+    {
+      "id": "MAP-D16449202E",
+      "verdict": "accepted",
+      "reason": "The raw diagnostic setup at lines 15-27 exposes `(broker as any).exchange` as a mutation-capable context. The target limits this context to scoped capability discovery/read and recognizes direct mutation only as explicitly authorized S7 ExternalStimulus, not as a second ordinary UTA execution authority."
+    },
+    {
+      "id": "MAP-58AE86AEDD",
+      "verdict": "accepted",
+      "reason": "The raw CCXT probe at lines 29-54 logs `info` and swallows reduce-only cleanup errors after direct createOrder. The target redacts/rejects undeclared response fields and preserves any retained order as S7 with actor/provenance and RecoveryRequired cleanup, while normal mutation uses a provider leaf plus withTransaction."
+    },
+    {
+      "id": "MAP-47ED37A445",
+      "verdict": "accepted",
+      "reason": "The diagnostic history at lines 56-90 logs unscoped raw open/closed order fields without pagination assertions. The target is a finite Account-scoped pull with cursor, namespace, completeness, and explicit absence variants, so another scope cannot enter evidence and a partial page cannot imply rejection."
+    },
+    {
+      "id": "MAP-B5990574ED",
+      "verdict": "accepted",
+      "reason": "The diagnostic at lines 92-113 mixes spot/perp presence checks with optional raw order mutation and best-effort close. The target separates a read-only Public/provider-scoped catalog from explicitly authorized S7 external orders; namespace completeness remains Partial/Unavailable until pagination evidence is observed, an empirical obligation retained in closure."
+    },
+    {
+      "id": "MAP-8D95A00EF9",
+      "verdict": "accepted",
+      "reason": "The raw metadata probe at lines 115-124 only logs market id/symbol/type/settle. The target returns a finite Public catalog record with canonical InstrumentId, exact native metadata, product-aware currency, and revision, rejecting a derivative descriptor without required settlement instead of routing by symbol."
+    },
+    {
+      "id": "MAP-E4B0D38A44",
+      "verdict": "accepted",
+      "reason": "The closed-order probe at lines 126-158 compares broad and since-filtered results, waits ten seconds for a new order, and swallows cleanup errors. The target makes history a finite Account-scoped pull with Found/NotFoundYet/Unknown completeness and keeps S7 placement/cleanup separate, so absent partial history cannot be treated as rejection."
+    },
+    {
+      "id": "MAP-9762F1BB09",
+      "verdict": "accepted",
+      "reason": "The IBKR helper at lines 25-30 throws when an open order lacks orderId. The target refines that observation into MissingRemoteOrderId with AccountScope and blocks destructive cleanup, while a valid remote reference can use idempotent cancel observation without attaching approval to the pure identity check."
+    },
+    {
+      "id": "MAP-25C7BC81F2",
+      "verdict": "accepted",
+      "reason": "The IBKR setup at lines 32-40 picks the first account and caches marketOpen after a clock read. The target requires TWS/Gateway endpoint, Paper environment, scope, readiness epoch, and fresh session evidence, separating session admission from recovery of any prior transaction."
+    },
+    {
+      "id": "MAP-813BFD59A1",
+      "verdict": "accepted",
+      "reason": "The IBKR connectivity slice at lines 44-92 reads account/clock, searches AAPL, resolves Contract details, and checks Decimal position fields. The target preserves these as scoped account/position pulls plus Public-or-declared catalog detail with canonical InstrumentId/conId and explicit money/valuation provenance."
+    },
+    {
+      "id": "MAP-EE69E2CB46",
+      "verdict": "accepted",
+      "reason": "The IBKR currency checks at lines 96-124 only require nonempty strings and optional equality with contract currency. The target refines CurrencyCode/Money and currency-source variants, making CHF/USD mismatch explicit while absent position data remains absence rather than fabricated currency."
+    },
+    {
+      "id": "MAP-2B14BC2DD9",
+      "verdict": "accepted",
+      "reason": "The IBKR scenario at lines 128-217 captures baselines, sends polluted fields as what-if, cancels unexpected orders, and compares arrays. The repaired target does not assume that what-if is natively non-mutating: it is a provider-declared preview with NonMutating|MutationPossible|Unknown, and any unexpected cancel is its own approved withTransaction effect with an exact native schema."
+    },
+    {
+      "id": "MAP-B41A0A0990",
+      "verdict": "accepted",
+      "reason": "The IBKR lifecycle at lines 221-268 searches, places, queries, batches, cancels, and checks remaining orders directly. The target splits place/query/cancel leaves, keeps batch query finite and scoped, and puts only place/cancel remote effects behind durable approval, dispatch, and idempotency."
+    },
+    {
+      "id": "MAP-FFA9030D49",
+      "verdict": "accepted",
+      "reason": "The IBKR quote at lines 272-299 treats one known TWS snapshot timeout as a logged skip while rethrowing other errors. The target emits Fresh|Stale|Unavailable with provider-versioned error evidence and blocks price-dependent effects; unknown TWS/Gateway timeout variants remain the retained empirical unavailable branch."
+    },
+    {
+      "id": "MAP-F9A4323AA5",
+      "verdict": "accepted",
+      "reason": "The IBKR fill scenario at lines 301-367 uses imperative polling, quantity baselines, introduced-order cancellation, and close compensation. The target preserves the useful BeforeImage/PositiveDelta/BaselineMatch facts around separate market.place and position.close effects without generalizing this fixture into a universal execution state machine."
+    },
+    {
+      "id": "MAP-424F0FB69C",
+      "verdict": "accepted",
+      "reason": "The evidence interfaces at lines 6-38 use optional fields, free strings, and cleanup counts. The target replaces that shape with a versioned redacted projection carrying subject scope, run/code identity, instrument evidence, phase, outcome, and explicit provenance, never an execution capability."
+    },
+    {
+      "id": "MAP-8800585703",
+      "verdict": "accepted",
+      "reason": "The run identity helpers at lines 40-52 use wall-clock and PID fallbacks plus an unknown git commit. The target injects identity/provenance inputs and makes Fresh|Stale|Unverifiable explicit, so an unknown commit cannot satisfy a freshness gate or serve as durable authority."
+    },
+    {
+      "id": "MAP-FA821E371F",
+      "verdict": "accepted",
+      "reason": "The evidence helper at lines 54-65 copies native IBKR Contract fields into a record. The target keeps those fields as adapter-owned Public/Account evidence alongside a resolved canonical InstrumentId and catalog revision, not as an SDK request or universal Contract type."
+    },
+    {
+      "id": "MAP-C2F022975E",
+      "verdict": "accepted",
+      "reason": "The evidence sink at lines 68-87 appends one env-controlled JSONL line to a caller-derived path with paper/broker strings and no sequence. The target makes it a fixed, redacted diagnostic projection with per-run/sink sequence, digest idempotence, and conflict handling independent of JournalWriter; concurrent ordering remains the retained empirical obligation."
+    },
+    {
+      "id": "MAP-3BF311EBD5",
+      "verdict": "accepted",
+      "reason": "The setup record at lines 18-23 only carries id, label, provider, and generic IBroker. The target makes runtime discovery return explicit scope, environment, readiness epoch, capabilities, and an effect-owned handle reference without imposing provider internals."
+    },
+    {
+      "id": "MAP-C34FFFADB8",
+      "verdict": "accepted",
+      "reason": "The setup helpers at lines 27-48 infer paper/live and credential presence from config fields, including a Record cast, while IBKR is always considered credentialed. The target parses an exact schema to opaque CredentialRef plus an environment hint and requires runtime endpoint/auth evidence, keeping secrets at the adapter boundary."
+    },
+    {
+      "id": "MAP-85AF389920",
+      "verdict": "accepted",
+      "reason": "The TCP probe at lines 50-58 collapses connect/refusal/timeout/service mismatch into a boolean. The target preserves Reachable|Refused|TimedOut|ProbeError with optional fingerprint and separately requires IBKR protocol/account evidence, so reachability cannot authorize a transaction or recovery."
+    },
+    {
+      "id": "MAP-73F753A129",
+      "verdict": "accepted",
+      "reason": "The init helper at lines 62-84 races broker.init against a 30-second timer and lets late work continue after timeout. The target introduces scoped attempt/deadline/epoch state and Ready|TimedOut|Failed results, preventing an old completion from publishing readiness while isolating other accounts."
+    },
+    {
+      "id": "MAP-3D797361F3",
+      "verdict": "accepted",
+      "reason": "The setup cache at lines 86-95 stores one module-global initialization Promise and broker set for all callers. The target allows only run-scoped immutable fixture reuse and makes production readiness/evidence durable and epoch-bound, removing process cache as recovery authority."
+    },
+    {
+      "id": "MAP-B4CCE8940E",
+      "verdict": "accepted",
+      "reason": "The initAll path at lines 97-139 filters accounts, probes IBKR, constructs brokers, times out init, and skips failures, but construction occurs outside the per-account try. The target returns typed ready/skipped discovery with exact reasons and isolates constructor/init failures so a named account cannot be silently redirected to another."
+    },
+    {
+      "id": "MAP-23AEA53AD6",
+      "verdict": "accepted",
+      "reason": "The filter helper at lines 141-144 compares only provider-engine equality. The target makes selection a pure descriptor query over venue, environment, scope, and capabilities with Unique|Ambiguous|NoCandidate, exposing same-engine mismatches rather than choosing one."
+    },
+    {
+      "id": "MAP-FACA90D0FC",
+      "verdict": "accepted",
+      "reason": "The UTA Alpaca setup at lines 23-33 selects the first account, waits for connect, and caches a market clock. The target admits a verified scoped runtime descriptor and fresh session observation while retaining UnifiedTradingAccount only as a compatibility projection; persisted runtime evidence precedes executable admission, not ordinary non-executable Git projection."
+    },
+    {
+      "id": "MAP-58F0FF7798",
+      "verdict": "accepted",
+      "reason": "The UTA Alpaca slice at lines 37-78 casts a partial AAPL object into a native key, mixes stage/commit/log with push, and checks submitted results. The target resolves a typed catalog InstrumentId, puts place/cancel behind withTransaction, and treats Git history as rebuildable projection rather than fill/cancel proof."
+    },
+    {
+      "id": "MAP-B164304E0C",
+      "verdict": "accepted",
+      "reason": "The UTA Alpaca tool slice at lines 87-129 casts tool calls to Function/Record and passes a raw aliceId into quote/details. The target gives search, quote, and contract-detail separate typed read leaves, parses account-bound AliceRef into scope/instrument, and keeps errors and read results outside order state."
+    },
+    {
+      "id": "MAP-8CB6B26E83",
+      "verdict": "accepted",
+      "reason": "The UTA Alpaca bracket slice at lines 133-172 stages/pushes TP/SL, optionally fetches legs, logs missing legs, and then stages/pushes close. The target declares protection only through an exact provider extension with durable parent/child observations and separate cleanup, so missing legs remain explicit recovery evidence."
+    },
+    {
+      "id": "MAP-628E0887B1",
+      "verdict": "accepted",
+      "reason": "The UTA Alpaca market flow at lines 176-246 stages/pushes a buy, checks a quantity delta, then stages/pushes close with optional sync. The target separates place and close effects and persists before-image, observed fill, operation delta, and final baseline; sync/log output remains a projection."
+    },
+    {
+      "id": "MAP-42049295D7",
+      "verdict": "accepted",
+      "reason": "The UTA Bybit setup at lines 24-47 composes account id and local symbol into aliceId after first-match search. The target resolves a structured scope/instrument/catalog-epoch reference and leaves compatibility UTA as a route projection, eliminating concatenated identity as authority."
+    },
+    {
+      "id": "MAP-E9EB273A72",
+      "verdict": "accepted",
+      "reason": "The UTA Bybit flow at lines 49-122 uses secType lookup and accepts any final quantity difference below 0.02 after buy/close. The target binds before-image/delta to the exact instrument and declared residual policy, so an unrelated position or unqualified tolerance yields Drift/Recovery rather than a passing projection."
+    },
+    {
+      "id": "MAP-E136AE0A4B",
+      "verdict": "accepted",
+      "reason": "The UTA Bybit tools at lines 133-199 use Function/Record casts and raw aliceId for search, quote, orderbook, funding, and details. The target exposes separate typed Public/account read leaves, parses account refs before provider calls, and forbids a generic Function/Record boundary or order approval on those reads."
+    },
+    {
+      "id": "MAP-4A1400D914",
+      "verdict": "accepted",
+      "reason": "The UTA Bybit TPSL flow at lines 203-236 rounds prices, pushes, waits, optionally checks legs, and closes. The target preserves a provider-declared BracketSpec only when exact validation and parent/leg observations exist, keeping quote, bracket observation, and close as distinct capabilities."
+    },
+    {
+      "id": "MAP-BA81ADF360",
+      "verdict": "accepted",
+      "reason": "The legacy UTA Bybit setup at lines 21-43 selects by substring and builds account|localSymbol aliceId. The repaired target imports only a well-formed delimiter-safe legacy display into structured scope/instrument evidence; ambiguous or unresolved IDs stay compatibility data and cannot execute."
+    },
+    {
+      "id": "MAP-96BCC45A7C",
+      "verdict": "accepted",
+      "reason": "The legacy Bybit flow at lines 45-98 treats commits, sync, and a secType-only quantity tolerance as execution evidence. The target imports those hashes as typed historical/projection records and requires new remote effects to use provider leaves with withTransaction, with residual drift remaining Recovery rather than a successful commit."
+    },
+    {
+      "id": "MAP-3FD0A99D87",
+      "verdict": "accepted",
+      "reason": "The legacy TPSL at lines 100-134 stages rounded prices, pushes, waits, optionally fetches legs, and closes. The target imports a typed BracketSpec/parent-leg observation and routes any new placement or close through separate declared effects, so projection cannot imply bracket confirmation."
+    },
+    {
+      "id": "MAP-CAA43D746F",
+      "verdict": "accepted",
+      "reason": "The legacy rejection at lines 136-180 clears staging and renders reasoned or reasonless rejection but has no durable typed event. The repaired target makes reject a local durable control transition and ReturnToAgent a ReviewRequest with the exact Discard|KeepSuspended|Rearm|Revise|RequestSubmission action set; no pause or rejection path dispatches to a provider."
+    },
+    {
+      "id": "MAP-47B29B6218",
+      "verdict": "accepted",
+      "reason": "The legacy sentinel checks at lines 182-216 scan status/show/export/log before and after push. The target centralizes a versioned Decimal wire projection with explicit AccountScope versus Public and quarantines sentinels before rendering or execution, preserving the observable sanitation requirement without treating scans as transaction authority."
+    },
+    {
+      "id": "MAP-61B4CADFAF",
+      "verdict": "accepted",
+      "reason": "The UTA IBKR setup at lines 22-32 selects the first account, waits for connect, and caches marketOpen. The target binds route admission to a scoped Paper RuntimeAccount and fresh session result, leaving conId as adapter evidence and requiring a new epoch after reconnect."
+    },
+    {
+      "id": "MAP-5C9F33F93C",
+      "verdict": "accepted",
+      "reason": "The UTA IBKR FX flow at lines 36-89 searches CASH, stages conId/display data, commits without push, records evidence, then rejects. The target separates Public/provider-declared catalog identity from account-bound review, keeps commit non-executable, and requires a durable DispatchStarted only for later approved provider work; evidence cannot authorize push."
+    },
+    {
+      "id": "MAP-DC819A17DE",
+      "verdict": "accepted",
+      "reason": "The UTA IBKR flow at lines 93-138 stages/pushes a GTC order, stages/pushes cancel, and checks legacy log counts. The target turns place/cancel into provider effect leaves with durable observations while leaving stage/commit/log as projection and query as finite pull."
+    },
+    {
+      "id": "MAP-34BF36C838",
+      "verdict": "accepted",
+      "reason": "The UTA IBKR TPSL flow at lines 142-169 comments that IBKR ignores protection fields but still pushes successfully. The target omits an undeclared protection leaf and requires an explicit policy to reject or record an approved entry-only effect, preserving the omission decision and treating later cleanup as separate authorized work."
+    },
+    {
+      "id": "MAP-147173C2A5",
+      "verdict": "accepted",
+      "reason": "The UTA IBKR market flow at lines 173-247 stages/pushes buy, checks quantity, stages/pushes close, and compares baseline/logs. The target keeps sync/position/baseline reads separate from place/close effects and scopes compensation to the observed operation delta, rather than trusting process-local Git evidence."
+    },
+    {
+      "id": "MAP-55F8053385",
+      "verdict": "accepted",
+      "reason": "The lifecycle fixture at lines 21-26 creates a fresh MockBroker with seeded cash/quotes and a UTA for each test. The target explicitly labels this a versioned Simulation fixture with isolation and prevents its envelope from satisfying LivePaper acceptance."
+    },
+    {
+      "id": "MAP-81E8AC49C4",
+      "verdict": "accepted",
+      "reason": "The mock push behavior at lines 30-64 deliberately varies between immediate mutation and deferred fill while both report submitted. The target exposes Immediate|Deferred fillModel with separate Ack and Observation values, allowing pure transition reuse without treating simulator timing as live behavior."
+    },
+    {
+      "id": "MAP-6119E3BEEE",
+      "verdict": "accepted",
+      "reason": "The mock fill scenario at lines 66-108 injects an external fill between sync calls and updates filled/position state. The target models that injection as a sequenced simulated observation and makes duplicate application a pure no-op, preserving delayed observation without double-counting."
+    },
+    {
+      "id": "MAP-7076DD2230",
+      "verdict": "accepted",
+      "reason": "The mock partial close at lines 110-123 applies 10 minus 3 and asserts 7. The target keeps this as a Simulation action with qualified quantity, scope, instrument, and explicit 0≤close≤available arithmetic, so over-close rejects without mutation."
+    },
+    {
+      "id": "MAP-5F648FC9E1",
+      "verdict": "accepted",
+      "reason": "The mock full close at lines 125-137 removes exposure and restores cash to 100000 immediately. The target records this as AllExposure simulation settlement/fee variants and explicitly keeps live unknown residual/fee outcomes reconciling rather than inferring cash equality from Ack."
+    },
+    {
+      "id": "MAP-C63562DE19",
+      "verdict": "accepted",
+      "reason": "The mock cancel at lines 139-151 reports Cancelled after a cancel command and getOrder. The repaired target distinguishes ConfirmedCancelled, StillWorking, AlreadyTerminal, AlreadyFilled, and Unknown observations with idempotent transitions, so a fill race cannot be reported as false cancellation."
+    },
+    {
+      "id": "MAP-3EEA8F2FEB",
+      "verdict": "accepted",
+      "reason": "The mock history at lines 153-167 renders in reverse chronological order from in-memory records. The target makes history a projection over immutable versioned events with sequence conflict and deterministic newest-first rendering, separating storage/projection failure from provider effects."
+    },
+    {
+      "id": "MAP-04EB2CF21F",
+      "verdict": "accepted",
+      "reason": "The mock bracket tests at lines 171-204 spy on TPSL forwarding and absence. The target replaces call-shape assertions with observable Simulation NoBracket|LegsKnown|LegObservationUnknown outcomes and an explicit ProtectionSpec, and forbids simulator results from satisfying LivePaper evidence."
+    },
+    {
+      "id": "MAP-14999AF99F",
+      "verdict": "accepted",
+      "reason": "The precision scenarios at lines 208-282 exercise fractional quantities, exact subtraction, price fields, JSON strings, and sentinel values through stage/push. The target consolidates these observable invariants in a versioned Decimal wire schema for Quantity|Price|Money, preserving exact serialization while rejecting IEEE/sentinel artifacts at the boundary."
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "group": "TargetGaps",
+  "entries": [
+    {
+      "id": "NOTE-5-4",
+      "question": "Which real broker/action combinations have empirically proven restoration and idempotency guarantees remains adapter-specific acceptance evidence; unproven capabilities are unavailable, not assumed.",
+      "disposition": "empirical-retained",
+      "evidence": "UnifiedTradingAccount.ts:180-196 still directly dispatches provider mutations without an applied-state undo contract. composition-contract.md K07-K08 and TargetGaps/analyses.json keep compensation assessment/intent serializable, but the compiler and NativeConformanceRecord are provider capability/effect specific. Alpaca, CcxtCore, CcxtVenues, Ibkr and Longbridge investigations retain identity, lookup, absence, fencing and restoration gaps; no conformance execution was performed here.",
+      "resolution": "Retain the empirical prerequisite. Require NativeConformanceRecord for each provider capability/effect variant with identity scope, retention horizon, complete lookup namespace/end boundary, absence and paused-sender fencing evidence, restoration domain and evidence version. Until that record exists, mark NativeGuaranteeUnproven, permit only the supported StateRestoring/Economic/None classes, and treat post-DispatchStarted response loss as Unknown with ObserveBeforeRetry/RecoveryRequired. This obligation applies to controlled effects only; data readers/streams do not inherit compensation or order approval."
+    },
+    {
+      "id": "NOTE-7-1",
+      "question": "Exact compatible Effect/sql/sqlite-node/better-sqlite3 semver and native binary build/ABI evidence are absent from the current UTA manifest; first storage slice must lock and execute them before availability claims.",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/package.json:14-34 still has no selected Effect/SQL/SQLite runtime dependency, while git-persistence.ts:27-47 remains JSON read/fallback/write authority. composition-contract.md K03/K05/K08 requires a verified native stack for controlled-effect authority but does not require every data cache/frame to use order WAL. detailed design D13/D17 leaves exact semver, native ABI and executable API acceptance to an implementation slice; no dependency or native load was executed here.",
+      "resolution": "Retain the empirical prerequisite. The first executable storage slice must pin compatible versions in the lockfile and execute native artifact load, database open, migration and pragma verification on every supported runtime. Until those results agree, StorageStackStatus is UnverifiedNativeStack: controlled-effect UTA must not become Ready or dispatch, and must not silently fall back to JSON/alternate driver. Provider data reads/streams may report their own unavailable/stale state without receiving fictitious effect authority; non-trading Alice remains independently available."
+    },
+    {
+      "id": "NOTE-9-1",
+      "question": "Each broker's native idempotency horizon, complete lookup namespaces and absence/fencing proof require real broker evidence; without it retry capability is ReconcileBeforeRetry only.",
+      "disposition": "empirical-retained",
+      "evidence": "UnifiedTradingAccount.ts:180-205 exposes the current generic Promise<unknown> dispatcher and brokers/types.ts:1-7 is a compatibility re-export. The corrected composition target uses declaration-derived capability leaves, exact provider schemas and a fixed UTA-facing bridge; it does not treat the current IBroker/global switch as a required SDK. Alpaca, CCXT core/venues, IBKR and Longbridge investigations still require native identity, lookup scope, retention, absence and fencing evidence; no provider conformance run was performed.",
+      "resolution": "Retain the empirical prerequisite. Each provider capability/effect leaf must supply native identity semantics, lookup namespace coverage and pagination/end boundary, retention horizon, absence limits and paused-sender fencing before safe retry, conclusive absence or Exact restoration is advertised. Discovery/availability/schema composition can be implemented without resolving those native facts; no global handler map or Unsupported-filled broker interface may conceal them. Without evidence, retry remains ReconcileBeforeRetry and data delivery remains its own pull/push contract."
+    },
+    {
+      "id": "NOTE-18-1",
+      "question": "Current paper account availability, venue session/entitlements and concrete native retry/absence evidence are empirical and intentionally not queried during this design-only assignment.",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/__test__/e2e/setup.ts:25-29,97-105 only filters paper/sandbox presets. docs/uta-live-testing.md:15-32,224-320 defines the alice-uta surface, complete baselines, hidden namespaces and S7 external-stimulus exception; LiveEvidence separates paper/session/entitlement hints from executed acceptance. composition-contract.md K02/K05/K07 requires PublicScope versus AccountScope and exact delivery/capability evidence. No real account, venue session, entitlement, retry or absence call was made here.",
+      "resolution": "Retain the empirical prerequisite. Before controlled-effect mutation, require verified non-live environment, authenticated AccountScope (including explicit subAccountId where applicable), venue session/entitlements and a complete baseline. PublicScope data observations do not become account authority. Unknown/unavailable facts produce a typed Blocked disposition and no dispatch; S7 remains separately labeled ExternalStimulus. Only executed provider/effect evidence can produce Passed or support native retry/absence claims, and cleanup preserves observe/recovery ownership when outcome is Unknown."
+    },
+    {
+      "id": "NOTE-18-2",
+      "question": "Release-supported OS/architecture matrix and packaged native ABI load results must be supplied by the packaging execution slice; this assignment has inspected manifest/bundle/Docker contracts but does not fabricate executed distribution evidence.",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/package.json:14-34 has no SQLite dependency, tsup.config.ts:11-19 externalizes native modules, and Dockerfile:51-65,107-159 defines an independent UTA closure and /data home. Historical architecture evidence is pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64; detailed design D13/D15 storage acceptance requires native load, crash, backup/restore, relocation and corruption execution. No packaging execution was performed here.",
+      "resolution": "Retain the empirical prerequisite. Enumerate every supported Source/Docker/PackagedDesktop OS/architecture/provider bridge cell, pin native versions/ABI and artifact digests, and execute load/open/migrate plus crash, backup/restore, relocation, corruption, read-only and ownership scenarios. An unexecuted cell remains Unexecuted or Unsupported and cannot confer effect Ready or fallback storage claims. Supported restore enters durable RestoreQuarantine then ObservationOnly before explicit ownership cutover; manifest metadata cannot prove rollback, fencing or exactly-once. Public data caches/streams retain only their separately evidenced replay/finality behavior."
+    }
+  ],
+  "remainingCount": 5,
+  "designBasis": "capability-composition-v1"
+}

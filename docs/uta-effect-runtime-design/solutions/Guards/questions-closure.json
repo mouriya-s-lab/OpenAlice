@@ -1,0 +1,19 @@
+{
+  "group": "Guards",
+  "entries": [
+    {
+      "id": "MAP-4A48C821C3",
+      "question": "Source inspection found no production caller or persisted configuration requiring a third-party guard extension. The current closed built-in policy therefore rejects undeclared extension types; if another owned group has verified a shipped extension requirement, Main must add a separately versioned composition-root layer contract rather than reopening the untyped registry.",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "services/uta/src/domain/trading/guards/guards.spec.ts:295-305 exercises custom registration only as a legacy test; no production caller is present in the observed source search.",
+        "services/uta/src/domain/trading/guards/registry.ts:6-19 declares exactly max-position-size, cooldown, and symbol-whitelist as built-ins, while registerGuard is the unsafe process-global mutator under replacement.",
+        "src/core/config.ts:436-454 persists only raw guard {type, options} entries and defines no third-party extension discriminator or versioned extension variant.",
+        "docs/uta-effect-runtime-design/solutions/composition-contract.md#k01 and docs/uta-effect-runtime-design/solutions/composition-contract.md#k02 require declaration-derived capability metadata and typed composition without a global ActionContractMap or mandatory provider handler set.",
+        "docs/uta-effect-runtime-design/solutions/Guards/analyses.json entry MAP-4A48C821C3 and docs/uta-effect-runtime-design/solutions/composition-contract.md#k01 plus docs/uta-effect-runtime-design/solutions/composition-contract.md#k02 retain the source finding while routing any future extension through an immutable composition-root descriptor."
+      ],
+      "resolution": "The observed source currently has three built-in guard declarations and no production or persisted third-party extension requirement; its current registry still warns and skips an undeclared type, which is the defect being replaced. The target configuration path must reject an undeclared guard reference atomically as GuardConfigFailure.UnknownRuleType before controlled-effect admission. This is a current composition/availability fact, not a universal closed provider SDK: public data capabilities and provider effect trees remain declaration-specific and open. If independent evidence later establishes a shipped extension, add a separately versioned composition-root RuleDeclaration/Layer with its config, rule input/required facts/pass-fact/issue schemas, effect applicability, and implementation identity; preserve the exact provider leaf input/result/error schemas, bind the immutable snapshot fingerprint to new controlled-effect plans, and retain existing plans or require explicit reprepare. Never restore the untyped process-global registry."
+    }
+  ],
+  "remainingCount": 0
+}

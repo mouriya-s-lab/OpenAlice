@@ -1,0 +1,20 @@
+{
+  "group": "HttpRoutes",
+  "entries": [
+    {
+      "id": "MAP-0682C42EA8",
+      "question": "仍需在各 broker adapter 核实 native sentinel 的完整集合与版本；Mock/IBKR 当前证据只覆盖此测试使用的几种。",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/__tests__/trading-tools.spec.ts:169-193 only exercises UNSET price fields and parentId=0 in a mocked OpenOrder; packages/ibkr/src/const.ts:10-13 defines UNSET_INTEGER, UNSET_DOUBLE, UNSET_LONG, and UNSET_DECIMAL, while packages/ibkr/src/order.ts:47-75,180-225,240-244 applies sentinel/default values across many native fields. services/uta/src/domain/trading/OrderHelper.ts:35-44,68-100 lists only seven Decimal fields and performs truthiness-based projection, and AlpacaBroker.ts:287-307, CcxtBroker.ts:519-601, LongbridgeBroker.ts:286-301, and MockBroker.ts:282-348 show adapter-specific UNSET_DECIMAL handling without a documented cross-adapter profile/version matrix. Stable Identity sentinel analysis MAP-60408331F8 and composition requirements K03, K04, K07, and K11 require an adapter-local versioned allowlist and typed failure for unknown native schema rather than treating SDK defaults or mocks as proof.",
+      "resolution": "Retain the empirical prerequisite under capability composition. Each adapter must supply a versioned NativeSentinelProfile plus presence/schema evidence before classifying a native value as Absent for its declared order-observation/effect leaf. Until then, unknown adapter/profile/field/version, missing presence metadata, or ambiguous native defaults yield UnknownNativeSentinel, NativeSentinelSchemaDrift, or PresenceRequired; the observation remains unavailable/unknown, raw values do not enter the selected projection or prepared payload, and no controlled effect is authorized. The confirmed Mock/IBKR fixture still omits its tested UNSET price and parentId=0 fields; other adapters and legitimate zero values remain unclassified until their own evidence exists."
+    },
+    {
+      "id": "MAP-2F69B76FDC",
+      "question": "The repository does not provide the UTA↔Alice service credential/issuer/verifier implementation; Main/deployment must designate the secret provisioning and verifier owner without route-local crypto or a body-supplied identity.",
+      "disposition": "empirical-retained",
+      "evidence": "src/webui/routes/trading-proxy.ts:4-7 explicitly states that v1 has no Alice↔UTA auth and trusts loopback, while :115-168 forwards the request headers/body unchanged. services/uta/src/http/routes-trading.ts:127-135 mounts GET /uta without authentication and returns raw manager summaries. Stable cross-group findings MAP-7D7ABA2368 and MAP-139EBB287C plus composition requirements K02, K07, K08, and K09 keep this as a transport/application boundary obligation but do not provide the credential issuer/verifier implementation. No repository implementation establishes the deployment owner or verifier evidence.",
+      "resolution": "Retain the empirical prerequisite. Deployment/Guardian must provision and identify the UTA↔Alice service credential and verifier before transport admission; this remains a deployment boundary, not a route-local crypto or universal provider contract. Before that boundary is installed, missing/invalid credentials return UnauthenticatedTransport (401), an unprovisioned verifier returns TransportVerifierUnavailable without loopback fallback, and a body-supplied actor is ignored. Only a verified Principal reaches the scope-aware account capability projection, and a selected controlled effect rechecks scope, capability, revision, expiry, policy, and actor binding."
+    }
+  ],
+  "remainingCount": 2
+}

@@ -1,0 +1,83 @@
+{
+  "group": "Longbridge",
+  "entries": [
+    {
+      "id": "MAP-7805D80DA1",
+      "question": "Native response envelope/version and deterministic accepted-before-ack injection remain to be fixed by the adapter conformance harness.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/brokers/longbridge/LongbridgeBroker.spec.ts:1-45 only mocks numeric enums, promise-returning contexts, and a limited method surface; it provides no native response envelope/version or independent remote ledger.",
+        "../composition-contract.md K03-K07-K08-K11-K12 requires runtime native schema validation, an isolated heterogeneous boundary, and explicit unknown handling after the dispatch barrier.",
+        "entries.md#map-7805d80da1 preserves this fixture limitation as an empirical obligation and does not treat mock behavior as native evidence."
+      ],
+      "resolution": "Retain the empirical prerequisite. Conformance must capture the actual SDK response envelope/version and inject accepted-before-ack against an independent ledger. Until then, missing or unknown envelope/version yields ProtocolViolation/RecoveryRequired with no Ack or OrderSnapshot; any outcome after DispatchStarted is Unknown and schedules ObserveRequired rather than retry or redispatch."
+    },
+    {
+      "id": "MAP-ABF45B8D66",
+      "question": "SDK error code/status and probe coverage of quote endpoint remain empirical conformance facts.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/brokers/longbridge/LongbridgeBroker.spec.ts:235-275 proves only credential checks, an empty accountBalance probe, and message-regex 401 retry behavior; it does not establish native code/status mapping or quote probe coverage.",
+        "services/uta/src/domain/trading/brokers/longbridge/LongbridgeBroker.ts:180-228 constructs trade and quote contexts but probes only tradeCtx.accountBalance().",
+        "../composition-contract.md K02-K03-K07 requires per-leaf availability, schema-bound native failure handling, and a fixed UTA-facing boundary."
+      ],
+      "resolution": "Retain the empirical prerequisite. The adapter conformance matrix must record native error code/status/body mappings and explicitly identify which trade and quote leaves were probed. Until observed, unknown codes are UnclassifiedNativeFailure, unprobed quote reach is Unavailable/ProbeCoverageUnknown, provider reach is not process RuntimeHealth.Ready, and write admission stays closed."
+    },
+    {
+      "id": "MAP-B35B59A740",
+      "question": "Concrete SDK response schema and independent remote-ledger driver remain conformance evidence to obtain; no capability is broadened.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/brokers/longbridge/LongbridgeBroker.spec.ts:828-843 defines a toString-only Decimal helper and fills every omitted balance field with 0, so it cannot distinguish missing from explicit zero or prove native schema.",
+        "../composition-contract.md K03-K07-K08 requires runtime schemas and forbids casts/defaults from turning dynamic responses into static provider values.",
+        "entries.md#map-b35b59a740 keeps fixture arithmetic separate from native and recovery evidence."
+      ],
+      "resolution": "Retain the empirical prerequisite. A conformance harness must obtain the SDK response envelope/version and provide a remote-ledger driver that survives restart. Without both, malformed or missing fields remain ProtocolViolation, accepted-before-ack/crash outcomes remain Unknown/ObserveRequired, and fixture or mock behavior cannot broaden native capability; read-only data fixtures do not acquire order transaction semantics."
+    },
+    {
+      "id": "MAP-50CE86A3DE",
+      "question": "Paper endpoint/credential semantics require pack conformance evidence.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/brokers/longbridge/LongbridgeBroker.ts:125-151 validates raw credentials, defaults paper false, and accepts optional endpoint URLs without proving endpoint/account environment.",
+        "services/uta/src/domain/trading/brokers/longbridge/longbridge-types.ts:17-31 describes a paper marker, matching environment credentials, and no separate sandbox URL set, but does not provide runtime endpoint/account evidence.",
+        "../composition-contract.md K07-K08-K09-K10 requires an isolated native boundary and explicit authority/trigger handling; configuration hints alone cannot grant execution."
+      ],
+      "resolution": "Retain the empirical prerequisite. Pack conformance must link declared paper/live intent, credential semantics, observed endpoint, and observed account before Paper or Live becomes executable for an account-owned effect leaf. Until then, EnvironmentUnknown blocks writes; explicit endpoint/account conflict is EnvironmentMismatch; durable plans contain only CredentialRef and non-secret fingerprint."
+    },
+    {
+      "id": "MAP-4DE673DCFE",
+      "question": "Exact SDK error code/status and probe endpoint coverage require empirical conformance.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/brokers/longbridge/LongbridgeBroker.ts:174-228 validates credentials, probes accountBalance, retries five times, regexes messages, and rethrows raw lastErr; it does not establish a versioned native error map or endpoint coverage matrix.",
+        "../composition-contract.md K02-K03-K07-K08-K11 requires named per-capability availability, typed protocol errors, and recovery-safe unknown outcomes.",
+        "entries.md#map-4de673dcfe retains per-endpoint ProbeFacts without claiming native mappings."
+      ],
+      "resolution": "Retain the empirical prerequisite. Capture exact SDK error code/status mappings and endpoint coverage per probe. Until captured, unknown native failures are UnclassifiedNativeFailure with Observe/RecoveryRequired, missing coverage keeps provider capabilities unavailable and process RuntimeHealth non-Ready, and no command admission or retry classification is authorized."
+    },
+    {
+      "id": "MAP-39CF059275",
+      "question": "No explicit release API is established by source; do not invent one.",
+      "disposition": "source-resolved",
+      "evidence": [
+        "services/uta/src/domain/trading/brokers/longbridge/LongbridgeBroker.ts:230-233 implements close() as an async no-op and states that Rust websocket pools are reclaimed by garbage collection; no SDK release/unsubscribe call exists in the source.",
+        "../composition-contract.md K05-K07 treats streams/resources as explicit lifecycle contracts and forbids invented native guarantees.",
+        "entries.md#map-39cf059275 records the source-resolved no-op and its scoped cleanup boundary."
+      ],
+      "resolution": "Resolve from source. The target uses scoped ownership, a single idempotent Closed transition, closed-generation evidence, and CleanupEvidenceUnavailable when no verified native hook exists. A future SDK hook may be used only after direct conformance observation; GC or the current no-op is never treated as deterministic release, and closing one connection does not manufacture global process failure."
+    },
+    {
+      "id": "MAP-FCDA99890A",
+      "question": "Actual endpoint/account evidence rules require broker-pack composition conformance.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/brokers/longbridge/longbridge-types.ts:9-32 is a compile-time config shape with raw credentials, a paper boolean, and optional endpoint overrides; it does not validate endpoint/account consistency.",
+        "../composition-contract.md K02-K03-K07 requires declaration-derived schemas, explicit availability, and a single UTA-facing boundary without assuming provider-native guarantees.",
+        "entries.md#map-fcda99890a preserves EnvironmentUnknown/EnvironmentMismatch and CredentialRef-only durability."
+      ],
+      "resolution": "Retain the empirical prerequisite. Broker-pack composition must observe and define the endpoint/account evidence rules before environment admission for account-owned effect leaves. Until then, EnvironmentUnknown blocks writes, explicit conflicts are EnvironmentMismatch, and durable plans persist only AccountId/Scope where applicable, config fingerprint, environment evidence, and CredentialRef—not secret material."
+    }
+  ],
+  "remainingCount": 6
+}

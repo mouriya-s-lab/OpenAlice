@@ -1,0 +1,62 @@
+{
+  "group": "Polling",
+  "entries": [
+    {
+      "id": "MAP-A173AC5D0E",
+      "question": "当前 MockBroker 没有持久化 remote ledger 或独立子进程协议；实现第一条 falsifier 时需实证选择‘测试进程内保留 broker、仅重启 worker’还是独立持久 broker actor，并记录该边界，不能假定 in-memory object 等价于远端持久性。",
+      "disposition": "design-decided",
+      "evidence": "services/uta/src/domain/trading/brokers/mock/MockBroker.ts:1-17 identifies an in-memory simulator; Polling analyses MAP-A173AC5D0E now separates worker/Scope restart from UTA process restart and names two test seams.",
+      "resolution": "Use InProcessRetainedLedger for worker/Scope-only restart checks, and use DurableMockVenue as a separate venue process with a durable ledger for UTA process-kill/reopen/crash checks. The deterministic test-owned identity/dedup behavior belongs to the fixture; neither seam is live-venue durability or native-idempotency evidence, and neither changes the provider capability contract."
+    },
+    {
+      "id": "MAP-9A7B5853BF",
+      "question": "MockBroker 当前递增 order id 没有 venue-side idempotency；第一条测试只能验证 scheduler 的 stable identity/no-blind-retry，不能把该 mock 行为当作 native idempotency evidence。",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/brokers/mock/MockBroker.ts:278-324 allocates in-process mock-ord-N identities; the revised analysis keeps this as simulator evidence and separates it from provider-native idempotency.",
+      "resolution": "Do not claim venue-side idempotency from MockBroker. The first test proves only stable command/transaction/dispatch identity, commit-before-dispatch, and no-blind-retry; native adapter idempotency acceptance remains Unknown/OperatorRequired until an adapter-specific observation establishes it."
+    },
+    {
+      "id": "MAP-F6CFDCE6F2",
+      "question": "MockBroker 的 `setMarkPrice` 是测试控制面，不证明真实 venue 的 order-status freshness 或 execution identity；真实 adapter acceptance 仍需分别取得。",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/brokers/mock/MockBroker.ts:546-563 labels setMarkPrice as simulator control; order-sync-poller.spec.ts:27-54 only exercises the synthetic working-to-filled sequence. The revised design treats it as an external simulator actor.",
+      "resolution": "Treat setMarkPrice as a simulator actor only. The durable slice may verify observation/projection behavior and duplicate-execution fencing, but real adapter freshness and execution identity remain unproven; absent that evidence, observation is Unknown/OperatorRequired and cannot authorize a terminal or native guarantee."
+    },
+    {
+      "id": "MAP-855D4FE105",
+      "question": "IBKR 当前 `reqOpenOrders` 只返回该 clientId 的订单（IbkrBroker.ts:766-775），手工 TWS 订单的 permId/reqAllOpenOrders 证据尚未存在；外部观察对这类订单必须保持 capability-limited，不能宣称全账户覆盖。",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/brokers/ibkr/IbkrBroker.ts:766-775 explicitly limits getOpenOrders to reqOpenOrders for this clientId and defers reqAllOpenOrders+permId; the revised external-observation target preserves the listing capability identity while reporting its coverage limitation.",
+      "resolution": "Keep IBKR external discovery capability-limited to the evidenced clientId range. Manual TWS orders remain outside the complete listing claim until reqAllOpenOrders/permId behavior is observed; incomplete scope is Partial/Unavailable and never NoNewOrders or full-account coverage."
+    },
+    {
+      "id": "MAP-E279FE276F",
+      "question": "现有 config 只验证 parseDuration 非 null，具体 scheduler 可接受的最大 duration、jitter、missed-window 和 rate-limit 上限尚未在 source 中规定；在实现 Layer 固化这些 policy 前，超出明确边界必须拒绝，采用 fixed-delay/no-jitter 的保守调度，不以隐式默认或 lossy market-data coalescing 代替 durable observation。",
+      "disposition": "design-decided",
+      "evidence": "services/uta/src/domain/trading/order-sync-poller.ts:20-49 exposes raw cadence, tick-count rounding and defaults; services/uta/src/main.ts:116-128 maps off and parse failure with a 15m fallback. The revised analysis makes duration validation and policy an order-observation boundary concern.",
+      "resolution": "Fix ConservativePollingPolicy as finite safe-integer milliseconds, jitter None, OneDueFixedDelay with no catch-up, and ExplicitAdapterBudget for the declared observation capability. Invalid/non-safe durations are rejected; missing provider rate budget yields Deferred/OperatorRequired rather than a guessed native limit, and durable observation never uses lossy market-telemetry coalescing."
+    },
+    {
+      "id": "MAP-BAF46FCF2F",
+      "question": "Observe listing 的可合并窗口、connection rate limit 和 lease heartbeat 需由各 adapter/运行配置的实证确定；在证据未齐前只允许同一 scope/schedule 的未 claim wake 合并，采用保守 single-flight/固定 due 处理，绝不把 unknown mutation 或 durable trading work 交给 market-telemetry 的 lossy policy。",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/order-sync-poller.ts:53-61,98-104 proves only process-local running/tickCount/timer behavior; the source does not establish provider rate limits or lease-heartbeat SLAs. The revised analysis records same-scope/schedule coalescing as the bounded interim policy.",
+      "resolution": "The design fixes same-scope/schedule unclaimed-wake coalescing with no implicit time window, single-flight/fixed-delay/no-jitter, and explicit budget admission. Provider-specific rate-limit and lease-heartbeat evidence remains required; until obtained, jobs stay Deferred/OperatorRequired and unknown mutation or durable trading work is never sent through lossy telemetry policy."
+    },
+    {
+      "id": "MAP-0F70BAA7CC",
+      "question": "IBroker 当前 optional getOpenOrders 的‘unsupported returns []’契约与严格 adapter 的 throw 语义不一致；需要 broker-spi owner 实证每个 adapter 的完整 namespace、分页、clientId 范围和 absence evidence，证据未齐前一律把 unsupported/不完整结果编码为 `Unavailable`/`Partial`，不得生成 NoNewOrders。",
+      "disposition": "empirical-retained",
+      "evidence": "packages/uta-protocol/src/types/broker.ts:577-584 permits optional enumeration and an unsupported empty-array result; CcxtBroker.ts:1171-1204 and bybit.ts:33-51 show permissive/strict and multi-namespace behavior. The revised target treats these as adapter evidence mapped at a provider capability boundary, not as a universal SDK requirement.",
+      "resolution": "Do not infer completeness from [] or a strict throw. Until each provider adapter's namespace, pagination, scope and absence evidence are established, encode unsupported discovery as Unavailable and incomplete discovery as Partial; only a scope-complete ListingResult.Complete may produce NoNewOrders."
+    },
+    {
+      "id": "MAP-5D07510B31",
+      "question": "各 adapter 的 order-status retention、symbol-scoped lookup、listing freshness 和稳定 execution identity 尚未由统一 SPI 证明；无证据时必须落 Unknown/OperatorRequired，而不是由 MockBroker 的 getOrder null/递增 id 推断。",
+      "disposition": "empirical-retained",
+      "evidence": "The Polling analysis grounds this gap in UnifiedTradingAccount.ts:844-915 and the provider lookup paths; the revised target keeps provider-specific lookup descriptors, freshness and execution identity as evidence fields rather than a global contract guarantee.",
+      "resolution": "Keep OrderRef lookup descriptors, freshness and execution identity as provider evidence fields. A null lookup without absence proof, unknown retention/freshness, or missing stable execution identity remains StillWorking/Unknown/OperatorRequired; MockBroker nulls and mock-ord-N values cannot produce cancellation, rejection, or native identity guarantees."
+    }
+  ],
+  "remainingCount": 6
+}

@@ -1,0 +1,272 @@
+{
+  "group": "CcxtVenues",
+  "entries": [
+    {
+      "id": "MAP-2FB8A60A26",
+      "question": "各 venue 的 native market id 是否稳定且与 unified symbol 是否一一对应需按连接 conformance 采样；在未证明前 catalog 只接受明确 identity evidence。",
+      "disposition": "empirical-retained",
+      "evidence": "ccxt-contracts.spec.ts:1-24 的 makeMarket 将 id 默认成 symbol、active 默认成 true，并以 Partial<CcxtMarket> 强转；ccxt-contracts.ts:55-111 只消费传入的 market row，未提供任何真实 venue id 稳定性或 id↔symbol 一一对应证明。Catalog/CcxtCore 设计也把 native key 保留为 venue-specific evidence，而非从统一 symbol 推导的事实。",
+      "resolution": "保留该连接 conformance 前置条件。未取得指定 venue、environment、SDK version 的样本与重复观察证据前，provider market leaf 只接受明确 nativeId/nativeSymbol identity evidence；InstrumentId 不因 display/unified symbol 被证明而生成稳定性保证。缺稳定性证据时该 market 可作为带 evidence 的查询事实，但依赖稳定 native identity 的 action/lookup leaf 保持 unavailable；不得跨 venue 猜测、重写或合并 key。"
+    },
+    {
+      "id": "MAP-00DA721165",
+      "question": "各 venue 对 option/future 的 expiry 与 contractSize 是否始终提供需在对应 broker conformance 中实测；未有证据时该 market capability 保持 unavailable。",
+      "disposition": "empirical-retained",
+      "evidence": "ccxt-contracts.spec.ts:26-77 只用带 expiry/contractSize 的 fixture 验证 future，ccxt-contracts.ts:77-108 通过 unknown cast 读取字段，并在缺 contractSize 时写入 multiplier='1'；这些 source facts 不覆盖各 venue 的真实字段可用性。",
+      "resolution": "保留逐 venue conformance。Future/Option 行必须分别取得 expiry、contractSize（以及 Option 的 strike/right）和版本化 native evidence；未取得时返回 MissingDerivativeMetadata/CapabilityUnavailable，保存已知 market identity 但不生成可交易 derivative Instrument，不把旧的 multiplier='1' fallback 当事实。"
+    },
+    {
+      "id": "MAP-1767B100E0",
+      "question": "CCXT 4.5.38 各 exchange 实际返回的 type vocabulary 需在 native response conformance 中采样；未采样值都应走 Unknown。",
+      "disposition": "empirical-retained",
+      "evidence": "ccxt-contracts.ts:24-32 仅定义 spot/swap/future/option 四个 switch 分支，default 返回 CRYPTO；ccxt-contracts.spec.ts:105-112 只覆盖四个已知字符串，没有真实 CCXT 4.5.38 各 exchange response vocabulary 样本。",
+      "resolution": "保留 native vocabulary 采样。provider market leaf 对未采样、空或新增 type 产生 UnknownMarketKind(rawType,path)/NativeProtocolViolation，不生成 CRYPTO Instrument；只有带 exchange、SDK version 和 payload evidence 的明确映射才能扩展该 provider leaf 的 semantic projection 与 availability。"
+    },
+    {
+      "id": "MAP-C2F10E778E",
+      "question": "各 CCXT venue 的 timeframes 在 sandbox/live 与 SDK version 间差异需连接层启动时实测并纳入 capability fingerprint。",
+      "disposition": "empirical-retained",
+      "evidence": "ccxt-contracts.ts:14-22 的 CCXT_TIMEFRAME 只是八个 normalized token table，并明确注释 support varies per exchange；它没有 sandbox/live、SDK version 或启动时 exchange.timeframes 的实测结果。",
+      "resolution": "保留启动 conformance。连接层必须以 venue、environment、SDK version、exchange.timeframes 快照构造 VenueTimeframeCapability 并纳入 fingerprint；证据缺失或 interval 不在已确认集合时返回 UnsupportedInterval，不能向同一 native endpoint 重试并把 SDK rejection 当普通 transport success。"
+    },
+    {
+      "id": "MAP-F0A14EF839",
+      "question": "各 venue 的完整 status vocabulary、closed 与 fill 的最终一致性语义和 order-id retention horizon 需由 broker conformance 实测后纳入 capability。",
+      "disposition": "empirical-retained",
+      "evidence": "ccxt-contracts.ts:36-45 的 mapOrderStatus 把 closed 直接映射 Filled、未知/undefined 映射 Submitted，且 expired/rejected 压成 Inactive；source 没有各 venue 状态全集、closed/fill 最终一致性或订单保留时长证据。",
+      "resolution": "保留 broker conformance。未确认 status/finality/retention 前，OrderObservation 使用 Unknown 与独立 filled/remaining evidence；Ack 或 closed 字样不能单独产生 Filled，DispatchStarted 后的未知结果进入 Observe/Reconciliation/RecoveryRequired，不能依据未知 retention horizon 盲重发或把查无订单当未执行。"
+    },
+    {
+      "id": "MAP-63CF278660",
+      "question": "CCXT markets 对各衍生类型的 contractSize/expiry 可用性需逐 venue 实测；缺证据的市场 capability 必须保持 unavailable。",
+      "disposition": "empirical-retained",
+      "evidence": "ccxt-contracts.ts:55-111 对 expiry、contractSize、strike、optionType 使用 unknown cast，且缺 contractSize 时 multiplier fallback 为 '1'；ccxt-contracts.spec.ts 的 derivative fixture 不能证明各 venue 的覆盖率或可靠性。",
+      "resolution": "保留逐 venue 字段 conformance。Native decoder 先校验完整 derivative metadata；缺 contractSize/expiry 的 Future/Option 保留 raw-safe evidence 并返回 MissingDerivativeMetadata/CapabilityUnavailable，不生成半成品 Instrument、不使用 multiplier='1'，也不由 translator 分支推导新的 FOP capability。"
+    },
+    {
+      "id": "MAP-249466CED5",
+      "question": "quote preference 是否适合所有交易辖区需要产品/venue policy 决策；在未决定前只能由调用方显式提供。",
+      "disposition": "design-decided",
+      "evidence": "ccxt-contracts.ts:146-180 的 resolveContractSync 在缺 currency 时隐式只选 USDT/USD/USDC；CcxtVenues 现有 target 已要求显式 quote/settlement policy，Catalog sibling design 也把 quote preference 定位为版本化 query policy 而非 universal currency rule。",
+      "resolution": "采用具名 `QuoteSelectionPolicy = ExplicitOnly | VersionedVenuePolicy(policyId)`。默认且无须额外配置的是 ExplicitOnly：quote/settlement 候选不唯一时返回 Ambiguous；只有调用方明示、且 policyId 与 venue/catalog version evidence 匹配的 VersionedVenuePolicy 才能排序候选。旧 USDT/USD/USDC preference 不再由 resolver 隐式补入，也不授予 dispatch。"
+    },
+    {
+      "id": "MAP-054253553C",
+      "question": "各 CCXT venue 的 order-book timestamp/sequence 可靠性需实测，sequence 缺失时 freshness policy 必须降低而不能伪造连续性。",
+      "disposition": "empirical-retained",
+      "evidence": "ccxt-tools.spec.ts:71-127 的 order-book fixture 只断言 bids/source/localSymbol；CcxtBroker.ts:1330-1375 在缺 timestamp 时使用 Date.now，source 没有各 venue timestamp/sequence 可靠性的证据。",
+      "resolution": "保留 order-book conformance。Native decoder 必须保留 provider timestamp/sequence 的 presence、source 和 asOf；sequence 缺失或未验证时只允许显式 degraded freshness，不能伪造连续性、把 local now 当 observedAt，或让 partial/stale book 满足交易 precondition。"
+    },
+    {
+      "id": "MAP-A023467285",
+      "question": "funding rate 的 native precision/settlement timestamp reliability 需按 venue conformance 确认。",
+      "disposition": "empirical-retained",
+      "evidence": "ccxt-tools.spec.ts:129-150 只检查 fundingRate 数字/source；CcxtBroker.ts:1330-1351 将缺 fundingRate 变成 0、缺 timestamp 变成 Date.now，未证明各 venue precision 或 settlement timestamp 可靠性。",
+      "resolution": "保留 funding conformance。只有经过 venue/version schema 与 precision/timestamp evidence 校验的有限 Decimal rate 才能成为 FundingObservation；缺 rate/time 或可靠性未确认时返回 FundingPayloadInvalid/FundingUnavailable，freshness 降级且不填 0/now。"
+    },
+    {
+      "id": "MAP-F12C6450E2",
+      "question": "funding rate 的 native precision/settlement timestamp reliability 需按 venue conformance 固定；未确认时 freshness 降级。",
+      "disposition": "empirical-retained",
+      "evidence": "ccxt-tools.ts:41-66 只解码 aliceId/source、调用 broker.getFundingRate 并 spread raw result；同一 source path 没有 precision、settlement timestamp 或各 venue reliability evidence，且 rejection 可逸出 tool。",
+      "resolution": "保留该 native reliability 前置条件，并沿用 A023 的安全规则：tool 通过 typed FundingObservation/QueryFailure 暴露 provider precision、observedAt、source 和 freshness；未确认的 precision/timestamp 只能返回 degraded/Unavailable，禁止合成 rate、now 或把 broker rejection 作为成功响应。"
+    },
+    {
+      "id": "MAP-CC557A8B9C",
+      "question": "各 venue 的 depth limit、序列号与 timestamp freshness 需实测后进入 capability；不支持的深度返回 UnsupportedDepth。",
+      "disposition": "empirical-retained",
+      "evidence": "ccxt-tools.ts:68-95 只验证 limit 为 1..100 且默认 20，并把 broker fields spread 出去；source 未提供 venue depth ceiling、sequence、timestamp freshness 或背压 conformance。",
+      "resolution": "保留 depth conformance。Depth(1..100) 先经 operation-specific capability 检查；未确认或 provider 不支持的深度返回 UnsupportedDepth/CapabilityUnavailable。缺/非法 level、sequence、timestamp 产生 ProtocolViolation 或 degraded Partial/Stale，不返回空盘口冒充成功，也不以未验证 freshness 满足交易前置条件。"
+    },
+    {
+      "id": "MAP-D084EF97BB",
+      "question": "Classic 与 Unified v3 的账户识别/响应字段和权限错误码需真实连接 conformance 固定；未证实前禁止 UTA capability。",
+      "disposition": "empirical-retained",
+      "evidence": "bitget.ts:1-15 的注释只声明 Classic-only 并排除 Unified v3；bitget.ccxt.spec.ts:1-25 只验证 spot 默认路由和显式 USDT-FUTURES route，没有真实 family/account response 字段或权限 code 证据。",
+      "resolution": "保留 Bitget family conformance。连接声明与 native endpoint/version/account evidence 不一致或未取得时返回 FamilyMismatch/CapabilityUnavailable；ClassicV2 interpreter 不得以 transport option 启用 UnifiedV3，不得以 spot 成功代替 derivatives scope/read。"
+    },
+    {
+      "id": "MAP-A5CD6EF457",
+      "question": "Bitget Classic plan endpoint 是否返回稳定 parent/child identity、分页与最终一致性证据需实测。",
+      "disposition": "empirical-retained",
+      "evidence": "bitget.ccxt.spec.ts:27-44 只断言 trigger/profit_loss 请求的 productType/planType；它没有真实 plan row parent/child identity、分页边界或 eventual-consistency evidence。",
+      "resolution": "保留 plan endpoint conformance。取得稳定 parent/child/native identity、cursor 和一致性 evidence 前，plan rows 只能进入 Partial/Unavailable 或带 Unknown relationship 的 data observation；该 open-order read 不创建 dispatch identity、approval、compensation 或 transaction lock。不得把 endpoint route/planType 参数当作 attached protection、parent linkage 或 Complete listing 的证明；若另有 protection effect leaf，其恢复语义独立建模。"
+    },
+    {
+      "id": "MAP-2305603E29",
+      "question": "Bitget permission errors 是否能稳定区分未开通 wallet 与网络故障需实测；两者须保留不同 evidence。",
+      "disposition": "empirical-retained",
+      "evidence": "bitget.spec.ts:16-24 只断言 strictPrivateReads/strictOpenOrderReads 两个 boolean 和 spot/derivatives subAccounts；该 fixture 没有 native permission/error payload，也不能区分未开通 wallet 与网络不可达。",
+      "resolution": "保留错误分类 conformance。只有 documented/versioned native fields 能构造 PermissionDenied/WalletNotEntitled；否则统一保留 redacted Unknown/Unavailable evidence。strict read 失败不得变成 zero/empty 或由 spot success 掩盖，且不能从 generic message 猜权限。"
+    },
+    {
+      "id": "MAP-0AD385A30A",
+      "question": "Bitget position row 的 contractSize/mark/PnL 字段可靠性需实测后决定 accounting capability。",
+      "disposition": "empirical-retained",
+      "evidence": "bitget.spec.ts:26-55 只验证 balance/positions 的 USDT-FUTURES 路由；它没有 position row 字段、单位、mark/PnL provenance 或 reliability sample。",
+      "resolution": "保留 accounting conformance。未确认 contractSize、mark 或 PnL 的单位/可靠性前，PositionObservation 保留已解码 scope/instrument/quantity 和 signed facts，mark/PnL 标为 Incomplete/MarkUnavailable；PositionListing 的 Complete 只由 required row identity/quantity 与 enumeration/page coverage 决定，因此缺 optional mark/PnL 不必把 listing 降为不完整。只有 schema、unit、asOf 与 venue evidence 齐全才提升相应 accounting capability。"
+    },
+    {
+      "id": "MAP-D119678B33",
+      "question": "Bitget endpoint 是否支持稳定分页/cursor 与每类 rate limit 需实测，未确认边界不得标 Complete。",
+      "disposition": "empirical-retained",
+      "evidence": "bitget.spec.ts:57-75 只固定六类请求顺序和每类一条 fake order；bitget.ts:17-30 的 helper 逐次调用 fetchOpenOrders，没有 cursor、page boundary 或 rate-limit observation。",
+      "resolution": "保留 endpoint/cursor/rate-limit conformance。每个 Bitget namespace data leaf 必须持久化 cursor boundary、attempt、asOf 和 backoff evidence；边界或 rate policy 未确认时返回 Partial/Unavailable，不能标 Complete、把未翻页当空列表，或在未知请求后盲目重扫。"
+    },
+    {
+      "id": "MAP-D0F4B7EAFE",
+      "question": "Bitget native order id 是否跨 namespace 全局唯一需实测；在没有证据时必须保留 instrument+scope 复合键。",
+      "disposition": "empirical-retained",
+      "evidence": "bitget.spec.ts:77-99 只证明同 symbol/id 的 fake rows 合并、不同 symbol 的相同 id 不合并；bitget.ts:17-30 实际以 symbol:id 拼 key，未提供跨 namespace/global uniqueness evidence。",
+      "resolution": "保留该经验前提和复合键规则。`ScopedOrderRef = AccountScope + InstrumentId + BrokerOrderId` 永远是默认 identity；即使未来 conformance 证明全局唯一，也只作为可审计优化 evidence，不允许在缺 scope/instrument 时跨 namespace、wallet 或 venue 合并。"
+    },
+    {
+      "id": "MAP-5AA0964109",
+      "question": "Bitget permission response 与 timeout 的可分类字段需实测；若无法区分，统一按 Unknown/Unavailable 保守处理。",
+      "disposition": "empirical-retained",
+      "evidence": "bitget.spec.ts:101-112 只让 profit_loss namespace 抛出字符串 `bitget permission denied` 并断言整体 reject；source 没有 permission payload 与 timeout 分类字段。",
+      "resolution": "保留错误字段 conformance。可证明的 native permission response 才可标 PermissionDenied；request-start 后 timeout/transport 不确定性保留 Unknown/Unavailable、covered/missing namespace 与 checkpoint，不丢前序 rows、不做 absence removal、不把 generic error 当 permission。"
+    },
+    {
+      "id": "MAP-8BF5C81D82",
+      "question": "Bitget native account family 识别 endpoint/version 的可靠字段需 live probe；无证据时 family capability 保持 unavailable。",
+      "disposition": "empirical-retained",
+      "evidence": "bitget.ts:1-15 只以注释声明 Classic-only 与 USDT-FUTURES 常量，未实现 family probe；bitget.spec.ts 仅覆盖 override metadata，不提供 native endpoint/version/account family field。",
+      "resolution": "保留 live family probe。未得到可靠 endpoint/version/account evidence 时，BitgetAccountFamily 为 Unknown/Unavailable，ClassicV2 routes 不注册可执行 capability；不得从 exchange 名、credential 形状或 productType 字符串猜测 Unified/Classic。"
+    },
+    {
+      "id": "MAP-B432FAA965",
+      "question": "Bitget open-order namespace 的分页、最终一致性及 native id retention 需实测后确定 cursor/absence policy。",
+      "disposition": "empirical-retained",
+      "evidence": "bitget.ts:17-30 的 fetchAndMergeOpenOrders 只串行遍历 parameterSets、跳过无 id row、按 symbol:id 合并；没有分页、eventual consistency 或 retention evidence。",
+      "resolution": "保留 namespace conformance。未确认 cursor/consistency/retention 前，NamespaceObservation 只贡献 covered rows 与 missing/Unknown evidence，ListingResult 为 Partial/Unavailable；缺 identity 不静默 skip，absence 只能在完整 coverage 后逐订单观察，不能由列表缺席直接移除。"
+    },
+    {
+      "id": "MAP-4714F941FF",
+      "question": "哪些 Bitget namespaces 对 Classic account 是 material/optional 需基于真实 account product entitlement 样本确认。",
+      "disposition": "empirical-retained",
+      "evidence": "bitget.ts:32-42 只声明 spot/derivatives subAccounts 和 strict flags，bitget.spec.ts 没有真实 account product entitlement 样本；六 namespace 是否 material 不能从参数数组或 boolean 推出。",
+      "resolution": "保留 entitlement conformance。每个 AccountScope/operation 使用 BitgetReadPolicy 的 Required/Optional/Unavailable 分类；没有 entitlement evidence 的 namespace 按 requiredness 未知处理，material coverage 不得被标 Complete，unknown/partial 期间保持 exclusion，不能从 spot success 推断 derivatives truth。"
+    },
+    {
+      "id": "MAP-B224A5F3E2",
+      "question": "USDT-FUTURES endpoint 是否返回足够的 account/position scope markers 需真实响应样本确认。",
+      "disposition": "empirical-retained",
+      "evidence": "bitget.ts:44-53 只把 swap balance 加上 productType=USDT-FUTURES、positions 调 fetchPositions(undefined,{productType:'USDT-FUTURES'})；bitget.ccxt.spec.ts:16-25 只验证 endpoint call payload，没有 response scope markers。",
+      "resolution": "保留 response-scope conformance。缺 account/sub-account/product marker 时不得把 route 参数当 scope proof；Position/AccountObservation 保留 `ScopeUnavailable`/Partial evidence，禁止将 response 绑定到另一个 wallet 或以 undefined symbol 代表全账户，直到真实样本满足 scope constructor。"
+    },
+    {
+      "id": "MAP-56798F3CBB",
+      "question": "Bitget 六类 endpoint 的分页/重复/最终一致性行为与可用 rate limit 需 live evidence；在缺证据时 listing 不能标 Complete。",
+      "disposition": "empirical-retained",
+      "evidence": "bitget.ts:55-67 只固定六类 namespace 的串行请求；bitget.spec.ts:57-99 只验证顺序、重复合并与不同 symbol collision，没有 live pagination, duplicate, consistency 或 rate-limit observations。",
+      "resolution": "保留六 namespace data-leaf live evidence。每类都必须记录 cursor/page boundary、duplicate/provenance、asOf、rate-limit/backoff 和 failure class；任一 material evidence 缺失时输出 C07 Partial/Unavailable，covered rows 可保留但不能执行 absence removal或声称 Complete。"
+    },
+    {
+      "id": "MAP-8F4D954D91",
+      "question": "Bybit category response 是否存在跨 category 同 id 不同 symbol、分页与最终一致性需实测后固定 identity/absence policy。",
+      "disposition": "empirical-retained",
+      "evidence": "bybit.spec.ts:9-28 只用 fake spot/swap rows、按 id 合并 overlap；bybit.ts:33-52 只发两次 category fetch，没有 native page/cursor/consistency 或跨 category id collision evidence。",
+      "resolution": "保留 category conformance。默认使用 `ScopedOrderRef(scope,instrumentId,brokerOrderId)`，同 id 不同 symbol/instrument 保持独立并记录 conflict；在 pagination/consistency/absence evidence 未确认前，spot/swap sweep 只能 Partial/Unavailable，缺席不能驱动撤单。"
+    },
+    {
+      "id": "MAP-4651A86203",
+      "question": "Bybit code 10016 是否稳定代表服务/权限故障需真实响应确认；未确认时按 Unknown 保守处理。",
+      "disposition": "empirical-retained",
+      "evidence": "bybit.spec.ts:30-40 仅构造 `Error('bybit 10016 service error')` 的 fake failure；该 message 没有 native structured error precedence 或真实 code semantics 证明。",
+      "resolution": "保留真实 response conformance。只有 documented code/payload/version evidence 才能构造 PermissionRejected 或 ServiceUnavailable；否则按 BybitUnknownOutcome/Unavailable，保留已覆盖 category rows 与 missing evidence，不能把字符串 10016 猜成权限、Complete 或可安全重试。"
+    },
+    {
+      "id": "MAP-A80A70DAA5",
+      "question": "Bybit 各 path 的错误码与 definitive absence payload、订单 retention horizon 需真实 conformance 固定。",
+      "disposition": "empirical-retained",
+      "evidence": "bybit.ts:1-31 依次调用 open regular、open conditional、closed regular、closed conditional 并 catch 所有异常为 generic not-found；source 没有每路 error code、definitive absence payload 或 retention horizon evidence。",
+      "resolution": "保留四路 conformance。每个 path 只有明确 absence payload 才是 DefinitiveAbsent；permission、timeout、schema error 或 retention 不明时保留 Rejected/TransportUnknown/ProtocolViolation，并让 requested ID 返回 Unavailable/Unknown。只有四路均有明确 absence evidence 才构造 NotFoundWithEvidence，不能把 catch-all 或 mutation outcome 互相替代。"
+    },
+    {
+      "id": "MAP-9D14A7D985",
+      "question": "Bybit category listing 的分页、cursor、eventual consistency 与 rate limit 需实测。",
+      "disposition": "empirical-retained",
+      "evidence": "bybit.ts:33-52 只实现 spot/swap 两次 category fetch 并按 id 合并；bybit.spec.ts:9-40 只固定 request shape、overlap 与 failure，没有真实 pagination/cursor/consistency/rate-limit evidence。",
+      "resolution": "保留 category listing conformance。`BybitListingPlan` 必须持久化每类 cursor、attempt、asOf、rate-limit/backoff 与 consistency evidence；任一边界未证明时返回 Partial/Unavailable，保留已见 orders，禁止把未扫完的 category 当 empty 或进行 absence removal。"
+    },
+    {
+      "id": "MAP-DD9535B452",
+      "question": "Hyperliquid slippage default、ticker freshness 与 native order/idempotency behavior 需 live evidence 后才能启用自动 market capability。",
+      "disposition": "empirical-retained",
+      "evidence": "hyperliquid.ts:1-19 的注释记录 IOC-limit、默认 5% 与 80% deviation concern，但注释不是 conformance；:20-41 只 fetch ticker.last/close 并转交 defaultImpl，未证明 slippage/freshness/native idempotency。",
+      "resolution": "保留 live capability gate。未取得 slippage/deviation、quote freshness、native order/idempotency evidence 前，MarketEmulation capability 为 unavailable；可做显式 PreparationPreview，但不得 Dispatch。已发送后未知结果只进入 Observe/RecoveryRequired，不按假设的 idempotency 盲重试 IOC。"
+    },
+    {
+      "id": "MAP-DD56DE539D",
+      "question": "Hyperliquid endpoint 是否支持稳定 client order identity/lookup 需实测；若不能，未知 outcome 需 operator recovery。",
+      "disposition": "empirical-retained",
+      "evidence": "hyperliquid.ts:20-41 在同一 placeOrder 调用内 fetchTicker 并把 refPrice 交给 defaultImpl/createOrder；source 没有 client-order-id、lookup 或 retention evidence。",
+      "resolution": "保留 endpoint identity conformance。PreparedHyperliquidMarketPlan 必须保存 quote/dispatch identity；在稳定 client identity/lookup 未证明时，DispatchStarted 后 timeout/response loss 进入 operator-owned RecoveryCase，先观察而不重发 createOrder，不能以 ticker success 推断 order identity 或 idempotency。"
+    },
+    {
+      "id": "MAP-AE93DB138F",
+      "question": "Hyperliquid `positionValue` 与 `contracts` 的单位/符号关系需 live sample 证明；未证实前 derived mark 只能用于显式降级展示。",
+      "disposition": "empirical-retained",
+      "evidence": "hyperliquid.ts:43-53 只在 markPrice 缺失且 contracts 非零时使用 abs(notional)/abs(contracts) 浅复制 recovery；没有 finite/unit/scope/provenance 或 live positionValue↔contracts sample。",
+      "resolution": "保留单位/符号 conformance。原始 signed position facts 必须保留；未取得 live unit evidence 时 derived mark 仅标 Derived/MarkUnavailable 并可显式展示，不能作为 authoritative valuation、price/buying-power precondition、零 exposure 或 Fill 证据。"
+    },
+    {
+      "id": "MAP-5CC2CA6EF1",
+      "question": "broker pack 的 SDK version compatibility/runtime loading policy 需与最终 package boundary 一起锁定。",
+      "disposition": "integration-resolved",
+      "evidence": "packages/uta-broker-ccxt/package.json:2-22 将 CCXT broker pack 作为 private ESM package 并声明 ccxt ^4.5.38；pnpm-lock.yaml:316-318,2501-2503 将当前 workspace resolution 固定为 4.5.38，提供当前 source version baseline 但不提供 native venue guarantees。Composition contract `composition-contract.md#K01-K03,K07-K08` 的 capability-leaf/pack boundary 与 MAP-5CC2CA6EF1 的目标字段是当前设计证据，不引用会变化的 sibling design 行号。",
+      "resolution": "采用已收敛的 `BrokerPackLoadingPolicy = InstalledImmutableRelease | ExplicitWorkspaceDev | PackLoadFailure`。production 只从 manifest-bound installed immutable pack 加载，workspace source 仅在显式 dev policy 下允许，broken release 不 fallback；manifest 校验 API/engine/package/locked CCXT version，加载失败保持 provider leaves unavailable。Prepared effect plans 绑定 pack manifest/content/version evidence，普通 data leaves 不因此获得交易能力。"
+    },
+    {
+      "id": "MAP-ED742AC7B1",
+      "question": "每个 CCXT venue 的 native idempotency/compensation/attached-order evidence 需逐项 conformance；未证实 handler 维持 unavailable。",
+      "disposition": "empirical-retained",
+      "evidence": "overrides.ts:31-144 是 optional raw hook bag，虽含 attached TP/SL、cancel/place/list hooks，却没有每个 venue/version 的 native idempotency、compensation 或 attached-order proof；存在 hook 不等于 capability。",
+      "resolution": "保留逐 venue capability-leaf conformance。每个 provider-declared action/attachment/compensation leaf 只有 documented native evidence 才可标记 Available；未声明的 action/parameter variant 在该 leaf schema 中不存在且没有 command，已声明 leaf 未证实时才保持 CapabilityUnavailable。用户语义字段在已接受 schema 中不能静默丢失；DispatchStarted 后 Unknown 只能 Observe/RecoveryRequired，不由 optional hook 自动 compensation 或第二次 mutation。"
+    },
+    {
+      "id": "MAP-663AADE476",
+      "question": "各 exchange regular/conditional endpoint 的 absence/error distinction 与 lookup retention 需实测；没有证据时保守为 Unknown。",
+      "disposition": "empirical-retained",
+      "evidence": "overrides.ts:146-167 的 defaultFetchOrderById 先 regular 后 stop:true，并 catch 任意异常再抛 generic not-found；source 没有各 exchange 的 error/absence payload precedence 或 order retention evidence。",
+      "resolution": "保留 per-exchange lookup conformance。每一路仅在 definitive absence evidence 下构造 DefinitiveAbsent；permission/transport/schema/retention 未知时保持 Unknown/Unavailable，持久化 path evidence 与 lookup descriptor，不把 regular failure 自动解释为 conditional absence。"
+    },
+    {
+      "id": "MAP-5B4370AB4D",
+      "question": "各 CCXT venue 如何证明 cancel endpoint unsupported-before-send 与 idempotency horizon 需 live evidence。",
+      "disposition": "empirical-retained",
+      "evidence": "overrides.ts:169-183 的 defaultCancelOrderById 在任意 regular error 后立即以 stop:true 重试；source 没有 endpoint unsupported-before-send 分类、request dispatch evidence 或 idempotency horizon。",
+      "resolution": "保留 live cancel conformance。只有明确 unsupported-before-send 且 conditional semantics/idempotency 安全的 evidence 才允许 fallback；timeout、request-start 或 horizon 未知时记录 DispatchStarted/Unknown，先 ObserveOrder/RecoveryRequired，不发送第二个 cancel mutation。"
+    },
+    {
+      "id": "MAP-F032485592",
+      "question": "CCXT venue 是否提供稳定 client order id 与 retention/idempotency scope 需逐 venue 实测；无证据时 Unknown recovery 更保守。",
+      "disposition": "empirical-retained",
+      "evidence": "overrides.ts:185-196 的 defaultPlaceOrder 直接把 raw symbol/type/side/amount/price/params 交给 createOrder；没有 client order id、retention 或 idempotency evidence，raw Ack 也不区分 fill/outcome。",
+      "resolution": "保留逐 venue client-identity conformance。provider order leaf 只能声明并接受其精确 native fields/relations；未声明的 trailing/protection/relation variant 不出现在 schema 或 command，已声明但未取得稳定 client id、lookup/retention 和 idempotency scope 证据时，remote timeout/response loss 只进入 Unknown/RecoveryRequired/observe，绝不重发 createOrder；已接受的字段不得因 CCXT 限制而静默丢弃。"
+    },
+    {
+      "id": "MAP-6AAB1AB711",
+      "question": "各 venue positions 是否全账户、是否分页、mark/PnL 是否权威需实测；未有 evidence 不能标 Complete。",
+      "disposition": "empirical-retained",
+      "evidence": "overrides.ts:198-201 的 defaultFetchPositions 无 scope/selector/schema，直接返回 raw fetchPositions rows；source 没有各 venue 全账户范围、分页边界或 mark/PnL authority evidence。",
+      "resolution": "保留 venue positions conformance。没有 scope、pagination、row schema、mark/PnL provenance 的完整 evidence 时，PositionListing 只能 Partial/Unavailable，保留已知 quantity/instrument/signed facts，不写 zero exposure，不执行 absence/Complete projection，也不把 mark/PnL 未证实地当 accounting precondition。"
+    },
+    {
+      "id": "MAP-A1AE3F307F",
+      "question": "OKX 实测证据的 SDK/endpoint/account version 与 retention horizon 需记录；其他 venue 必须逐一 probe。",
+      "disposition": "empirical-retained",
+      "evidence": "overrides.ts:203-213 的注释只把单次 unscoped fetchOpenOrders 覆盖绑定到 OKX live comment，并明确 CCXT 不提供跨 venue completeness semantics；source 没有完整 OKX evidence record，也没有其他 venue probes。",
+      "resolution": "保留逐 venue probe。OKX policy 只有连同 SDK/endpoint/account version、scope、cursor/absence coverage 与 retention evidence 才可声明 Complete；其他 venue 默认 Partial/Unavailable，不能从 OKX comment 推广 guarantee，缺席仍需 per-order observe。"
+    },
+    {
+      "id": "MAP-AB05DEE8D4",
+      "question": "每个注册 venue 的 account-family、jurisdiction、idempotency、coverage 与 optional wallet 事实需 live conformance 固定；未证实能力保持 unavailable。",
+      "disposition": "empirical-retained",
+      "evidence": "overrides.ts:215-234 的 registry 是 string-keyed Record，实际四个 exchange keys，Binance value 另含 future/delivery wallet definitions；source 没有 per registration family/jurisdiction/idempotency/coverage/entitlement live facts。",
+      "resolution": "保留 registration conformance。Typed VenueAccountRegistration 必须为每个 venue/version/environment/family/scope 写入 live evidence；registry presence 仅允许装配 adapter，未证实的 read/action/optional-wallet capability 保持 Unavailable/Partial。Binance delivery 的 tolerated-on-failure 只能是显式 OptionalNamespace，不能把四个 exchange keys、默认 family 或缺失 wallet 当完整账户/安全重试证明。"
+    }
+  ],
+  "remainingCount": 36
+}

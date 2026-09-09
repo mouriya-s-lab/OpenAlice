@@ -1,0 +1,1479 @@
+{
+  "group": "TargetGaps",
+  "entries": [
+    {
+      "id": "NOTE-2-1",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "src/webui/routes/trading-proxy.ts:1-12,29-34: loopback proxy explicitly has no Alice-to-UTA authentication and forwards correlation headers",
+        "src/webui/routes/trading-config.ts:216-249,272-331: Alice reads/writes account configuration, triggers reload/reconnect, and can wipe ephemeral history",
+        "src/tool/trading.ts:203-207,760-807: allowAiTrading=false returns a manual-approval response while true directly calls uta.push for committed pending work",
+        "src/server/cli-commands.ts:241-296: alice-uta exports git push/reject and other trading commands",
+        "src/services/connector-client/uta-review.ts:150-218: connector approval is pendingHash-based and readonly errors are classified by regex",
+        "src/services/connector-client/action-bridge.ts:45-91,111-140: connector UTA requests are claimed/released and processed outside a durable UTA transaction"
+      ],
+      "currentBehavior": "Alice owns more than presentation: account CRUD and secret masking/unmasking run in Alice, connector actions fetch status then push/reject by hash, and the AI tool has an explicit allowAiTrading switch that can call uta.push directly when enabled. Loopback is the only interprocess trust assumption.",
+      "problem": "A host-local caller can bypass Alice presentation guards; a connector status check or client-supplied actor is not authorization for the plan eventually executed. The enabled AI path is an existing explicit capability, but its current boolean gate is outside UTA and does not durably bind actor, scope, revision, digest, policy version, and expiry. Configuration replacement and process restart have no transaction/recovery ownership fence.",
+      "targetModel": "AuthenticatedAliceRequest contains service audience, home identity, principal, workspace/session correlation, granted actor role, commandId, canonical body digest, issuedAt/expiresAt and proof. UTA resolves the capability-declared PublicScope or AccountScope and selects a declaration-derived capability leaf; only a controlled effect is wrapped with an ApprovalBinding. ExecutionApproval = ManualApproval | ConfiguredAutoApproval(actor,scope,revision,planDigest,policyVersion,expiresAt). AccountLifecycleCapability accepts Configure/RotateCredentialReference/Disable/Retire with expectedConfigRevision and never exposes raw broker access. The source allowAiTrading setting is an authorized product-policy input, not a self-authorizing body boolean.",
+      "pureTransitions": [
+        "verifyRequestBinding(assertion, requestDigest, home, now) rejects audience/body/expiry mismatch before command dedup",
+        "authorize(actor, capabilityScope, capabilityIdentity, permissionSnapshot) yields AuthorizedCommand or AuthorizationDenied; prepare/approve/recover and configured auto-approval re-evaluate authority.",
+        "bindExecutionApproval(mode, actor, scope, revision, planDigest, policySnapshot, now) yields a digest-bound ApprovalBinding or AwaitingApproval; auto-approval still enters the normal prepare/writer/DispatchStarted path",
+        "retireAccount(configRevision, unfinishedEffects) disables new effect admission and either retains recovery-only access or permits credential retirement after remote liabilities are classified"
+      ],
+      "effectBoundary": "Alice authenticates the human or configured service actor and carries a short-lived proof over the private boundary; Guardian-provisioned key material remains in the existing secret/runtime path. UTA verifies proof, resolves credential references, and owns capability/lifecycle effects. Alice receives descriptors, credential references, and masked views; data reads and streams require resource authorization but not order approval.",
+      "durability": "CommandReceipts deduplicate by principal scope and commandId after authentication. Approval events bind effect capability identity, transaction/revision/digest, actor, policy and expiry atomically with jobs. Configuration records a desired revision and credential-reference write intent, applies it idempotently, then marks the revision available; no secret enters plans, receipts, or public views.",
+      "errors": [
+        "UnauthenticatedRequest(reason): deny before state lookup",
+        "AuthorizationDenied(scope, capability, policyVersion): no executable effect",
+        "ApprovalBindingMismatch(expected,observed): no queue or dispatch",
+        "AccountHasUnresolvedEffects(transactionIds): retain recovery credentials and refuse destructive retirement",
+        "CredentialReferenceUnavailable(reference): degrade the affected capability without logging secret"
+      ],
+      "preservedBehavior": [
+        "Duplicate broker identity returns a conflict rather than silently creating a second authority",
+        "Account id remains stable across credential rotation",
+        "allowAiTrading=false remains an AwaitingApproval/manual Web UI path; explicit enabled policy retains the source auto-push capability only as a UTA-authorized auto-approval binding",
+        "Lite/read-only presentation and connector hidden-operation warnings remain explicit"
+      ],
+      "replacementSteps": [
+        "Migrate Alice trading-config and connector calls to typed UTA lifecycle and capability calls; remove direct manager/config mutation authority",
+        "Translate tradingPush and connector approval into revision/digest approval bindings; enabled policy calls UTA approval rather than a raw push path",
+        "Strip untrusted actor headers at the BFF and require authenticated assertions on non-health capability routes",
+        "Block ephemeral purge until owned unfinished effects are classified while retaining immutable evidence"
+      ],
+      "verificationCases": [
+        "Replay a valid approval assertion with changed body or home -> authentication fails and no receipt/job is created",
+        "allowAiTrading disabled -> effect request remains AwaitingApproval with no dispatch; enabled policy -> one digest-bound approval reaches writer commit and DispatchStarted, never a direct broker call",
+        "Credential rotation with an Unknown effect -> new writes are disabled while scoped observation remains available",
+        "A connector approval after draft revision changes -> ApprovalMismatch without execution"
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "The source gap is retained at the Alice/UTA trust boundary, but the target is a composed set of authenticated lifecycle, query, and controlled-effect capability leaves. Approval binding belongs only to effect leaves; account identity, capability availability, and presentation correlation remain separate rather than becoming a universal broker contract.",
+      "contractAnchors": [
+        "K01",
+        "K02",
+        "K06",
+        "K08",
+        "K09",
+        "K10"
+      ]
+    },
+    {
+      "id": "NOTE-2-2",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/order-sync-poller.ts:53-98: timer scans healthy accounts and invokes sync with no durable job identity",
+        "services/uta/src/domain/trading/git/TradingGit.ts:141-155: operation errors become rejected results and there is no compensation phase",
+        "composition-contract.md K08/K10; transaction-contract.md §7-8: proposed recovery classification and dependency-reverse compensation"
+      ],
+      "currentBehavior": "The poller can discover fills but cannot resume a persisted abort or distinguish an already-sent compensating mutation after restart.",
+      "problem": "A compensator built as a callback or finalizer loses both its applied-effect basis and its dispatch identity; retry can open an additional economic position.",
+      "targetModel": "ObservationJob is a provider-declared pull or resource-scoped push lifecycle with a serializable PublicScope or AccountScope (including explicit subAccountId when account facts require it), cursor/stream identity, completeness and recovery facts. CompensationProgram is a separate controlled-effect record bound to applied evidence, a source effect revision, restoration target, dependency edges and approved risk limits. Durable job targets are typed data-observation, preparation/expiry, forward-effect, or compensation identities; no callback/closure is persisted and no data frame is put through order approval.",
+      "pureTransitions": [
+        "advanceObservation(streamOrPull, frameOrPage) updates cursor, completeness, gap and next-due state without creating an order transaction",
+        "planAbort(progress, acceptedPolicy, appliedFacts) supersedes unstarted forward effect jobs, then returns AwaitConclusiveOutcomes or a compensation dependency DAG",
+        "nextCompensation(frontier, observedResults) selects only nodes whose dependencies settled and recalculates economic residuals from confirmed facts",
+        "observeCompensation(outcome, target) produces Restored, ContinueObserving or RecoveryRequired; an unknown compensation is observed, not recursively mutated"
+      ],
+      "effectBoundary": "A provider adapter owns data subscription resources and decodes native frames; the scheduler owns durable observation cursors and invokes the narrow effect dispatch port only for persisted compensation steps. Reconnect can resume a stream cursor when the provider declares that ability, but cannot resume a business effect by itself.",
+      "durability": "Data observations persist only the evidence, cursor, completeness and recovery state required by their delivery contract. Abort, supersession and compensation plans commit through the effect writer with DispatchStarted/epoch and evidence ingestion; observation completion and its next cursor are one writer decision where durable persistence is required.",
+      "errors": [
+        "ObservationGap(scope,cursor): pause or mark incomplete according to the provider stream contract",
+        "AppliedOutcomeIndeterminate(dispatchIds): reconcile before compensation",
+        "CompensationBudgetExceeded(actual,authorized): stop and retain a recovery case",
+        "RestorationUnavailable(reason,evidence): no improvised inverse effect"
+      ],
+      "preservedBehavior": [
+        "An unhealthy broker does not stop unrelated account observations",
+        "Idle accounts do not repeatedly query known-empty pending books; scheduled external observation remains distinct"
+      ],
+      "replacementSteps": [
+        "Replace tick counters as effect authority with typed observation cursors and durable next-due facts",
+        "Keep pull/push data delivery out of order prepare/approve/compensate paths",
+        "Introduce compensation only through persisted controlled-effect steps, never legacy push/placeOrder from an abort handler",
+        "Retain observation after an accepted effect while working external resources remain, using provider-declared scope and freshness"
+      ],
+      "verificationCases": [
+        "A push stream disconnect with a declared replay cursor resumes or reports a gap without creating an approval",
+        "Kill after compensation venue acceptance but before ack persistence -> restart observes the original effect identity and never submits a new inverse",
+        "Two effect steps with a dependency edge -> dependent restoration is selected only after prerequisite facts settle",
+        "Unknown forward fill quantity -> no compensation quantity is guessed"
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "The poller evidence still requires durable observation and recovery, but K05 separates finite data observation/streams from transaction effects. Observation cursors and stream lifecycles are not compensation transactions; only a provider capability that mutates external state receives the K08 controlled-effect wrapper.",
+      "contractAnchors": [
+        "K05",
+        "K07",
+        "K08",
+        "K10",
+        "K11",
+        "K12"
+      ]
+    },
+    {
+      "id": "NOTE-4-1",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 920-951): bounded writer queue, take/drain group commit and post-commit Deferred",
+        "composition-contract.md K01/K03/K08; transaction-contract.md §6: closed effect commands, grouped failures and cancellation boundary",
+        "services/uta/src/domain/trading/git/TradingGit.ts:171-179: persistence occurs after memory commit/head mutation"
+      ],
+      "currentBehavior": "Current execution has a per-instance inflight boolean, not a bounded process-wide durable admission service.",
+      "problem": "A naive queue implementation can acknowledge before commit, drop blocked callers, deadlock outcome ingestion behind new admission, or evaluate conflicting commands against the same pre-batch state.",
+      "targetModel": "WriterEnvelope(commandId,principalScope,payloadDigest,EffectWriteCommand,replyDeferred) carries only commands that change local effect authority or an effect-owned projection checkpoint. EffectWriteCommand is a small local safety ADT composed by the application; provider leaves supply their own exact input/output/error codecs and are not forced into a global handler union. Provider data delivery checkpoints remain with their own resource owner outside the effect writer. User admission and internal-progress ingress are separately bounded and served by one writer. Data pulls return finite validated results and push streams use bounded, declared backpressure/cancellation resources outside the effect writer.",
+      "pureTransitions": [
+        "formBatch(first, currentlyAvailableSnapshot) drains a finite snapshot of each configured effect queue and never follows newly arriving producers indefinitely",
+        "applyBatch(stagedDatabaseState, envelopes) processes FIFO within each lane and deterministic fair lane order; each accepted command updates the staged state seen by the next command",
+        "resolveDuplicate(storedReceipt,digest) returns the original result or IdempotencyConflict; a domain rejection is a result and does not abort unrelated siblings",
+        "admitDelivery(resource,capacity,policy) returns a typed backpressure or cancellation decision for a data stream without manufacturing an effect receipt"
+      ],
+      "effectBoundary": "Queue/Deferred are transport to the sole JournalWriter fiber for durable effect decisions. Data provider adapters own stream buffers and pull cancellation; scheduler wakeups only prompt durable eligibility scans. No provider IO occurs while the local effect SQL transaction is open.",
+      "durability": "The writer begins one SQL transaction, resolves effect receipts and staged state sequentially, appends accepted events/jobs/locks, commits, then completes replies. SQL failure rolls the batch back; an admitted cancellation does not erase intent. Data delivery may persist cursor/checkpoint facts according to its own contract, never an order WAL per frame.",
+      "errors": [
+        "WriterUnavailable(lifecycle): do not enqueue a durable effect",
+        "StorageFailure(operation,sqliteCode): rolled-back callers receive retry-same-command guidance",
+        "CommitOutcomeIndeterminate(commandIds): reopen/query receipts before any effect dispatch",
+        "WriterDefect(evidenceRef): close effect lanes and complete pending waiters",
+        "DeliveryBackpressure(resource,capacity): apply declared stream policy rather than dropping a trading command"
+      ],
+      "preservedBehavior": [
+        "Callers still receive explicit per-command errors; one business conflict must not reject unrelated commands",
+        "No silent batch-size truncation; configured queue capacities remain visible"
+      ],
+      "replacementSteps": [
+        "Replace onCommit persistence permission with writer receipt-only effect dispatch authorization",
+        "Keep finite sequential staged-state decisions for effect commands without introducing a global provider switch",
+        "Keep accepted receipt constructors private and remove detached persistence from effect execution",
+        "Give each data pull/push capability an explicit finite-result or stream-lifecycle resource policy"
+      ],
+      "verificationCases": [
+        "Two same-version effect edits in one batch -> first accepted, second VersionConflict, both receipts durable",
+        "SQL fails on final effect row -> no earlier effect receipt or broker permission",
+        "Fill progress arrives while user effect admission is full -> internal progress advances without lost evidence or unbounded queue",
+        "A push stream exceeds its declared buffer -> its typed overflow policy fires and no order receipt is fabricated"
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "The post-commit and bounded-admission finding remains valid for durable controlled effects, but K01/K02 reject a universal provider command product. The writer handles declaration-derived effect/application commands and progress records; pull results and push frames use their own finite delivery resources.",
+      "contractAnchors": [
+        "K01",
+        "K03",
+        "K05",
+        "K08",
+        "K11",
+        "K12"
+      ]
+    },
+    {
+      "id": "NOTE-4-2",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/git/TradingGit.ts:61-116: stagingArea/pendingHash are mutable memory state",
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 307-308): STM is limited to proposal views",
+        "transaction-contract.md §3: prepare binds revision and retires only unexecuted plans"
+      ],
+      "currentBehavior": "Staging mutates an array and commit derives a hash from current operations/time, but neither edit nor prepare is journal-backed.",
+      "problem": "Making a TRef snapshot authoritative after prepare would let cache eviction or restart invalidate a plan without a durable revision transition.",
+      "targetModel": "CapabilityDraftView is Clean(capabilityIdentity,scope,revision,version,snapshot) or LocallyEdited(baseVersion,editSequence,candidate), where scope is PublicScope or AccountScope as the capability declares; a TRef or equivalent cache is never effect authority. A controlled-effect DraftRecord and PrepareStarted reference a writer-owned revision and exact schema/HOF composition. Pull pages and push frames are delivery records with their own cursor/finality metadata, not ProposalSnapshot and not approval state.",
+      "pureTransitions": [
+        "editProposal(view, edit) validates the selected capability leaf schema and returns a candidate with incremented editSequence",
+        "applyDraftReceipt(view, receipt) installs committed version only when candidate base matches, otherwise marks ViewConflict with the authoritative draft",
+        "beginPrepare(draft, expectedVersion) freezes a serializable controlled-effect revision and refuses unsaved candidate data",
+        "advanceDataCursor(cursor, delivery) accepts only provider-declared sequence/cursor transitions and marks a gap rather than silently replaying an old frame"
+      ],
+      "effectBoundary": "The application may use STM/TRef for local views and provider-local caches, but submits effect Draft changes to the writer. Hydration uses named readers; prepare never trusts an arbitrary cache. Data stream cancellation and cache eviction release only that delivery resource and cannot alter a saved effect revision.",
+      "durability": "Only a committed writer receipt makes a controlled-effect edit saved; PrepareStarted and its revision are durable before fact reads. Cache loss discards unsaved UI edits or data pages only. Retirement of a prepared effect uses a no-start CAS and creates a new draft revision; a data cursor checkpoint does not retire or approve an effect.",
+      "errors": [
+        "DraftVersionConflict(expected,actual): show authoritative revision instead of silently merging risk",
+        "UnsavedProposal(editSequence): save candidate before effect preparation",
+        "PlanAlreadyDispatched(planRef): reject editable shortcut",
+        "CursorConflict(expected,observed): reopen the provider delivery contract"
+      ],
+      "preservedBehavior": [
+        "User can stage and review before external mutation",
+        "Editing an approved/prepared plan requires reapproval rather than mutating queued work"
+      ],
+      "replacementSteps": [
+        "Replace TradingGit staging authority with schema-bound draft commands and keep only an explicitly unsaved presentation cache",
+        "Invalidate local views by writer version or provider cursor, not elapsed time alone",
+        "Use STM only where multiple local references need atomic view updates; do not add a mandatory store",
+        "Keep data reader/stream state separate from effect revision and approval lifecycle"
+      ],
+      "verificationCases": [
+        "Restart after a saved effect ReplaceDraft receipt -> same draft restores without TRef state",
+        "Concurrent local edit and prepare -> prepared digest binds one committed schema revision",
+        "Expire a prepared effect that has DispatchStarted -> retirement refused",
+        "Evict a data cache during a push stream -> no effect revision or approval changes"
+      ],
+      "openQuestions": [],
+      "contractDisposition": "retained",
+      "contractRationale": "The source correctly distinguishes an unsaved proposal/cache from durable effect revision. K03 extends the same rule to schema-derived drafts, while K05 keeps transient pull results and stream cursors out of transaction approval and preserves their own delivery state.",
+      "contractAnchors": [
+        "K03",
+        "K04",
+        "K05",
+        "K08",
+        "K11"
+      ]
+    },
+    {
+      "id": "NOTE-5-1",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 317-355): baseline Decision only admits nonempty-event success and state has twelve variants",
+        "transaction-contract.md §5: transition table includes prepared retirement and terminal observations",
+        "services/uta/src/domain/trading/git/TradingGit.ts:141-184: booleans/rejected strings collapse execution outcomes"
+      ],
+      "currentBehavior": "A pushed batch gathers heterogeneous results without a replayable transaction-state event transition model.",
+      "problem": "The baseline Decision cannot represent a duplicate without emitting fake facts; its state payloads lose plan/progress during reconciliation. State/event completeness must cover initial creation, draft edits, approvals, dispatch, rejection, compensation and recovery.",
+      "targetModel": "EffectDecision = Rejected(DomainFailure) | Unchanged(ReceiptRef) | Accepted(NonEmpty<EffectEvent>,DurableIntent[]). EffectStateEnvelope carries the finite safety lifecycle Draft/Preparing/Prepared/AwaitingApproval/Queued/Executing/Reconciling/Aborting/Compensating/Committed/Compensated/RecoveryRequired, with active variants retaining immutable PlanRef/ProgressRef. Provider capability results and stream frames retain their declaration-derived input/output/error schemas and delivery metadata without becoming effect events.",
+      "pureTransitions": [
+        "decideEffect(state,command,facts,now,allocatedIds) exhaustively selects a transition without IO, clock reads, or id generation",
+        "evolveEffect(state,event) requires aggregate identity and contiguous version before applying a legal lifecycle transition",
+        "reduceEvidence(progress,evidence) deduplicates native identities and correction revisions rather than adding duplicate callbacks",
+        "foldBatchSettled(perStep) records conclusively settled independent effect outcomes without claiming all succeeded",
+        "reduceDataDelivery(cursor,frame) handles provider sequence/finality/gap rules independently of effect state"
+      ],
+      "effectBoundary": "Application gathers typed facts from provider leaves; the effect writer reloads authority and calls pure effect decisions inside its transaction. Provider decoders reject unknown persisted/schema versions at their boundary. Data replay has its own cursor and resource lifecycle; neither evaluator performs network IO.",
+      "durability": "Creation, draft, preparation, approval, dispatch-start, observation, abort, compensation, settlement and recovery events are complete for effects; infrastructure-only jobs have their own typed owner. Duplicate accepted commands return the original receipt. Data evidence/checkpoints are durable only when their delivery or later decision contract requires them and never fake an effect event.",
+      "errors": [
+        "InvalidCommandState(state,command): durable effect-domain rejection receipt",
+        "ReplayViolation(sequence,expectedState,eventTag): stop affected authority and preserve bytes",
+        "EvidenceIdentityConflict(nativeEventId,digests): quarantine contradictory evidence",
+        "DataDeliverySchemaViolation(capability,frame): terminate or pause that stream without classifying it as an effect rejection"
+      ],
+      "preservedBehavior": [
+        "Rejection before dispatch has no external undo work; show Compensated(NoEffectsApplied) rather than pretending a trade was reversed",
+        "Committed at acceptance continues independent order observation without reopening its historical criterion"
+      ],
+      "replacementSteps": [
+        "Retain complete controlled-effect event closure including creation, draft retirement, dispatch, observation, compensation and recovery",
+        "Replace generic success booleans with typed per-capability results and per-effect step results",
+        "Remove catch-all evolution defaults while preserving PlanRef/ProgressRef in active effect states",
+        "Keep provider pull/push delivery schemas and finality independent of effect event replay"
+      ],
+      "verificationCases": [
+        "Replay every effect lifecycle variant through legal events -> same state as live writer",
+        "Duplicate accepted effect command -> original receipt and no added event/version",
+        "Independent rejected and accepted effect leaves -> BatchSettled reports both, never AllSucceeded",
+        "A duplicate data callback is idempotent by provider identity and does not create an effect event",
+        "A later fill correction updates projections but does not rewrite a historical effect criterion"
+      ],
+      "openQuestions": [],
+      "contractDisposition": "retained",
+      "contractRationale": "Replayable state/event completeness is still necessary for controlled effects and their recovery. The corrected boundary limits the finite lifecycle ADT to those effects; provider data results/frames and catalog/cache projections are not forced into transaction states.",
+      "contractAnchors": [
+        "K03",
+        "K04",
+        "K05",
+        "K08",
+        "K11",
+        "K12"
+      ]
+    },
+    {
+      "id": "NOTE-5-2",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 403-412 and 1014-1018): lock release constrained by durable state; baseline lock row includes lease expiry",
+        "transaction-contract.md §3: proposes safe unexecuted plan retirement",
+        "transaction-contract.md §6-7: dispatch fencing and hierarchical conflicts"
+      ],
+      "currentBehavior": "No durable lock owner exists; inflightWrite is a process-local wallet guard.",
+      "problem": "Treating LogicalLock.lease_expires_at like a worker lease would release economic exclusion while a remote mutation is unknown. Merely naming RecoveryRequired cannot safely allow conflicting new trades.",
+      "targetModel": "LogicalLockOwner = PlanOwner(transactionId,revision) | RecoveryOwner(recoveryCaseId,transactionId,revision), with lifetime UntilSettlement for controlled-effect conflicts. JobRunPermits are ephemeral scheduler leases and ResourceReservations cover risk/capacity separately. A data stream has an independent resource-scoped subscription/cursor lease and may be canceled or ended by its delivery contract; it never owns an effect lock.",
+      "pureTransitions": [
+        "releaseEligibility(plan,attempts,state) permits no-effect retirement only when no DispatchStarted exists and all effect intents are superseded",
+        "enterRecovery(state,residual) transfers conflicting effect keys to RecoveryOwner atomically without an exclusion gap",
+        "acceptRiskTransfer(case,operatorDecision,facts) releases only enumerated keys after sender fencing and residual reservation proof",
+        "endDataResource(stream,reason) closes or marks a delivery resource according to its stream contract without changing effect ownership"
+      ],
+      "effectBoundary": "Only the effect writer mutates logical effect locks. Scheduler renews run permits; provider stream code owns subscription cancellation and backpressure. Recovery commands remain typed and scope-authorized.",
+      "durability": "Effect terminal events and lock release commit together; unresolved dispatch retains exclusion. PlanRetired and supersession/approval invalidation/new revision are one effect commit. Stream cursor/checkpoint updates, if persisted, are separate data records and do not release effect locks or reserve buying power.",
+      "errors": [
+        "UnsafeLockRelease(dispatchIds,reason): retain effect exclusion",
+        "RecoveryOwnershipConflict(caseId,version): no partial transfer",
+        "ResidualNotReconciled(scope,evidenceGap): no force-success",
+        "StreamResourceUnavailable(scope,reason): degrade data delivery without releasing unrelated effect ownership"
+      ],
+      "preservedBehavior": [
+        "No-effect rejection permits a new proposal",
+        "Prepared plan editing remains possible, but only via a provably unexecuted revision boundary"
+      ],
+      "replacementSteps": [
+        "Remove lease expiry from controlled-effect lock release semantics",
+        "Clarify that recovery ownership transfer does not automatically release resource exclusion",
+        "Separate logical effect locks, run permits and buying-power reservations",
+        "Model stream lifecycle/lease facts separately from order-effect safety state"
+      ],
+      "verificationCases": [
+        "Pause an effect sender after DispatchStarted past every worker deadline -> conflict key remains blocked",
+        "Retire an unexecuted prepared effect -> old jobs/approval invalid, locks released, new revision can prepare",
+        "RecoveryRequired survives restart with the case owner excluding conflicting writes",
+        "A data stream lease expires while an effect is Unknown -> stream ends or resumes per provider evidence, but effect exclusion remains"
+      ],
+      "openQuestions": [],
+      "contractDisposition": "retained",
+      "contractRationale": "Durable exclusion and recovery ownership remain required for controlled effects. K05 makes the scope explicit: stream/pull resources may have provider leases or cancellation, but their expiry cannot release an economic effect lock or trigger compensation.",
+      "contractAnchors": [
+        "K05",
+        "K08",
+        "K09",
+        "K10",
+        "K11"
+      ]
+    },
+    {
+      "id": "NOTE-5-3",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 418-430): five immutable commit criterion variants",
+        "services/uta/src/domain/trading/git/TradingGit.ts:181-184: submitted/rejected determines push response",
+        "services/uta/src/domain/trading/order-sync-poller.ts:77-85: fills are discovered after push"
+      ],
+      "currentBehavior": "Push reports submission while later sync discovers execution; this distinction is real and must survive the new transaction terminology.",
+      "problem": "One generic Confirmed value can be incorrectly treated as fulfilment of every criterion; native group id may not exist until dispatch although the plan must be immutable before approval.",
+      "targetModel": "EffectCompletionCriterion is a provider-declared, schema-versioned criterion such as acceptance, working-state, confirmed quantity, target exposure, cancellation observation, terms observation, or a native group evidence record. The prepared effect stores its exact criterion and evidence requirements; a local logical group identity may later bind to a native identity. A data pull page or push frame is never a criterion result merely because it arrived.",
+      "pureTransitions": [
+        "evaluateCriterion(immutableCriterion, normalizedEvidence) returns Satisfied, Pending, Violated or Indeterminate using scope/unit/finality evidence",
+        "requireAcceptance(criterion,evidence) rejects transport success or socket write when native acceptance is not proven",
+        "reduceQuantityEvidence(evidence) uses provider-declared cumulative/individual semantics and deduplicates identities",
+        "bindNativeGroup(localIdentity,nativeEvidence) requires complete membership and does not change the approved effect digest",
+        "evaluateDataFinality(frameContract,frame) distinguishes current, closed, corrected and withdrawn data without asserting a transaction result"
+      ],
+      "effectBoundary": "Provider adapter decodes native evidence and its exact extension fields; the effect kernel evaluates the declared criterion as pure data. Data applications collect aggregate observations and finality metadata separately. No criterion evaluator performs network IO.",
+      "durability": "Criterion and required membership enter the prepared effect digest; satisfaction records exact evidence references. Later corrections update order/account projections or create anomaly recovery work without rewriting historical criterion. Data cursors/finality corrections remain in their own delivery journal/projection.",
+      "errors": [
+        "CriterionNotApplicable(capability,criterion): reject effect preparation",
+        "NativeBindingMismatch(expected,observed): retain Unknown and quarantine evidence",
+        "ExposureObservationIncomplete(scope): Indeterminate, not target reached",
+        "DataFinalityUnknown(capability,cursor): dependent trigger cannot assume closed data"
+      ],
+      "preservedBehavior": [
+        "Submitted orders remain queryable and continue sync after acceptance-level settlement",
+        "No claim that venue acceptance means filled"
+      ],
+      "replacementSteps": [
+        "Replace implicit submitted-success settlement with declared effect criterion compilation",
+        "Use a local prepared group identity and later native binding rather than requiring an unknown native id at preparation",
+        "Use per-effect evidence under IndependentBatch; do not hide failed leaves",
+        "Keep data finality and correction contracts explicit and separate from effect settlement"
+      ],
+      "verificationCases": [
+        "Transport ack before venue acceptance -> acceptance criterion remains Pending",
+        "Partial confirmed quantity with duplicate callbacks -> criterion remains Pending until the declared target is reached once",
+        "Native group response omits one member -> no native-group satisfaction",
+        "Same numeric exposure in another scope -> relation error, never satisfied",
+        "A data push frame marked current is not accepted as a closed-bar trigger or effect completion"
+      ],
+      "openQuestions": [],
+      "contractDisposition": "retained",
+      "contractRationale": "The source distinction between submission and later evidence is essential, but completion criteria are scoped to a declared controlled effect. K04 permits small local criterion unions; K05 prevents a data-frame receipt from being treated as fulfilment or closure.",
+      "contractAnchors": [
+        "K03",
+        "K04",
+        "K05",
+        "K07",
+        "K08",
+        "K12"
+      ]
+    },
+    {
+      "id": "NOTE-5-4",
+      "assessment": "blocked-on-evidence",
+      "sourceEvidence": [
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 432-444): function-bearing compensation union and explicit cancel-replace loss",
+        "transaction-contract.md §4: separates serializable compensation assessment/intent from runtime compiler",
+        "services/uta/src/domain/trading/UnifiedTradingAccount.ts:180-196: direct mutation dispatcher has no applied-state-specific undo contract",
+        "Alpaca provider design: client identity/observation are separate; server idempotency, child-group and close semantics remain conformance evidence",
+        "CcxtCore provider design: Unknown is RecoveryRequired; native idempotency evidence remains insufficient",
+        "Ibkr provider design: unknown dispatch/listing evidence and client idempotency/complete lookup remain unproven",
+        "Longbridge provider design: post-dispatch Unknown and native idempotency/absence/protection remain conformance gaps"
+      ],
+      "currentBehavior": "Mutations directly call the broker and no prepared restoration claim or evidence scope is recorded.",
+      "problem": "An undo closure cannot be journaled, and reverse BUY/SELL does not restore cash, fees, queue priority or identity. A capability judged before a fill is not a future guarantee.",
+      "targetModel": "CompensationAssessment = Exact(restorationDomain,assumptions,evidenceRef) | StateRestoring(target,allowedLossDomains,evidenceRef) | Economic(targetExposure,maxSlippage,maxLoss,feeBudget,currency,evidenceRef) | None(reason). CompensationIntent is serializable and binds a source effect, applied evidence, allowed class, target and compiler version. A provider-owned pure compensation compiler consumes resolved facts; NativeConformanceRecord is per provider capability leaf and effect variant, not a global broker promise. Missing evidence is NativeGuaranteeUnproven.",
+      "pureTransitions": [
+        "assessCompensation(capability,beforeImage,observedFacts,policy) selects the weakest truthful restoration class",
+        "compileAppliedCompensation(intent,actualAppliedFacts,currentFacts) recalculates residual cancellation or exposure restoration; unknown fills return NeedsObservation",
+        "validateRestoration(result,declaredDomain) checks each identity/state/economic predicate and never upgrades a class because a call returned success",
+        "admitNativeConformance(leaf,record) permits only the specifically evidenced retry/restoration behavior; absent scope, horizon, lookup, absence or sender-fence evidence remains unavailable"
+      ],
+      "effectBoundary": "Provider adapter performs mutation IO only from persisted compensation steps and receives sealed credentials at dispatch. The effect kernel authorizes risk and records evidence; a provider-owned compiler remains pure after fact collection. Data pull/push adapters do not compile inverse effects.",
+      "durability": "Assessment, assumptions and consent are immutable effect plan data. Each compensation program binds an applied-evidence digest and unique source-abort identity; its dispatch identity and observations use the normal started/unknown protocol. NativeConformanceRecord stores evidence version, identity scope, horizon and lookup/absence/fencing limits; absence leaves Unknown/RecoveryRequired.",
+      "errors": [
+        "NonCompensatable(lossDomains,reason): reject strict effect admission or expose explicit independent risk",
+        "CompensationAssumptionInvalidated(fact): observe/recover, do not use stale undo",
+        "EconomicLimitExceeded(requested,remainingBudget): stop before further risk",
+        "NativeConformanceMissing(capability,evidenceGaps): safe retry and Exact restoration remain unavailable"
+      ],
+      "preservedBehavior": [
+        "Partial-close quantity is checked against observed exposure",
+        "Cancel and replace never advertises Exact when venue identity/priority changes",
+        "Mock reversible-ledger behavior and SDK method presence never upgrade a real adapter's compensation or idempotency class"
+      ],
+      "replacementSteps": [
+        "Keep runtime functions out of prepared/public schemas; persist only serializable assessment and intent",
+        "Grant Exact only where a provider capability has explicit restoration-domain proof",
+        "Record fee/slippage/identity-loss evidence for state-restoring or economic classes",
+        "Require evidence per provider leaf before granting safe retry, absence, or Exact claims; retain this entry as empirical-retained"
+      ],
+      "verificationCases": [
+        "Cancel accepted then late fill -> recompute restoration; cancel-only intent is insufficient",
+        "Restored quantity with a changed native identity -> cannot satisfy identity-preserving Exact",
+        "Economic undo exceeds approved limits -> no compensating effect is sent and residual is exposed",
+        "No provider/action conformance record -> post-start timeout remains Unknown with an observation job",
+        "A paused sender can resume after lease expiry -> missing fence keeps the original identity in RecoveryRequired"
+      ],
+      "openQuestions": [
+        "Which real broker/action combinations have empirically proven restoration and idempotency guarantees remains adapter-specific acceptance evidence; unproven capabilities are unavailable, not assumed."
+      ],
+      "contractDisposition": "retained",
+      "contractRationale": "The empirical gap and the durable distinction between assessment and runtime compiler remain fully applicable to controlled effects. Under K07/K08 each provider effect leaf owns its conformance evidence; no universal action map or native guarantee is inferred for other leaves, and data readers never receive compensation machinery.",
+      "contractAnchors": [
+        "K03",
+        "K07",
+        "K08",
+        "K11",
+        "K12"
+      ]
+    },
+    {
+      "id": "NOTE-5-5",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 446-456): three policies do not imply grouping atomicity",
+        "services/uta/src/domain/trading/git/TradingGit.ts:141-155: legacy loop continues after each known failure",
+        "transaction-contract.md §8: policy table requires an explicit stop/continue choice and selects ContinueOnKnownRejection for legacy translation"
+      ],
+      "currentBehavior": "Legacy push executes each operation even when an earlier one rejects. It does not undo successful siblings.",
+      "problem": "An implicit stop default would silently change the existing behavior. AllOrCompensate and native atomicity also need admission-time group membership and capability evidence rather than a group label.",
+      "targetModel": "EffectPolicy = IndependentBatch(failurePolicy:ContinueOnKnownRejection|StopOnKnownRejection) | AllOrCompensate(acceptedUndoClassSet,riskBudget,dependencyOrder) | ProviderDeclaredAtomic(mechanism,scope,membership,evidenceVersion). Effect results are per-leaf Satisfied/KnownFailure/Skipped or Unknown until classified; no policy name alone proves atomicity or restoration. Pull/push data capabilities use their own delivery/error policy and are not forced into compensation.",
+      "pureTransitions": [
+        "admitEffectPolicy(plan) checks each effect leaf assessment, class membership, risk totals and dependency acyclicity",
+        "onKnownRejection(IndependentBatch) records rejection then continues or skips remaining work according to the frozen policy; legacy translation selects ContinueOnKnownRejection",
+        "onUnknown(anyIndependentPolicy) suspends remaining forward effects pending conclusive classification",
+        "onKnownFailure(AllOrCompensate) supersedes unsent effects and enters abort after classifying started attempts",
+        "onProviderAtomicResult(evidence) validates the provider mechanism and complete frozen membership; local SQL grouping never upgrades it"
+      ],
+      "effectBoundary": "Policy selection is a pure application decision recorded in the controlled-effect plan; the scheduler executes resulting typed jobs and never chooses semantics via catch/continue. Provider adapters own native group IO. Data streams report provider-declared errors/end/overflow without compensation.",
+      "durability": "Policy, allowed classes, membership and risk envelope participate in the effect plan digest and approval. Mixed outcomes settle as BatchSettled only after Unknown is resolved. Data delivery state may persist a cursor or terminal error but does not create effect jobs.",
+      "errors": [
+        "UnsupportedAtomicity(capability,scope,reason): refuse effect preparation",
+        "UndoClassNotAllowed(leaf,assessed,accepted): refuse strict plan",
+        "GroupMembershipChanged(expectedDigest): invalidate provider preparation",
+        "DeliveryPolicyViolation(capability,frame): pause/end the stream per its own contract"
+      ],
+      "preservedBehavior": [
+        "Legacy independent batches continue on known rejection and retain successful siblings",
+        "Unknown always suspends remaining forward steps; unsafe legacy catch-as-reject is intentionally removed"
+      ],
+      "replacementSteps": [
+        "Keep explicit digest-bound policy for legacy effect translation and new authorized commands",
+        "Remove Git hash/request grouping as policy inference",
+        "Require per-effect results in public views and keep Unknown distinct",
+        "Define data delivery policies separately from effect failure/compensation policies"
+      ],
+      "verificationCases": [
+        "Known rejection under legacy policy -> sibling effect continues with one KnownFailure",
+        "Stop policy -> remaining effect is Skipped and never sent",
+        "AllOrCompensate with a None assessment -> admission fails",
+        "Provider atomic evidence missing -> UnsupportedAtomicity, even when local writes are one SQL transaction",
+        "A stream frame error ends/pause stream without invoking effect compensation"
+      ],
+      "openQuestions": [],
+      "contractDisposition": "retained",
+      "contractRationale": "Explicit failure policy and the legacy continue-on-known-rejection behavior remain valid for controlled effect batches. K08 limits AllOrCompensate and native atomicity to capabilities that declare evidence; data delivery does not enter these policies.",
+      "contractAnchors": [
+        "K04",
+        "K08",
+        "K09",
+        "K11"
+      ]
+    },
+    {
+      "id": "NOTE-7-1",
+      "assessment": "blocked-on-evidence",
+      "sourceEvidence": [
+        "services/uta/package.json:14-34: runtime dependencies contain Hono/Zod/Decimal but no selected Effect/SQLite stack",
+        "services/uta/src/domain/trading/git-persistence.ts:14-47: per-account JSON read/fallback/write authority",
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 884-918): selected embedded stack, one path and required pragmas",
+        "docs/data-locations.md:8-27: complete-home isolation forbids two writers sharing one home",
+        "detailed design D13/D17: exact semver/native ABI and executable API remain to be locked in an implementation slice"
+      ],
+      "currentBehavior": "Each account loads a JSON commit history and rewrites it; database authority and crash barrier do not exist.",
+      "problem": "File histories cannot atomically couple several accounts, command receipts, locks and dispatch jobs. A driver silently opening an alternate path or disabling synchronous durability would falsify receipt semantics.",
+      "targetModel": "UtaDatabaseIdentity(homeCanonicalPath,databaseUuid,schemaVersion); DatabaseLifecycle = Opening|Migrating|Verifying|Ready|Failed. StorageStackStatus = UnverifiedNativeStack(missingVersionOrAbiEvidence) | VerifiedNativeStack(lockfile,artifactDigest,runtimeAbi,evidenceRef). JournalDatabaseLayer owns the selected SQL adapter, migration manifest and private writer for controlled-effect authority, durable review/trigger decisions and capability metadata. Provider data caches/stream checkpoints are typed PublicScope-or-AccountScope records with their own retention and availability semantics, not transaction rows.",
+      "pureTransitions": [
+        "planMigrations(currentVersion,manifest) requires contiguous monotonic migration ids/checksums and rejects a newer unsupported schema",
+        "validateDatabaseConfiguration(readBackPragmas,pathIdentity) requires the selected physical durability settings before effect Ready",
+        "classifyLoadFailure(error) distinguishes genuine absence from malformed/unreadable evidence; no fallback hides corruption",
+        "selectStorageStack(declaredFamily,lockedVersions,loadEvidence) remains UnverifiedNativeStack until exact versions, ABI and open/migrate evidence agree",
+        "classifyDataStoreAvailability(cacheOrCursorEvidence) reports missing/stale/incomplete data without granting effect authority"
+      ],
+      "effectBoundary": "Resolve the complete home once, acquire ownership, open one private effect writer and explicit read/query connections. SQL owns WAL/checkpoint/backup mechanics; UTA adds domain records. Provider data resources may connect/cache/stream independently, subject to scope and quota, and never open effect dispatch admission.",
+      "durability": "Effect migrations, receipt/event/job/lock updates and required capability revisions are durable in the selected database. Backups use SQLite-supported consistent backup or a stopped complete-home copy, never a live main-file copy. Data cache loss is reported as stale/unavailable and cannot erase effect authority or trigger compensation. Missing native evidence keeps effect dispatch unavailable while non-trading Alice may run.",
+      "errors": [
+        "DatabaseAlreadyOwned(home): refuse a second effect authority",
+        "UnsupportedDatabaseVersion(actual,supported): no downgrade/reset",
+        "StoragePragmaMismatch(name,actual): effect admission remains closed",
+        "LegacyStateCorrupt(path,evidenceRef): retain source and quarantine migration",
+        "NativeStorageStackUnverified(missingEvidence): no JSON/alternate-driver fallback for effect authority",
+        "DataCacheUnavailable(capability,scope): return typed unavailable/stale result"
+      ],
+      "preservedBehavior": [
+        "OPENALICE_HOME remains the portable user data root",
+        "No secret moves into trading database",
+        "An optional UTA failure must not prevent non-trading Alice use",
+        "Embedded SQLite remains an implementation option for controlled-effect authority; exact library/package/ABI availability is an empirical gate rather than a capability-composition requirement"
+      ],
+      "replacementSteps": [
+        "Add the selected SQL stack as runtime dependencies in the first executable slice and preserve native externalization",
+        "Import legacy Git state with a shipment-aware manifest and immutable audit references; remove file-write fallback as effect authority",
+        "Keep Git as checkpointed export only",
+        "Record exact dependency/ABI/open-migrate evidence before effect Ready",
+        "Treat data caches and stream checkpoints as independent typed delivery state"
+      ],
+      "verificationCases": [
+        "Effect receipt followed by abrupt termination -> event/job/lock bundle survives",
+        "Read-only/full disk -> typed storage failure and no effect dispatch",
+        "Second UTA on the same home -> ownership refused",
+        "Malformed primary history with a valid legacy fallback -> corruption reported, not hidden",
+        "Unverified native stack -> no effect Ready/dispatch while data-only capability may report unavailable or stale"
+      ],
+      "openQuestions": [
+        "Exact compatible Effect/sql/sqlite-node/better-sqlite3 semver and native binary build/ABI evidence are absent from the current UTA manifest; first storage slice must lock and execute them before availability claims."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "The native storage evidence gate remains, but K05/K08 narrow what must be journaled. The embedded database is authority for controlled effects, approvals, recovery and required metadata; data caches/cursors may use declared stores and do not require an order WAL for every frame.",
+      "contractAnchors": [
+        "K03",
+        "K05",
+        "K08",
+        "K11",
+        "K12"
+      ]
+    },
+    {
+      "id": "NOTE-7-2",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 953-1043): nine baseline tables omit receipt/epoch/schema association constraints",
+        "transaction-contract.md §9: receipt and multi-key relation extensions leave concrete constraints to implementation",
+        "services/uta/src/domain/trading/git-persistence.ts:28-47: persisted JSON currently has no schema decode or relational validation"
+      ],
+      "currentBehavior": "JSON history has no FK/version uniqueness guaranteeing a job belongs to its exact prepared step or compensation direction.",
+      "problem": "Nine table names alone permit orphan jobs, reused dispatch identity, partially leased rows and unbound compensation sources. Logical locks cannot use SQL string uniqueness alone for parent/child conflicts.",
+      "targetModel": "The relational contract names effect authority records (transactions/effect revisions, events, prepared serializable plans, effect jobs, locks, permits, observations, compensation, receipts, recovery and reservations) plus capability descriptors, availability evidence and optional data cursor/frame projections. Every payload is a named versioned codec; provider schemas remain provider-owned and are validated at the UTA boundary. Data jobs use typed pull/push targets and cursor/stream lifecycle rows, not fake effect-step foreign keys.",
+      "pureTransitions": [
+        "validateEffectRelations checks scope, revision, before-image and compensation source agreement before row materialization",
+        "encodeJob requires one typed target and a complete lifecycle shape; leaseEpoch is monotonic for effect jobs",
+        "ingestObservation(nativeIdentity,revision,digest) accepts identical duplicates, records real higher revisions/corrections and rejects divergent same-identity payloads",
+        "encodeDataDelivery(capability,cursorOrFrame) validates provider-declared sequence/finality/gap fields without creating an effect receipt"
+      ],
+      "effectBoundary": "Migrations and typed writer handlers own effect SQL. Application readers expose named projections rather than rows. Provider adapters decode native payloads into exact leaf schemas; SQL constraints complement, but do not replace, schema/unit/scope validation.",
+      "durability": "Effect identities, composite relationships, receipt digests, dispatch/compensation direction and RESTRICT deletion protect unresolved work. Data cursor/frame checkpoints are durable only where replay/recovery requires them and preserve delivery provenance, freshness and incompleteness; they do not participate in approval/compensation locks.",
+      "errors": [
+        "RelationalInvariantViolation(constraint,commandId): effect batch rolls back and authority stops",
+        "DuplicateEffectIdentity(scope,identity): no second allocation",
+        "CodecVersionUnsupported(recordType,version): stop the affected persisted state",
+        "DataFrameIdentityConflict(capability,identity): retain evidence and pause the delivery"
+      ],
+      "preservedBehavior": [
+        "Order ids remain strings and decimal fields serialize as decimal strings",
+        "Legacy history remains audit evidence even when not safe to import as executable work"
+      ],
+      "replacementSteps": [
+        "Replace the under-specified effect table sketch with explicit constraints and schema ownership",
+        "Add typed non-step effect targets for preparation/expiry and typed data cursor/stream targets",
+        "Keep effect projections atomic and data read projections independently checkpointable",
+        "Never make a provider leaf implement an empty effect handler to satisfy relational shape"
+      ],
+      "verificationCases": [
+        "Compensation references another effect revision -> relation rejection and no commit",
+        "Leased effect job missing deadline -> constraint failure",
+        "Duplicate native observation with a new transport request id -> one accounting effect",
+        "Corrupt provider payload tag -> boundary defect, never default decoder",
+        "A push cursor gap -> stream becomes incomplete/paused without an effect row"
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "Relational identity and codec constraints remain important for controlled effects, but K01/K03 require provider declaration-derived schemas and K05 gives data deliveries their own cursor/frame relations. There is no need to manufacture a step row for a pull, push, or provider capability that has no transaction effect.",
+      "contractAnchors": [
+        "K01",
+        "K03",
+        "K05",
+        "K08",
+        "K11"
+      ]
+    },
+    {
+      "id": "NOTE-8-1",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 1065-1078): Account/Exposure/Order/Connection conflict keys",
+        "transaction-contract.md §6: hierarchical all-key acquisition and connection-budget distinction",
+        "services/uta/src/domain/trading/UnifiedTradingAccount.ts:665-688,784-790: sub-account is omitted or only message-stamped"
+      ],
+      "currentBehavior": "Wallet-wide memory guards do not identify order/exposure conflicts or persist explicit sub-account scope.",
+      "problem": "Equal-string locks miss Account-versus-Order hierarchy; a single Connection key on every order removes legitimate concurrency. Partial acquisition can deadlock cross-account multi-step plans.",
+      "targetModel": "EffectConflictKey = Account(scope) | Exposure(scope,instrumentId,positionBucket) | Order(scope,providerOrderRef) | Connection(connectionId) as needed by a declared effect; AccountScope is required only for account/order facts and includes explicit subAccountId when the provider distinguishes it. DataResourceKey = ProviderInstance(PublicScope|AccountScope) + declared feed/instrument/subscription identity; it is governed by quota/backpressure and is not a logical effect lock. Prepared effect conflict sets are sorted/deduplicated and include resolved parent relations.",
+      "pureTransitions": [
+        "conflictsWithEffectKeys is symmetric and honors declared parent/child scope relations; connection exclusivity applies only to exclusive operations",
+        "compileEffectConflicts(capability,scope,providerFacts) includes only resources declared by that capability, requiring AccountScope for account facts and an explicit subAccountId when the provider distinguishes wallets; it never invents one for PublicScope data",
+        "acquireAll(candidate,held) returns all requested effect owners or a typed conflict set, never partial ownership",
+        "admitDataResource(resource,quota) returns available/degraded/backpressured without acquiring an effect lock"
+      ],
+      "effectBoundary": "The effect kernel compiles resource semantics and the writer performs indexed all-key acquisition in one transaction. Scheduler consumes effect permits and connection budget. Provider data adapters acquire/release stream resources under their own declared scope and quota; external/manual activity is observed, not locally locked as an effect.",
+      "durability": "Complete effect conflict sets enter prepared plan digests and job rows; plan locks and run permits are atomic. Data subscription identity/cursor may be checkpointed, but loss or cancellation does not release an unresolved effect lock or alter effect reservations.",
+      "errors": [
+        "ConflictHeld(keys,owner): fail or durably wait without partial effect locks",
+        "UnresolvedScope(accountId): refuse effect preparation, not single-wallet default",
+        "ConflictSetExpansion(observed,prepared): stop unsent effect work and reprepare/recover",
+        "DataResourceQuotaExceeded(resource): backpressure/degrade the stream without effect mutation"
+      ],
+      "preservedBehavior": [
+        "Same order mutation remains excluded",
+        "Independent instruments/accounts can progress subject to shared cash reservations and connection limits"
+      ],
+      "replacementSteps": [
+        "Replace account-only effect keys with explicit AccountScope-qualified keys while leaving PublicScope data resources unqualified by account",
+        "Remove the per-account boolean as exclusion authority",
+        "Add risk reservations instead of broad account locking for every effect",
+        "Define provider data resource keys and quotas separately from effect conflicts"
+      ],
+      "verificationCases": [
+        "Account and child-effect locks race -> exactly one prepares",
+        "Opposite key-order multi-scope effects -> no partial lock/deadlock",
+        "Different instruments share a connection -> concurrent effect dispatch up to declared capacity",
+        "Same numeric provider order id in two subaccounts -> distinct effect resources",
+        "Two streams on one feed exceed quota -> one is backpressured while unrelated effect locks remain unchanged"
+      ],
+      "openQuestions": [],
+      "contractDisposition": "retained",
+      "contractRationale": "Scope-aware conflict identity remains essential for controlled writes. K05 adds a distinct provider-resource identity for data subscriptions so a stream cannot acquire a trading lock merely because it uses the same connection or account.",
+      "contractAnchors": [
+        "K04",
+        "K05",
+        "K08",
+        "K09"
+      ]
+    },
+    {
+      "id": "NOTE-8-2",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 1080-1092 and 1264-1291): lease transaction and insufficient DispatchPlanned-only sequence",
+        "transaction-contract.md §7: explicit started boundary and stale-worker limitation",
+        "services/uta/src/domain/trading/git/TradingGit.ts:119-125: finally only clears a memory guard"
+      ],
+      "currentBehavior": "No durable boundary distinguishes a claimed but unsent operation from a broker-accepted operation whose response was lost.",
+      "problem": "Lease expiration fences local writes but cannot revoke a paused worker's network call. Reclaiming as fresh dispatch after a possible send creates duplicate economic effects.",
+      "targetModel": "EffectJobLease = Ready(notBefore)|Leased(ownerInstanceId,epoch,deadline)|Completed(resultRef)|Failed(failureRef), with monotonic leaseEpoch. EffectAttempt = Planned(identity)|DispatchStarted(identity,owner,epoch,startSequence)|Acknowledged(ackRef)|Rejected(rejectionRef)|Unknown(evidenceRef). A data push has a separate StreamLifecycle = Opening|Live(cursor)|Paused(gap)|Ended(reason)|Failed(error) and does not create DispatchStarted unless it is itself a controlled mutation capability.",
+      "pureTransitions": [
+        "claimEligible(now,effectJob,permits,budget) checks dependencies/conflicts/capacity and increments epoch",
+        "startEffect(job,epoch,plan,latestPreconditions,now) CAS-checks live lease/approval/plan and appends DispatchStarted before provider mutation",
+        "classifyExpiredAttempt selects unsent reclaim only when no start boundary exists; any started effect selects ObserveUnknown",
+        "ingestLateEvidence validates provider identity independently of stale scheduling ownership; stale workers cannot complete/requeue or allocate a new effect",
+        "advanceStream(stream,frame) follows provider cursor/sequence/finality rules and marks gap/ended without invoking effect retry"
+      ],
+      "effectBoundary": "The writer commits effect claim and start separately; scheduler invokes provider mutation only after the committed start receipt. Adapters do not automatic-retry mutation. Data stream adapters own cancellation and reconnect within their declared contract and cannot authorize an effect.",
+      "durability": "Effect claims, permits, starts, observations and unknown reservations are durable; remote retry requires verified provider identity/horizon or conclusive absence plus old-sender fencing. Stream cursor/checkpoint persistence records delivery state only and does not grant resend or effect permission.",
+      "errors": [
+        "StaleLease(jobId,provided,current): deny effect write/dispatch",
+        "OutcomeUnknown(effectId,cut): persist observation/recovery schedule",
+        "RetryNotProven(identity,evidenceGap): remain Unknown/RecoveryRequired",
+        "ConnectionGenerationChanged(expected,actual): revalidate before new effect start",
+        "StreamCursorGap(resource,cursor): pause or end stream according to provider contract"
+      ],
+      "preservedBehavior": [
+        "Connection recovery is independent and may continue for unrelated accounts",
+        "Valid late broker facts are not discarded merely because a worker lease expired"
+      ],
+      "replacementSteps": [
+        "Keep the DispatchStarted receipt/epoch CAS barrier in controlled effects",
+        "Remove timer-driven effect mutation retries and separate stale evidence ingestion from stale owner completion",
+        "Specify each push stream cancellation/reconnect/finality contract independently",
+        "Do not call a data-frame acknowledgement a remote effect acknowledgement"
+      ],
+      "verificationCases": [
+        "Kill after effect claim before start -> unsent effect can be reclaimed",
+        "Pause after effect start before socket send, expire lease, resume old worker -> no second sender",
+        "Late ack from old effect epoch -> evidence stored once but old worker cannot complete new job",
+        "A first-page empty data listing -> stream remains incomplete and does not authorize effect resend",
+        "SIGINT closes a push stream while a previously accepted effect remains unchanged"
+      ],
+      "openQuestions": [],
+      "contractDisposition": "retained",
+      "contractRationale": "The durable start boundary, stale-worker fencing, and Unknown classification remain exactly the required safety behavior for controlled effects. K05 expressly excludes ordinary data stream cancellation from this protocol; stream close/abort has delivery semantics, not remote mutation uncertainty.",
+      "contractAnchors": [
+        "K05",
+        "K07",
+        "K08",
+        "K11",
+        "K12"
+      ]
+    },
+    {
+      "id": "NOTE-8-3",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/order-sync-poller.ts:53-95: one running flag plus serial account loop lets a slow account delay later accounts",
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 1094-1101): explicit no-drop trading admission and starvation prevention",
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 949-951): writer drains available work without silent cap"
+      ],
+      "currentBehavior": "Polling is serialized in process order and scheduling policy is hidden in timer cadence rather than an auditable connection budget.",
+      "problem": "Always preferring recovery/high priority can starve normal work; always bypassing a blocked multi-key job can let younger single-key jobs prevent it forever. Queue capacity alone does not cap durable outstanding work.",
+      "targetModel": "EffectAdmissionPolicy(connectionBudget,requestCost,tokenCapacity,refill,priorityAging,durableOutstandingLimit,waitBarrier) governs controlled effect jobs. DataDeliveryPolicy = PullFinite(page/cursor/completeness) | PushStream(buffer/backpressure,sequence,finality,replay,disconnect) and may choose Lossless, LatestPerInstrument or DropOldest only when declared by that provider. Data delivery never accepts trading commands and never enters the effect compensation queue.",
+      "pureTransitions": [
+        "chooseEffectClaims scans eligible jobs by bounded effective priority/ready sequence and preserves barriers for the oldest blocked multi-key effect",
+        "refillEffectTokens clamps elapsed time and treats backward clocks conservatively",
+        "reserveEffectAdmission uses durable outstanding capacity; accepted effect jobs are never evicted for freshness",
+        "advancePull(page,cursor) returns finite result plus completeness/next cursor",
+        "advancePush(buffer,frame,policy) returns enqueue/coalesce/drop/backpressure/end decisions with explicit sequence/finality evidence"
+      ],
+      "effectBoundary": "Effect producers block at bounded admission before acceptance; scheduler claims durable effect jobs and wakes on eligibility. Provider data adapters own pull pagination and push buffers/backpressure; a stream is a resource with lifecycle and cancellation, not stdout and not a trading queue.",
+      "durability": "Effect ready sequence, throttle and barriers survive restart; unknown attempts retain exclusion. Data cursor/checkpoint persistence is scoped to replay/observation requirements and does not become an order WAL. Cache coalescing cannot delete an accepted effect command.",
+      "errors": [
+        "AdmissionCapacityWait(scope,oldestSequence): no accepted effect receipt yet",
+        "AdmissionCanceled(commandId): only pre-acceptance cancellation is definitive",
+        "RateLimited(retryAt,evidence): persist effect throttle without blind mutation retry",
+        "UnsafeClockDiscontinuity(observed): conservative effect scheduling",
+        "PushOverflow(resource,policy): apply declared backpressure/coalescing or fail the stream"
+      ],
+      "preservedBehavior": [
+        "No new public provider/broker calls for idle work",
+        "One bad broker does not starve unrelated healthy connection queues"
+      ],
+      "replacementSteps": [
+        "Replace serial timer ownership with durable per-connection effect eligibility and fair claims",
+        "Validate effect capacity/priority/rate configuration at startup without adding provider switches",
+        "Expose effect wait age/barriers and data cursor/stream health as separate operational views",
+        "Keep data pulls finite and streams resource-scoped with explicit cancellation/replay/finality"
+      ],
+      "verificationCases": [
+        "Continuously enqueue high-priority effects -> an earlier normal effect eventually ages to service",
+        "Oldest multi-key effect vs younger single-key effects -> barrier permits the older effect after owners drain",
+        "Connection A unavailable -> unrelated effect connection B progresses",
+        "Trading admission full while prices flood -> no effect job disappears and data buffers obey policy",
+        "A push gap/overflow -> stream is marked incomplete/backpressured, never compensated as an order"
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "The scheduling starvation and capacity problem remains for controlled effect jobs, while the current poller also exposes a data-observation path. K05 requires explicit pull finite-result and push stream policies rather than applying order admission, compensation, or transaction WAL to every market-data frame.",
+      "contractAnchors": [
+        "K01",
+        "K05",
+        "K06",
+        "K08",
+        "K12"
+      ]
+    },
+    {
+      "id": "NOTE-8-4",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/UnifiedTradingAccount.ts:572-595: close amount rereads positions but has no version/freshness binding",
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 1108-1117): preconditions include ExposureSnapshot and BuyingPowerAtLeast",
+        "transaction-contract.md §2 and §6: conflicting exposure spelling resolves to ExposureEquals and requires reservations"
+      ],
+      "currentBehavior": "Partial close validates the latest quantity against an unversioned broker position before dispatch; other preconditions are not immutable plan inputs.",
+      "problem": "External snapshot mismatch cannot safely be swallowed into retry. Two different instruments can each pass the same buying power check unless their unsettled spending is reserved locally.",
+      "targetModel": "EffectPrecondition is a declaration-composed union of TransactionVersion, ProviderOrderVersion, ExposureEquals(scope,instrument,expectedSnapshotRef,quantity), BuyingPowerAtLeast(scope,amount,currency,observationRef), and MarketSessionOpen as applicable. Account/order preconditions carry AccountScope and an explicit subAccountId when the provider distinguishes wallets; public Candle/Instrument/News facts carry PublicScope or their provider-declared scope and never receive a fabricated account. ObservationStamp carries the concrete PublicScope or AccountScope, source, observedAt, completeness and native/local revision. Data readers/streams expose their own freshness/finality/cursor evidence; a consumer must explicitly select and persist the evidence used to prepare an effect.",
+      "pureTransitions": [
+        "evaluatePrecondition compares the variant-specific unit, scope and freshness requirement; changed facts yield ReprepareRequired with expected/observed evidence",
+        "availableBuyingPower subtracts only local unsettled reservations not reflected in the observation watermark; uncertainty in margin/FX/overlap returns UnestimableBuyingPower",
+        "reserveEffectRisk adds plan reservations atomically after aggregate demand checks",
+        "deriveDispatchGuardVersion uses current writer authority and approved revision, not an obsolete pre-prepare aggregate version",
+        "acceptDataEvidence(frame,policy) rejects unknown finality or incomplete scope for consumers that require closed/fresh data"
+      ],
+      "effectBoundary": "Provider/application adapters read current account, market and stream facts; pure compilers evaluate named stamps. The writer validates local CAS/reservations. Remote venues remain an external race and data caches are not locks.",
+      "durability": "Prepared effect preconditions/freshness limits enter the plan digest; evidence used at start and reservation changes are referenced from DispatchStarted. An invalidated unsent effect retires/reprepares; a started effect reconciles. Data cursor/finality evidence is retained only under its delivery/decision obligation.",
+      "errors": [
+        "BuyingPowerInsufficient(required,available,currency,observationRef): reject/reprepare",
+        "UnestimableBuyingPower(reason): fail closed for executable effect",
+        "PreconditionInvalidated(kind,expected,observed): typed conflict",
+        "ObservationStale(stamp,maxAge): reacquire before effect start",
+        "DataFinalityUnknown(capability,cursor): reject a consumer requiring closed data"
+      ],
+      "preservedBehavior": [
+        "Close quantity remains positive and no greater than observed exposure",
+        "Local check is not advertised as native reduce-only or cross-venue serializability"
+      ],
+      "replacementSteps": [
+        "Use one ExposureEquals contract with an ExposureSnapshot payload",
+        "Attach the concrete PublicScope or AccountScope required by each precondition; account/order facts require explicit subAccountId when the provider distinguishes wallets, and public data must not synthesize one",
+        "Integrate durable reservations with risk policy instead of globally serializing instruments",
+        "Make data freshness/finality conversions explicit before an effect uses them"
+      ],
+      "verificationCases": [
+        "Two effect plans reserve 70 from buying power 100 -> one rejected despite different instruments",
+        "A fresh broker snapshot already reflects a fill -> reservation watermark avoids double subtraction",
+        "External close after prepare -> oversized effect invalidates rather than reversing exposure",
+        "A writer operational event does not falsely invalidate its own approved effect revision",
+        "A current but unclosed stream frame cannot satisfy a closed-data trigger precondition"
+      ],
+      "openQuestions": [],
+      "contractDisposition": "retained",
+      "contractRationale": "Freshness, scope, unit and buying-power evidence remain necessary for controlled effects, especially the observed partial-close guard. K05 keeps reader freshness/finality as data semantics and prevents treating a cache frame as an order precondition without an explicit evidence conversion.",
+      "contractAnchors": [
+        "K04",
+        "K05",
+        "K08",
+        "K11"
+      ]
+    },
+    {
+      "id": "NOTE-9-1",
+      "assessment": "blocked-on-evidence",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/UnifiedTradingAccount.ts:180-205: Promise<unknown> dispatcher and guard pipeline",
+        "services/uta/src/domain/trading/brokers/types.ts:1-7: legacy broker types re-export public package",
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 1121-1185): scoped connection, interpreter, outcome and contextual capability requirements",
+        "composition-contract.md K07/K08/K11: deterministic native compilation and native evidence limits",
+        "Alpaca provider design: client identity and broker idempotency/child-group evidence remain acceptance facts",
+        "CcxtCore provider design: Unknown is RecoveryRequired and native idempotency evidence is not established",
+        "CcxtVenues provider design: timeout requires observation and venue coverage; partial listings are not absence",
+        "Ibkr provider design: lookup scope and native idempotency remain unproven",
+        "Longbridge provider design: post-dispatch Unknown and native absence/idempotency remain open"
+      ],
+      "currentBehavior": "UnifiedTradingAccount calls one generic broker interface directly and receives erased mutation results; public broker types are coupled through a compatibility re-export.",
+      "problem": "An interpreter whose Action/Ack/Observation generics widen independently can return an observation for the wrong action. Runtime availability must not serialize Schema or functions into a plan or client response.",
+      "targetModel": "Each provider instance declares a capability tree of exact leaves: input schema, result schema, domain-error schema, delivery mode, effect category, resources, availability evidence and provider extension fields. CapabilityDescriptor is the fixed UTA-facing envelope; provider internals may be SDK/classes/REST/OpenAPI/another process. Scope is PublicScope or AccountScope as the leaf declares; account/order facts require AccountScope and an explicit subAccountId when the provider distinguishes wallets, while public Candle/Instrument/News leaves do not invent an account. Order, Candle, Instrument, News and NewsGroup are semantic units with provider-declared exact extensions, not a universal action map. withTransaction composes only a mutating leaf and preserves its precise schema/error/resource types; no absent leaf is represented by an Unsupported handler.",
+      "pureTransitions": [
+        "declareCapability(provider,leafSchema,handler,resources) derives descriptor, validation, help and metadata from one declaration",
+        "composeEffectCapability(leaf,transactionPolicy) adds prepare/approval/dispatch/recovery only when the leaf has an external effect and preserves provider-declared native fields and legal combinations without widening to a generic object",
+        "deriveAvailability(instance,scope,implementation,session,authorization) reports Available, Unavailable or Degraded separately from schema identity; scope is PublicScope or AccountScope as declared, never inferred from reachability",
+        "decodeNative(leaf,nativePayload) validates provider-specific response/error evidence at the adapter boundary and returns a typed protocol failure or exact leaf result",
+        "bindInvocation(discoveryRevision,capabilityIdentity,schemaFingerprint) rejects stale/revoked capability identity instead of silently selecting another leaf"
+      ],
+      "effectBoundary": "The bridge exposes version negotiation, discovery, correlated request/response or stream and cancellation at the UTA-facing boundary. Provider adapter code owns native lookup, SDK lifecycle, subscriptions and decoding. Only a composed controlled-effect leaf receives the scheduler dispatch port; read/pull/push leaves are resource-scoped data operations and cannot authorize transactions.",
+      "durability": "Persist descriptor identity/fingerprint/revision, availability evidence and serializable effect plans as needed; never persist functions, runtime Schema objects, SDK classes or secrets. Effect dispatch identity/unknown/recovery use the durable protocol. Data cursors/frames retain provider identity/finality/gap facts without order WAL or compensation records.",
+      "errors": [
+        "CapabilityNameConflict(provider,identity): reject load, never last-write-wins",
+        "SchemaFingerprintMismatch(expected,observed): reject invocation",
+        "CapabilityUnavailable(reason): preserve identity but refuse execution",
+        "NativeProtocolViolation(capability,evidenceRef): classify possible effect mutation as Unknown",
+        "OutputSchemaViolation(capability,evidenceRef): reject data output or isolate effect worker according to delivery/effect boundary"
+      ],
+      "preservedBehavior": [
+        "All existing order-entry features remain represented and receive explicit capability decisions",
+        "Connection-specific health is preserved without embedding transaction state in the connection",
+        "Unproven SDK/mock outcomes, empty listings and transport acknowledgements never become native capability evidence"
+      ],
+      "replacementSteps": [
+        "Keep the existing IBroker/global-switch path as source evidence only and introduce a declaration-derived provider adapter boundary",
+        "Migrate one provider capability leaf through discovery, exact schema validation, availability, invocation and observation before removing its old mutation path",
+        "Let each provider preserve native parameters/extensions and report missing leaves structurally",
+        "Require conformance evidence per effect leaf before granting safe retry, absence or compensation; do not add empty handlers for other providers"
+      ],
+      "verificationCases": [
+        "Add one provider-native field -> its schema, validator, descriptor and CLI/help metadata change without a kernel switch",
+        "A tree without cancel/option leaves produces no such command or empty parent node",
+        "A malformed native response is rejected at the adapter boundary before state update",
+        "A provider capability unavailable due to session is still discoverable with named availability, not falsely Unsupported",
+        "A pull result or push frame validates independently and never enters order approval/compensation"
+      ],
+      "openQuestions": [
+        "Each broker's native idempotency horizon, complete lookup namespaces and absence/fencing proof require real broker evidence; without it retry capability is ReconcileBeforeRetry only."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "The source fact that UnifiedTradingAccount dispatches through a generic IBroker/global switch is retained as migration evidence, not elevated to target architecture. K01-K03/K07 replace that closed SDK-shaped surface with provider declaration, exact leaf schemas, adapter-native protocols and one fixed UTA-facing boundary; K08 is opt-in for effect leaves.",
+      "contractAnchors": [
+        "K01",
+        "K02",
+        "K03",
+        "K04",
+        "K05",
+        "K07",
+        "K08"
+      ]
+    },
+    {
+      "id": "NOTE-12-1",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/main.ts:63-87,104-128,145-176: current startup initializes managers/timers then exposes health/routes without journal classification",
+        "services/uta/src/domain/trading/uta-manager.ts:63-71: account startup restores file state and callback persistence",
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 1239-1262): ordered recovery gate and per-account degraded reach"
+      ],
+      "currentBehavior": "Startup restores available file history, starts snapshot/order timers and serves routes; it has no durable unfinished-work scan.",
+      "problem": "A boolean health response can be mistaken for safe command admission while old effects are unclassified; one unreachable broker must not indefinitely block unrelated accounts after local authority is valid.",
+      "targetModel": "StartupState = OwningHome|OpeningDatabase|Migrating|VerifyingJournal|RebuildingExecution|AcquiringConnections|ClassifyingRecovery(cursor,highWatermark)|Ready|Failed(evidenceRef). RuntimeHealth is Initializing|Recovering|Ready|Stopping|Failed with readiness evidence. Per-scope capability availability/reach and data stream lifecycle are separate tagged values over PublicScope or AccountScope; only controlled-effect aggregates require durable recovery classification before effect admission.",
+      "pureTransitions": [
+        "classifyEffectRecovery(durableState,attempts) resumes preparation, preserves Prepared/AwaitingApproval for review/expiry only, requeues queued/no-start effects, observes started effects, resumes abort/compensation and retains RecoveryCase ownership",
+        "verifyReplay(records,highWatermark) checks effect schema/plan/projection versions before authority opens",
+        "admissionGate requires a durable next action/wait/recovery owner for each unfinished effect and emits Ready only after the local barrier",
+        "classifyCapabilityScope(scope,descriptor,availability) returns available/degraded/unavailable without changing descriptor identity",
+        "classifyDataStream(streamState) handles opening, gap, reconnect and end without creating an effect recovery case"
+      ],
+      "effectBoundary": "effect-runtime sequences local startup and the writer records classification/projection checkpoints. Provider connections and data streams start as scoped resources; not every remote connection must be healthy for local authority or unrelated query scopes to be ready. Guardian consumes the tagged RuntimeHealth and scoped capability views.",
+      "durability": "Admission stays closed during effect journal replay/rebuild; replacement execution projections switch atomically. Classification jobs are typed and deduplicated. Data cursor/stream recovery follows provider replay/finality evidence; absence of replay is an explicit gap/degraded state, not a fabricated local sequence.",
+      "errors": [
+        "JournalVerificationFailed(sequence,reason): close affected effect authority",
+        "ScopeConnectionUnavailable(scope,reach): degrade only the affected capability",
+        "RecoveryClassificationConflict(transactionId,version): reload/CAS",
+        "DataReplayUnavailable(scope,cursor): report gap/unavailable, do not infer complete history"
+      ],
+      "preservedBehavior": [
+        "One broken broker configuration does not stop non-trading Alice or independent available accounts",
+        "Keyless market-data scopes remain query-only and are never classified as executable trading accounts"
+      ],
+      "replacementSteps": [
+        "Replace health ok:true semantics with the RuntimeHealth union and local effect readiness gate",
+        "Retain stop handles for all effect/data workers and classify durable effect work before admission",
+        "Do not delete ephemeral source state before effect recovery decisions",
+        "Expose per-scope capability availability separately from startup and journal status"
+      ],
+      "verificationCases": [
+        "Kill during effect classification after half aggregates -> next startup has one durable next action per aggregate and no early effect admission",
+        "Prepared/AwaitingApproval on restart -> only expiry/review work exists; no forward effect dispatch before approval",
+        "One provider offline with a valid journal -> unrelated scopes admit while that scope is degraded",
+        "An effect projection is corrupt but journal valid -> deterministic rebuild before effect admission",
+        "A non-replayable data stream restarts -> it reports a gap/degraded state without compensating or dispatching an order"
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "Startup/recovery barriers remain for local controlled-effect authority, but K02/K05 separate capability availability and data delivery from local readiness. An unavailable broker data scope must not block unrelated local effect or query scopes, while a corrupt effect journal still closes its authority.",
+      "contractAnchors": [
+        "K02",
+        "K05",
+        "K07",
+        "K08",
+        "K11",
+        "K12"
+      ]
+    },
+    {
+      "id": "NOTE-12-2",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/git-persistence.ts:28-39: all read/parse errors fall back then return undefined",
+        "services/uta/src/domain/trading/git/TradingGit.ts:147-153: thrown exceptions become broker rejected strings",
+        "services/uta/src/main.ts:179-189: shutdown swallows manager/event-log failures",
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 1293-1300): defects stop owner and preserve evidence"
+      ],
+      "currentBehavior": "Corrupt persisted JSON can appear as empty history; unexpected execution errors are recorded as rejections.",
+      "problem": "Retry supervision after an impossible transition can repeat mutation, and silent defaults erase the evidence needed to classify old effects.",
+      "targetModel": "ExpectedFailure families are DomainRejection, ProviderRejection, ConnectionUnavailable, PreconditionConflict, OutcomeUnknown, StorageFailure, DeliveryGap and OutputViolation. Defects are PersistedCodecViolation, ReplayViolation, RelationalInvariantViolation and UnexpectedInterpreterDefect. SupervisionDecision = RetryReadAt|DegradeScope|StopWorkerPreserve|StopAuthorityPreserve; the decision is selected by boundary and phase, not a blanket catch. Data delivery defects isolate/pause the affected leaf; effect defects preserve evidence and mutation exclusion.",
+      "pureTransitions": [
+        "classifyFailure(stage,typedFailure,durableBoundary) maps known no-send effect connection failure to rescheduling and possible-send failure to Unknown; pull/push delivery failure becomes gap/unavailable according to its contract",
+        "classifyDefect(owner,reach) stops global effect authority for journal/relational corruption or isolates malformed provider data while preserving any possible mutation reconcile gap",
+        "loadLegacyReadFailure distinguishes ENOENT from parse, permissions and IO errors; only genuine absence is absent history",
+        "classifyOutputViolation(capability,payload) rejects malformed data output and never silently returns empty state"
+      ],
+      "effectBoundary": "Supervision observes typed causes, closes affected claim/admission gates and terminates pending replies. Provider stream code owns cancellation/reconnect; diagnostic sink failure cannot override effect journal truth. No blanket catch returns empty state or transforms a possible-send boundary into rejection.",
+      "durability": "A healthy writer records WorkerIncident/OutcomeUnknown before stopping effect work; a broken writer retains DB/WAL/raw evidence and reports the last durable sequence without claiming persistence. Data cursor gaps/violations retain delivery evidence and may degrade only that scope. Restart verifies and never clears corrupt state automatically.",
+      "errors": [
+        "PersistedCodecViolation(path,recordId,schemaVersion): fatal effect-authority defect",
+        "NativeBoundaryMalformed(capability,evidenceRef): possible effect Unknown or data delivery isolation",
+        "WriterFailed(lastSequence): fail pending effect waiters with no memory/file bypass",
+        "StreamDeliveryFailure(resource,reason): typed end/pause/gap"
+      ],
+      "preservedBehavior": [
+        "Transient broker outages remain isolated rather than crashing every account",
+        "Expected user mistakes return actionable typed errors instead of stack traces"
+      ],
+      "replacementSteps": [
+        "Delete catch-all legacy load fallback on malformed/unreadable effect files",
+        "Remove throw-to-rejected conversion from controlled effect dispatch",
+        "Make supervision exhaustive by provider boundary, delivery mode and effect phase",
+        "Preserve data stream error/finality evidence without attaching order compensation to it"
+      ],
+      "verificationCases": [
+        "Corrupt persisted effect payload -> startup fails closed with retained evidence, never empty history",
+        "Malformed provider response after possible effect send -> Unknown, not ProviderRejected",
+        "Writer defect with queued effect callers -> all resolve failure, none suspend forever",
+        "A data query timeout on one provider -> unrelated effect/data workers remain live"
+      ],
+      "openQuestions": [],
+      "contractDisposition": "retained",
+      "contractRationale": "The evidence-preserving failure boundary remains necessary. K07 adds provider protocol/delivery failures and K08 keeps possible-send Unknown distinct from known rejection; data-reader failures may be isolated without applying effect recovery semantics.",
+      "contractAnchors": [
+        "K05",
+        "K07",
+        "K08",
+        "K11",
+        "K12"
+      ]
+    },
+    {
+      "id": "NOTE-13-1",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/main.ts:147-152: health reports only ok/startedAt/account count",
+        "services/uta/src/domain/trading/order-sync-poller.ts:80-90: human strings show update/error without durable dispatch context",
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 1302-1325): context and operational views required",
+        "detailed design D14: high-cardinality context must not become metric labels"
+      ],
+      "currentBehavior": "Logs describe account polling, but no operational query identifies the age, ownership and residual of each unknown transaction.",
+      "problem": "A healthy socket counter cannot indicate stalled writer, stale projection or unresolved execution; putting transaction ids into metrics produces unbounded cardinality and may leak sensitive identities.",
+      "targetModel": "OperationalViews include effect TransactionsByStateAge, UnknownDispatches, RecoveryResiduals, DurableQueueLag, LeaseAge, WriterPressure and ProjectionLag, plus scoped CapabilityAvailability and DataDeliveryFreshness/cursor-gap views. ViewEnvelope(sequence,asOf,freshness,rows,nextCursor) is schema-bound. ExecutionContext is reserved for effect identity; DataContext carries provider/resource/cursor/finality. Metrics labels stay bounded; high-cardinality identities are redacted trace/log attributes.",
+      "pureTransitions": [
+        "projectEffectOperational(event,state) updates state-entered time, unknown onset and recovery owner without resetting age",
+        "projectDataDelivery(frame,cursor) records freshness, finality, gap and provider identity without creating a dispatch context",
+        "computeLag(now,dueAt,checkpoint,head) returns duration/sequence gaps with clock uncertainty",
+        "redactDiagnostic(capabilitySchema,payload) preserves safe error references and rejects unknown/native secret fields",
+        "projectAvailability(descriptor,evidence) separates implementation/session/authorization availability from effect readiness"
+      ],
+      "effectBoundary": "projection-store owns named SQL views/checkpoints; observability owns instrumentation/redaction/sinks; effect-runtime composes them. Operational readers authorize by the capability-declared PublicScope or AccountScope (with explicit subAccountId for account facts). Logs/metrics cannot authorize or schedule effects, and data diagnostics cannot be raw provider payloads.",
+      "durability": "Effect authority events retain correlation/timestamps and effect operational rows are queryable atomically. Data delivery checkpoints are independent and may be stale/incomplete. Writer latency instrumentation is ephemeral unless explicitly summarized; no history is fabricated across restart.",
+      "errors": [
+        "ProjectionStale(checkpoint,head): expose lag, not empty rows",
+        "DiagnosticRedactionRejected(schema,field): drop unsafe diagnostic and count redaction error without changing effect",
+        "OperationalViewForbidden(scope): no cross-scope leak",
+        "CapabilityEvidenceUnavailable(capability): expose unavailable/degraded view"
+      ],
+      "preservedBehavior": [
+        "Human readable account/broker errors remain actionable but schema-redacted",
+        "Polling errors remain nonfatal when they are expected reach failures"
+      ],
+      "replacementSteps": [
+        "Replace health count as effect readiness with RuntimeHealth, capability availability and delivery freshness fields",
+        "Add paginated effect and data operational views without silently truncating unresolved residuals or stream gaps",
+        "Use low-cardinality labels and traces/exemplars for identity-rich context",
+        "Keep data finality/sequence provenance distinct from effect dispatch context"
+      ],
+      "verificationCases": [
+        "Repeated Unknown polls -> firstUnknownAt stays fixed while nextDue advances",
+        "Read projection paused -> response is visibly stale with head/checkpoint gap",
+        "Provider error includes a token -> token never reaches diagnostics",
+        "A million effect transactions -> metric series remain bounded",
+        "A stream loses cursor continuity -> data view shows gap without creating an effect unknown"
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "Operational visibility remains required, but K05 introduces delivery freshness/cursor views alongside effect unknown/recovery views. K02/K06 require availability and schemas to be visible without turning transaction ids into metric labels or treating health as effect authorization.",
+      "contractAnchors": [
+        "K02",
+        "K05",
+        "K06",
+        "K08",
+        "K11"
+      ]
+    },
+    {
+      "id": "NOTE-14-1",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 1331-1347): exact ten transaction/capability/account routes",
+        "services/uta/src/http/routes-trading.ts:20-77,198-224: legacy loose schemas, one-shot pipeline and manager routes",
+        "detailed design D13: runtime schemas, error coverage and event pagination"
+      ],
+      "currentBehavior": "Legacy routes operate on account instances and stringly order fields; one-shot status maps stage/commit/push rather than durable command acceptance.",
+      "problem": "Returning prepare success before a plan is durably compiled or exposing generic manager data makes client retry and approval ambiguous. Transport timeout is not transaction rejection.",
+      "targetModel": "UTA-facing transport exposes authenticated discovery/describe and application ports. Mutation-capable capability leaves use named command/receipt codecs with commandId and expectedVersion where an effect aggregate exists; read leaves use finite pull result schemas; push leaves use named stream frames, cancellation and end/error schemas. QueryCapabilities and account/scope views are fixed boundary projections, while provider command trees and extensions are descriptor-derived rather than a handwritten universal route table. Public data routes remain PublicScope; account/order routes require AccountScope and explicit subAccountId.",
+      "pureTransitions": [
+        "decodeRoute(route,capabilityDescriptor,wireInput) validates schema, path/body identity, scope and schema fingerprint before invoking a leaf",
+        "createOrReplacePrepareApproveRecover are available only for a composed controlled-effect leaf and return durable receipt/result variants",
+        "pull(capability,input) returns one finite validated page/result with cursor/completeness",
+        "push(capability,input,signal) returns typed frames and cancellation/end behavior; closing the client does not revoke an accepted effect",
+        "pageAuthorityEvents(scope,cursor,limit) returns stable sequence/nextCursor/end without hidden caps"
+      ],
+      "effectBoundary": "HTTP/CLI is an outer interpreter: authenticate, discover/describe, decode, invoke application/reader, and encode. Provider bridge code handles native protocol; application/writer owns controlled-effect receipts. No route exposes SQL rows, SDK objects, functions, or credentials.",
+      "durability": "Controlled-effect responses emit only after receipt commit; retry uses the same commandId. Pull pages may be retried as finite reads under their cursor semantics; push cancellation releases only the stream resource. Read views expose freshness/availability and do not imply effect approval.",
+      "errors": [
+        "ProtocolDecodeFailure(issues): typed boundary rejection",
+        "Unauthenticated/Forbidden: authentication/authorization failure before receipt disclosure",
+        "CapabilityNotFoundOrStale(identity,revision): no silent alternate semantics",
+        "VersionConflict/ApprovalMismatch/IdempotencyConflict: controlled-effect conflict",
+        "PrepareRejected(typedIssues): durable effect result, never fabricated Prepared",
+        "DeliveryUnavailableOrGap(capability,cursor): typed pull/push delivery result"
+      ],
+      "preservedBehavior": [
+        "One-shot UX can compose create/replace/prepare under policy but must expose durable waiting-for-approval",
+        "All legacy quantity/TP-SL/trailing/GTD/parent/OCA fields survive in named ADTs or fail explicit unsupported capability"
+      ],
+      "replacementSteps": [
+        "Derive provider help/CLI/route metadata from one capability declaration and fixed UTA boundary",
+        "Migrate Alice/CLI/connector calls together and delete old one-shot execution authority after cutover",
+        "Keep controlled-effect async prepare/approval distinct from data pull/push response lifecycles",
+        "Document unavailable structural leaves rather than adding unsupported handlers"
+      ],
+      "verificationCases": [
+        "Drop a controlled-effect response after commit and retry the same command id -> one receipt returned",
+        "Preparation facts fail -> durable typed PrepareRejected and no dispatch",
+        "Pull pagination over multiple pages -> stable finite results with explicit completeness",
+        "Push client closes -> stream ends/cancels its resource without canceling an already accepted effect",
+        "A capability tree without option/cancel leaf has no corresponding command/help node"
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "The route evidence remains about loose request/response and one-shot semantics, but K01/K02/K06 require route/help/call projections from capability declarations. Controlled-effect commands retain durable receipts; data pull/push routes expose their own schemas and lifecycle without universal transaction endpoints for every provider.",
+      "contractAnchors": [
+        "K01",
+        "K02",
+        "K03",
+        "K05",
+        "K06",
+        "K07",
+        "K08"
+      ]
+    },
+    {
+      "id": "NOTE-15-1",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/http/routes-simulator.ts:116-220: simulator routes directly mutate MockBroker state",
+        "services/uta/src/http/routes-trading.ts:198-224: test-connection builds a broker and reconnect reaches manager",
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 1344-1356): typed recovery only, private database"
+      ],
+      "currentBehavior": "Transport receives manager/broker access and simulator endpoints can alter external-trade-like state directly.",
+      "problem": "A future admin SQL callback or simulator mutation through transaction store would bypass dispatch evidence and make crash experiments tautological.",
+      "targetModel": "TransportDependencies exposes typed TransactionApplication only for composed controlled effects, plus AccountQuery/CapabilityQuery/DataQuery ports and a separately authorized SimulatorApplication. JournalWriter/SqlClient/DatabaseHandle and native SDK objects never cross transport. Simulator leaves target an independent MockVenue ledger and are labeled ExternalVenueStimulus; Recovery is a typed effect decision bound to actor/scope/version/evidence, not arbitrary state patching. Public simulator data uses PublicScope; account simulation requires explicit AccountScope.",
+      "pureTransitions": [
+        "authorizeSimulator(principal,environment,scope,capability) requires simulator-only scope and explicit test/admin grant",
+        "validateRecoveryDecision(decision,evidence,residual) checks expected revision and retained effect ownership; it cannot set a state tag or invoke a provider mutation directly",
+        "projectAdminView(recordSchema) exposes redacted capability/data/effect views, never rows or credential payloads",
+        "classifyStimulus(source,identity) preserves external/manual provenance separately from UTA effect intent"
+      ],
+      "effectBoundary": "Only the UTA composition root constructs database/effect services. Simulator IO changes mock venue facts and feeds ordinary provider observation; effect commands still use normal writer/approval/dispatch. Data stimulus does not mutate transaction rows directly. Backup/diagnostic commands use fixed private identities, not user SQL or arbitrary paths.",
+      "durability": "Mock venue facts have their own durable identity so killing UTA does not erase provider truth. Effect recovery updates use writer CAS/events/locks; data stimulus/observation retains provenance and cursor state independently. No simulator receipt is an approved production effect receipt.",
+      "errors": [
+        "SimulatorScopeRequired(scope): deny real-provider mutation through simulator route",
+        "UnsupportedRecoveryDecision(tag): reject arbitrary patch",
+        "AdministrativeCapabilityDenied(operation): no SQL exposure",
+        "StimulusProvenanceMissing(identity): do not attribute external data to UTA effect"
+      ],
+      "preservedBehavior": [
+        "Simulator can still drive fills/prices/external balance changes for development",
+        "Those changes remain distinct from approved user transaction intent"
+      ],
+      "replacementSteps": [
+        "Replace manager/broker god-view injection with application/data/capability ports",
+        "Move MockVenue operations behind an independently scoped simulator capability and ledger boundary",
+        "Keep typed recovery and no raw state replacement/SQL endpoints",
+        "Ensure external data stimulus remains distinguishable from approved effect execution"
+      ],
+      "verificationCases": [
+        "Normal trader calls simulator mutation on a live scope -> denied",
+        "External mock fill then UTA kill -> venue fact survives and is ingested as external observation",
+        "Recovery body with arbitrary state/table field -> schema rejects before writer",
+        "Public response excludes native request and secrets",
+        "A market-data stimulus cannot create an approval or dispatch receipt"
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "The transport injection gap remains, while K07 fixes the boundary at capability discovery/invocation and K08 forbids simulator or admin ports from becoming an effect-authority backdoor. Simulator data/effect stimuli are provider-scoped and independently evidenced.",
+      "contractAnchors": [
+        "K01",
+        "K02",
+        "K05",
+        "K07",
+        "K08",
+        "K12"
+      ]
+    },
+    {
+      "id": "NOTE-16-1",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 1302-1325): observability obligations exist but layout row is absent",
+        "detailed design D14: observability owner, stage ADT, redaction, and projection-store views",
+        "services/uta/src/main.ts:42-54,127-152: current composition emits inline console logs and health response"
+      ],
+      "currentBehavior": "Current main and poller own ad hoc logging; target source layout lacks an explicit observability destination despite operational requirements.",
+      "problem": "Without a concrete import boundary, adapters may log raw SDK payloads or domain functions may acquire logger/time dependencies, and operational queries may drift into another authority store.",
+      "targetModel": "services/uta/src/observability owns execution-context, data-delivery-context, redaction, instrumentation and sinks when used. Domain owns serializable DiagnosticEvent, EffectContext and DataContext values with pure constructors; projection-store owns checkpointed operational queries. Provider adapters depend on narrow typed diagnostic ports. No per-entity logger, raw provider object, or generic telemetry registry is a target contract.",
+      "pureTransitions": [
+        "extendEffectContext(transaction,step) returns StepContext only after scope/revision proof; a committed attempt produces DispatchContext",
+        "extendDataContext(capability,resource,cursor,frame) includes provider identity, sequence/finality and gap status without effect identity",
+        "encodeDiagnostic(event) exhaustively maps safe variants and rejects unknown/native fields",
+        "computeOperationalMetric(view) derives bounded aggregates without changing authority or delivery state"
+      ],
+      "effectBoundary": "Adapters emit typed values to observability; domain does not acquire logger/time dependencies. Writer/scheduler enrich effect sequence/timing, while data adapters enrich frame/cursor facts. Observability is not journal or execution authority; sink finalization cannot settle or retry effects.",
+      "durability": "Effect audit facts remain in the effect journal; data cursor/finality facts remain in their delivery projection where required; view checkpoints belong to projection-store. Sink loss cannot lose receipts, authorize retries, or turn an incomplete data frame into a final one.",
+      "errors": [
+        "SinkUnavailable(destination): degrade telemetry and report safely without changing effect",
+        "ContextRelationMismatch(expected,actual): defect before emitting evidence",
+        "DiagnosticRedactionRejected(schema,field): suppress unsafe provider field",
+        "DataContextIncomplete(capability,cursor): preserve gap/finality uncertainty"
+      ],
+      "preservedBehavior": [
+        "Logs still identify the account for operational debugging",
+        "Non-trading Alice remains outside UTA observability composition"
+      ],
+      "replacementSteps": [
+        "Add the observability boundary to the canonical layout with effect and data context types",
+        "Move inline logs into typed ports as each source cuts over",
+        "Keep operational queries/checkpoints in projection-store",
+        "Require provider-specific redaction before raw native values reach sinks"
+      ],
+      "verificationCases": [
+        "Effect diagnostic cannot be built without step/scope/start sequence",
+        "Data-frame diagnostic includes cursor/finality but no transaction authority fields",
+        "Telemetry backend unavailable -> effects still journal and data delivery reports its own status",
+        "Adapter raw native payload -> boundary codec rejects secret/unknown fields"
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "The missing import boundary is real, but observability must cover both controlled effects and data delivery without making either a universal logger/telemetry registry. K03/K07 require typed redaction at provider boundaries and K05 requires frame/finality context.",
+      "contractAnchors": [
+        "K01",
+        "K03",
+        "K05",
+        "K06",
+        "K07",
+        "K11"
+      ]
+    },
+    {
+      "id": "NOTE-17-1",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 1385-1419): slice order requires durable Mock, approval, then compensation before real brokers",
+        "detailed design D15/D16: independent persistent broker ledger and seven crash cuts",
+        "services/uta/src/http/routes-simulator.ts:151-175: existing simulator can model partial fill/cancel but has direct in-process state mutation"
+      ],
+      "currentBehavior": "Simulator endpoints provide useful stimuli, but no executable multi-step compensation protocol with independent crash-surviving venue facts exists in the examined path.",
+      "problem": "Proving only happy-path place then adding brokers leaves the load-bearing late-fill/abort/stale-worker mechanisms untested. An in-process mock erased with UTA cannot falsify duplicate recovery.",
+      "targetModel": "Slice3Scenario uses an independent MockVenue process/ledger plus UTA authority, and declares provider capability leaves for effect mutation, finite pull and push stream. Effect fixtures specify dependency DAG, policy, criteria and deterministic barriers; data fixtures specify PublicScope or AccountScope, cursor/finality/gap/backpressure. FixtureCapabilities distinguish Exact/reversible, StateRestoring, Economic and explicit None/refusal behavior, and never export those guarantees to another provider.",
+      "pureTransitions": [
+        "effectScenarioOracle(beforeLedger,afterLedger,journal) matches identities and actual exposure to the justified next action, not adapter call count",
+        "dataScenarioOracle(beforeFrames,afterFrames,deliveryState) checks finite completeness, stream lifecycle, cursor/gap and finality rules",
+        "abortOracle(partialApplied,policy) classifies unknown effects before compensation and orders dependencies",
+        "concurrencyOracle checks effect all-key exclusion while disjoint effect/data resources progress"
+      ],
+      "effectBoundary": "Acceptance launches actual UTA API/CLI and independent provider process; fixture barriers sit around writer/provider boundaries. Venue fixtures manipulate provider truth, not UTA SQL. Data pull/push runs through declared capability schemas and resource lifecycle; no stdout buffer stands in for a stream resource.",
+      "durability": "Effect crash cuts inspect journal/receipts/jobs/locks and separate venue ledger after restart. Data cuts inspect cursor/checkpoint, frame identity, completeness, gap and cancellation. Seven effect cuts remain, plus paused stale-worker and stream disconnect/replay cuts.",
+      "errors": [
+        "AcceptanceInvariantFailed(cut,evidenceRefs): block effect-provider cutover",
+        "ResidualExposureUnexpected(scope,actual,target): stop and retain recovery ownership",
+        "FixtureNotIndependent(storageIdentity): reject invalid setup",
+        "DeliveryInvariantFailed(capability,cursor): block claimed data delivery contract"
+      ],
+      "preservedBehavior": [
+        "Mock can still simulate external activity, not just echo configured results",
+        "Real broker adaptation does not inherit mock-only Exact capability"
+      ],
+      "replacementSteps": [
+        "Build independent effect failure paths before heterogeneous mutation ownership",
+        "Add explicit data pull/push lifecycle and finality/gap cases without order compensation",
+        "Keep exact/state-restoring fixtures local to the MockVenue capability and add Economic/None refusal scenarios",
+        "Do not mark composition passed using type checks or same-process state"
+      ],
+      "verificationCases": [
+        "First effect partially fills and second rejects -> classify, cancel residual, restore only authorized target",
+        "Compensation fails permanently -> RecoveryRequired retains keys/residual",
+        "Kill at each effect cut -> one justified next action with no blind duplicate",
+        "A stream disconnect with no replay guarantee -> gap/unavailable, not synthetic continuity",
+        "Lease expires while an effect sender is paused -> new worker observes and old sender cannot mutate twice"
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "Independent MockVenue and crash cuts remain the falsification strategy for controlled effects, but K12 also requires proving composition for data pull/push and K05 forbids using in-process order state as a data-stream or effect authority shortcut. Mock capabilities cannot confer native guarantees.",
+      "contractAnchors": [
+        "K05",
+        "K07",
+        "K08",
+        "K10",
+        "K12"
+      ]
+    },
+    {
+      "id": "NOTE-18-1",
+      "assessment": "blocked-on-evidence",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/__test__/e2e/setup.ts:25-29,97-105: non-live preset filtering exists but is not live account evidence",
+        "docs/uta-live-testing.md:15-32,224-298,327-350: exclusive agent surface, opt-in live lane and S1-S14 behaviors",
+        "docs/uta-live-testing.md:268-273: S7 nevertheless asks for direct broker probe script",
+        "docs/uta-live-testing.md:302-320: listing completeness, string ids, fees and child-order identities required",
+        "LiveEvidence design (current acceptance distinction; stable integration boundary K02/K07/K12): paper/session/entitlement hints versus real acceptance evidence"
+      ],
+      "currentBehavior": "Legacy setup filters non-live accounts but initializes raw brokers; scenario catalog mixes exclusive alice-uta execution with a direct external-order probe in S7.",
+      "problem": "A suite can accidentally bypass approval/transport and still look green, omit unsupported applicable scenarios, or leave working protective/conditional orders hidden by partial listings.",
+      "targetModel": "BrokerAcceptanceRecord binds account scope, environment/session/entitlement evidence, capability descriptor fingerprint, complete baseline, scenario results, dispatch/observation evidence and final baseline. ScenarioDisposition = Passed(evidence)|NotApplicable(capabilityReason)|Blocked(environmentFact)|Failed(counterexample). Baselines include all provider-declared relevant order namespaces, positions, balances, units and completeness. ExternalStimulusRecord is separately labeled venue/manual actor and cannot count as UTA effect execution.",
+      "pureTransitions": [
+        "selectScenarios applies applicable capability leaves and effect/data delivery cases, including unknown/recovery supplements; absent structural leaves are NotApplicable only with a reason",
+        "compareBaseline uses authorized temporary fixtures and detects hidden provider namespaces, residual exposure, fees and incomplete observations",
+        "classifyFailureCleanup chooses observe pending identity, authorized cleanup, or ManualStop with retained evidence; it never flattens an Unknown effect generically",
+        "requireEnvironmentGate verifies non-live/session/entitlement/scope plus complete baseline before effect mutation; unknown facts yield Blocked"
+      ],
+      "effectBoundary": "Future runs submit UTA effect/approval/recovery actions through the real Alice Workspace identity. S7 may use an independent provider/manual stimulus to test external observation and carries actor/provenance. Paper markers, session flags and SDK method presence are hints, not capability/effect evidence. No real calls occur in this design task.",
+      "durability": "Record command/transaction/revision/step/dispatch/native identities, redacted statuses, journal cursors and cleanup outcomes. Native retry/absence conclusions include namespace/pagination/horizon/fencing evidence. Missing proof leaves Blocked/NotApplicable and never Passed.",
+      "errors": [
+        "LiveAccountGateFailed(preset,environment): no effect mutation",
+        "BaselineIncomplete(namespaces): block before first effect",
+        "CleanupOutcomeUnknown(effectId): manual stop with recovery ownership",
+        "ScenarioNotApplicableRequiresEvidence(scenario): reject unexplained skip",
+        "NativeEvidenceMissing(capability,action): no safe retry/absence claim"
+      ],
+      "preservedBehavior": [
+        "Non-live preset gate and explicit live-paper opt-in stay mandatory",
+        "S5 verifies both protection legs including hidden trigger/held namespaces",
+        "S13 directories cannot trade; S14 derivative units/signs stay exact",
+        "Source inspection, mocks, paper markers and SDK method presence do not prove paper availability, entitlements or native guarantees"
+      ],
+      "replacementSteps": [
+        "Reconcile exclusive-agent wording with S7 external-stimulus exception",
+        "Use real UTA capability/effect actions as acceptance authority; keep adapter-only probes separate",
+        "Migrate Git-specific scenarios to effect journal/projection while retaining fill observation and approval UX",
+        "Check provider-declared identity semantics rather than assume one identity rule",
+        "Require executed environment/session/entitlement and per-leaf evidence before Passed"
+      ],
+      "verificationCases": [
+        "Paper gate true but baseline namespace incomplete -> blocked before effect mutation",
+        "Lost effect ack -> observe the same provider identity and retain Unknown until evidence",
+        "Protection namespace missing from projection -> fail even if ordinary listing is healthy",
+        "Paper/session/entitlement marker without execution -> Blocked with no dispatch",
+        "No provider/leaf retry or absence evidence -> capability remains unavailable and cleanup preserves recovery ownership"
+      ],
+      "openQuestions": [
+        "Current paper account availability, venue session/entitlements and concrete native retry/absence evidence are empirical and intentionally not queried during this design-only assignment."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "The test-safety and empirical-gate obligations remain, but K01/K02/K07 require scenarios to assert the composed capability descriptor/availability and exact provider evidence. S1-S14 effect behavior remains controlled; external S7 is a separate stimulus/data observation, never UTA approval.",
+      "contractAnchors": [
+        "K01",
+        "K02",
+        "K05",
+        "K07",
+        "K08",
+        "K12"
+      ]
+    },
+    {
+      "id": "NOTE-18-2",
+      "assessment": "blocked-on-evidence",
+      "sourceEvidence": [
+        "services/uta/package.json:14-34: SQLite native runtime dependencies absent",
+        "services/uta/tsup.config.ts:11-19: node_modules/native modules remain external",
+        "Dockerfile:51-65,107-137: UTA has a separate production dependency closure",
+        "Dockerfile:143-159: OPENALICE_HOME=/data persistent volume",
+        "docs/data-locations.md:8-27,36-42: complete home versus narrower project transfer semantics",
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 1465-1472): source/Docker/Electron storage acceptance requires native load, crash recovery, backup/restore, relocation, and loud corruption failure",
+        "detailed design D13/D15: exact semver/native ABI and executable API remain unexecuted"
+      ],
+      "currentBehavior": "UTA builds an external-dependency ESM bundle; Docker separately deploys UTA production dependencies and persists the complete data volume. No examined manifest supplies SQLite.",
+      "problem": "A source install passing does not prove packaged native module ABI resolution, full WAL backup, relocation or corruption behavior. Project transfer excluding runtime identity is not automatically a safe trading-authority migration. A copied SQLite database can be internally consistent while being an arbitrary rollback or clone; databaseUuid, checksum, and journal high-watermark are audit metadata, not proof of sole ownership, freshness, or fencing of another host.",
+      "targetModel": "StorageAcceptanceCell(distribution:Source|Docker|PackagedDesktop,os,arch,nodeRuntimeAbi,sqliteVersion,packageArtifactDigest,homePath,scenario,status:Unexecuted|Unsupported|Passed|Failed) covers OpenMigrate, DurableEffectKillRecover, ConsistentBackupRestore, CompleteHomeRelocate, corruption, read-only and double-owner cases. RestoreMode = NormalRestart|RestoreQuarantine|ObservationOnly|AuthorityCutover; supported restore enters quarantine before effect admission and starts observation-only until external facts/ownership reconcile. Capability descriptors/schema fingerprints and provider bridge assets are part of the runtime cell evidence, not a claim that all providers are bundled.",
+      "pureTransitions": [
+        "assessRestore(databaseIdentity,backupSequence,currentProviderEvidence) treats missing effect tail as Unknown risk; manifest metadata correlates evidence but cannot prove no rollback/clone/fence",
+        "enterRestoreQuarantine(restoreCase,sourceHome,destinationHome) records durable quarantine before admission; observation can reconcile provider facts, while AuthorityCutover requires old-owner stop/fence evidence",
+        "validateRelocation(sourceStopped,destinationOwnership,completeHome) requires no concurrent writers and correct credential references",
+        "matrixCoverage(releaseTargets,executedCells) leaves unexecuted cells Unexecuted/Unsupported and does not inherit support from another cell",
+        "validateRuntimeCapabilityCell(descriptor,wireSchema,bridgeAssets) rejects schema/ABI mismatch before exposing a leaf"
+      ],
+      "effectBoundary": "Distribution jobs run the actual bundled entry; native SQLite remains external and is included in each UTA dependency closure/unpacked layout. Consistent backup uses SQLite backup API or stopped complete-home copy. Provider bridges decode exact schemas at runtime. Raw copies bypassing quarantine are not claimed safe or detectable.",
+      "durability": "Database UUID/schema/checksum/high-watermark are audit correlation only, never sole-writer, rollback or exactly-once proof. Restore does not overwrite a live effect authority; observation-only startup reconciles current provider facts before explicit cutover. Unexecuted cells cannot enter effect Ready. Data cache/stream state remains subject to its own replay/finality evidence after restore.",
+      "errors": [
+        "NativeSqliteLoadFailure(runtimeAbi,artifact): no fallback storage",
+        "RestoreQuarantineRequired(restoreCase): no effect admission before quarantine",
+        "BackupAuthorityStale(sequence): observation-only restore",
+        "HomeOwnershipUnproven(path): refuse authority cutover",
+        "CorruptJournal(recordRef): fail closed without reset",
+        "DistributionCellUnexecuted(cell): no Ready/support claim",
+        "RuntimeCapabilitySchemaMismatch(capability): do not expose the leaf"
+      ],
+      "preservedBehavior": [
+        "Docker retains independent UTA dependency closure and optional broker-pack separation",
+        "Data root remains portable complete home",
+        "Non-trading Alice can still run when UTA native driver is unavailable",
+        "Manifest/package metadata alone does not upgrade an unexecuted distribution cell or native ABI claim"
+      ],
+      "replacementSteps": [
+        "Add the selected SQLite stack to UTA production closure while preserving native externalization",
+        "Extend desktop/Docker packaging acceptance to the actual UTA runtime and capability bridge assets",
+        "Add durable trading-authority restore/cutover gates; never auto-activate a clone",
+        "Keep ordinary same-home restart distinct from restore/relocation",
+        "Record every release cell and provider capability evidence before support claims"
+      ],
+      "verificationCases": [
+        "Packaged runtime opens/migrates a relocated complete home and executes a durable mock effect",
+        "Backup before provider fill, restore after fill -> observation-only detects current fact and no effect dispatch before cutover",
+        "Valid checksum with arbitrary rollback/clone -> quarantine remains",
+        "Wrong native ABI -> startup failure and no JSON fallback",
+        "Unexecuted OS/architecture/provider bridge cell -> status remains Unexecuted/Unsupported and no effect Ready"
+      ],
+      "openQuestions": [
+        "Release-supported OS/architecture matrix and packaged native ABI load results must be supplied by the packaging execution slice; this assignment has inspected manifest/bundle/Docker contracts but does not fabricate executed distribution evidence."
+      ],
+      "contractDisposition": "retained",
+      "contractRationale": "Packaging/native ABI evidence and restore quarantine remain empirical gates. The corrected target additionally requires each distribution to carry the same fixed UTA-facing capability/schema boundary while preserving provider-native internals and keeping restore/data observation distinct from effect authority.",
+      "contractAnchors": [
+        "K03",
+        "K05",
+        "K07",
+        "K08",
+        "K11",
+        "K12"
+      ]
+    },
+    {
+      "id": "NOTE-19-1",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 1474-1489): forbids external authority stores/workflow engines and blind retries",
+        "services/uta/src/main.ts:63-168: current UTA process owns managers, poller, FX, snapshots and HTTP",
+        "Dockerfile:107-137,143-170: co-located UTA process and persistent home, not an external database prerequisite"
+      ],
+      "currentBehavior": "UTA is a co-located service with local state and optional brokers; adding durability does not require a new infrastructure service.",
+      "problem": "Delegating scheduler/history to Redis/Postgres/workflow service would create deployment and recovery dependencies outside the chosen home and split execution authority.",
+      "targetModel": "RuntimeAuthoritySet is one UTA process/home with embedded effect journal, capability registry/availability evidence and in-process effect workers. ExternalDependencyRole = ProviderEffectEndpoint|ProviderDataFacts|MarketDataStream|OptionalTelemetrySink|OptionalBackupDestination; none holds sole approval/recovery authority. DurableIntent is a schema-bound provider-declaration-derived controlled-effect record with only small local lifecycle tags, not a closed global taxonomy. Data pulls/pushes are declaration-derived resources over PublicScope or AccountScope as declared, with independent lifecycle.",
+      "pureTransitions": [
+        "checkRuntimeRequirements(config) rejects a mandatory external queue/database/workflow authority for effect acceptance or recovery",
+        "degradeOptionalSink(availability) affects telemetry/export only, never effect journal readiness",
+        "recoverOfflineLocal(effectJournal) classifies unfinished effects locally while provider observations wait durably",
+        "composeProviderResource(descriptor,scope) records data/effect availability for the declared PublicScope or AccountScope without turning external reach into approval or inventing account identity"
+      ],
+      "effectBoundary": "Only provider effect/data facts and optional sinks are remotely required for the relevant capability. Local scheduler scans embedded authority; timers/queues are hints. Provider data streams are resource-scoped and may be unavailable without creating an external workflow authority.",
+      "durability": "Approvals, controlled-effect jobs, locks, receipts, reconciliation cursors and recovery owners remain in the same home. Data cursor/checkpoint records may be local or provider-backed only as declared, but no external acknowledgement substitutes for local effect commit. Complete-home backup contains local recovery authority.",
+      "errors": [
+        "UnsupportedExternalAuthority(dependency,role): configuration rejected",
+        "OptionalExportUnavailable(destination): expose lag without blocking effect journaling",
+        "ProviderFactsUnavailable(scope): durable waiting/degraded capability, not workflow fallback",
+        "DataStreamUnavailable(scope,reason): typed unavailable/degraded result"
+      ],
+      "preservedBehavior": [
+        "UTA remains optional for non-trading users and deployable with the existing local/Docker process topology",
+        "Broker facts remain remote authority; embedded SQLite does not pretend to own venue state"
+      ],
+      "replacementSteps": [
+        "Implement finite typed effect handlers and provider data leaves alongside each executable slice, not a generic workflow engine",
+        "Reject mandatory external state dependencies during composition review",
+        "Keep telemetry/backup as optional projections of local truth",
+        "Keep remote provider facts as evidence sources rather than authority for approval/recovery"
+      ],
+      "verificationCases": [
+        "Disable optional telemetry/export -> local effect transaction and restart recovery still operate",
+        "Provider offline at restart -> unfinished effects classify durably without external queue service",
+        "SQLite unavailable while an in-memory queue is healthy -> no accepted effect receipt or dispatch",
+        "A provider data stream outage -> query/stream degrades without becoming an external workflow or blocking unrelated effect scopes"
+      ],
+      "openQuestions": [],
+      "contractDisposition": "retained",
+      "contractRationale": "The single-home authority constraint remains sound for controlled effects, approvals and recovery. K05/K07 permit remote broker/data facts and optional projections, but they cannot become a second effect authority or force all provider streams into the local transaction journal.",
+      "contractAnchors": [
+        "K01",
+        "K02",
+        "K05",
+        "K07",
+        "K08",
+        "K11"
+      ]
+    }
+  ],
+  "crossGroupContracts": [
+    "All TargetGaps effects use docs/uta-effect-runtime-design/solutions/composition-contract.md K01-K12 as the fixed UTA-facing boundary: providers declare capability leaves and exact input/output/error schemas; provider trees, handlers, languages and native protocols remain open.",
+    "NOTE-2-1 and NOTE-14-1 depend on K02/K06 discovery and transport semantics: capability identity, schema fingerprint, availability, authorization and delivery mode are separate; no universal ActionContractMap or mandatory Unsupported handlers.",
+    "NOTE-2-2, NOTE-8-2, NOTE-8-3, NOTE-8-4 and NOTE-17-1 distinguish K05 pull/push data delivery from K08 controlled effects: data frames/cursors/streams have their own lifecycle, freshness, finality, replay and backpressure; order approval/WAL/compensation apply only when a capability is explicitly wrapped by withTransaction.",
+    "NOTE-4-1, NOTE-5-1, NOTE-5-2, NOTE-7-1, NOTE-7-2 and NOTE-12-1 retain the single local effect authority, writer CAS, durable recovery and lock safety from the investigation, while capability metadata/data projections are typed and scoped rather than forced into the effect state machine.",
+    "NOTE-5-3, NOTE-5-4 and NOTE-5-5 retain exact criterion, compensation, FailurePolicy and Unknown-safe obligations only for composed controlled effects; NativeConformanceRecord remains per provider capability/effect and is not inferred from another adapter.",
+    "NOTE-9-1 is the source-bridge cutover: existing UnifiedTradingAccount/IBroker/global-switch facts remain evidence, but target implementations must compose declaration-derived leaves and fixed UTA-facing descriptors without a kernel broker-name switch or handwritten order Cartesian product.",
+    "NOTE-12-2, NOTE-13-1 and NOTE-16-1 share typed defect/redaction/observability boundaries. Provider protocol/output failures, data gaps and effect OutcomeUnknown are distinct variants and cannot be collapsed into empty results or known rejection.",
+    "NOTE-15-1 and NOTE-18-1 keep simulator/external stimulus provenance separate from UTA effect execution. Real acceptance must traverse authenticated UTA capability/effect paths; data/manual stimulus may test observation only.",
+    "NOTE-18-2 and NOTE-19-1 retain native packaging/home/authority evidence gates. Manifest metadata, SDK method presence, endpoint reachability and mock success never establish native idempotency, absence, atomicity, restoration, ownership or replay guarantees."
+  ],
+  "additionalFindings": [
+    "src/webui/routes/trading-config.ts:216-331 and services/uta/src/main.ts:69-70 currently let Alice/config startup purge or mutate account state before target recovery classification; the composition cutover must preserve unresolved effect evidence and expose lifecycle as an authenticated capability.",
+    "services/uta/src/main.ts:127 and services/uta/src/domain/trading/order-sync-poller.ts:53-105 retain a timer/poller observation path; target implementation must own stop handles and distinguish data stream/cursor lifecycle from controlled-effect scheduler jobs.",
+    "services/uta/src/domain/trading/UnifiedTradingAccount.ts:180-205 remains source evidence for one generic dispatcher/global switch, while composition-contract K01-K03/K07 require provider-native leaf declarations and exact boundary decoding rather than a new universal IBroker.",
+    "docs/uta-effect-runtime-design/transaction-contract.md §6-7 and architecture lock fields remain controlled-effect evidence only; data delivery leases and cache eviction cannot release economic locks or trigger compensation.",
+    "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former line 426) and NOTE-5-3 retain local prepared group identity plus later native binding; an unknown provider id must not be required before preparing a capability effect.",
+    "docs/data-locations.md:36-42 remains narrower than a complete-home trading-authority migration; restore/relocation needs quarantine, observation and explicit ownership cutover, while data caches/streams retain only their declared replay/finality claims."
+  ],
+  "designBasis": "capability-composition-v1"
+}

@@ -1,0 +1,114 @@
+{
+  "group": "Supervisor",
+  "designBasis": "capability-composition-v1",
+  "analysesSha256": "7d1266c70119873487e0c6bc541703669dc6615161135739899f0026453fdf14",
+  "designSha256": "c4f30d83ca4430690aafbc264882a9994ee9551ecb0fdbbc2c56c11612484574",
+  "contractSha256": "73f5235ae86d3f1c9038dfd214e7207cdfb1833be7bc369f628d7d3f9017dd4f",
+  "entries": [
+    {
+      "id": "MAP-B9DC6715CE",
+      "verdict": "accepted",
+      "reason": "The source comment and optional-carrier call describe process observation with a nullable result, not broker authority. The repaired analysis now keeps broker/account health as a separate UTA-owned observation with no Supervisor AccountScope or account capability error, and requires a local startup/recovery barrier rather than treating HTTP reachability as trading admission."
+    },
+    {
+      "id": "MAP-43A7CB72EF",
+      "verdict": "accepted",
+      "reason": "health.ts:9-13 is only an unconstrained compile-time HealthBody, so arbitrary timestamps and counts can cross the process boundary. The target replaces it with one versioned UtaHealthResponse and exact RuntimeHealth phases, while explicitly treating Ready as local startup/recovery evidence rather than trading admission."
+    },
+    {
+      "id": "MAP-CEB68E968D",
+      "verdict": "accepted",
+      "reason": "health.ts:15-22 forwards raw endpoint and timing values with 15s/200ms defaults and no caller cancellation. The target refines endpoint/durations, preserves those defaults, bounds the schedule and puts AbortSignal in the interpreter; this remains a finite pull observation rather than transaction work."
+    },
+    {
+      "id": "MAP-6F1E8D6910",
+      "verdict": "accepted",
+      "reason": "health.ts:24-30 casts unknown JSON to Partial<HealthBody> and throws one generic Error. The target uses the shared runtime codec, validates version, process identity, local phases and count domain, and retains typed path/protocol evidence without claiming native broker guarantees."
+    },
+    {
+      "id": "MAP-ABEDDF53B2",
+      "verdict": "accepted",
+      "reason": "health.ts:32-43 hard-codes enabled=true, erases helper failure causes to null, and uses body!. The target exposes Disabled, Observed and Unavailable variants with a non-optional decoded body only on Observed, preserves non-Ready local phases, and leaves policy unchanged on ordinary outage."
+    },
+    {
+      "id": "MAP-A630EBD86C",
+      "verdict": "accepted",
+      "reason": "The restart comments describe a whole-process flag lifecycle, while the current Guardian control server only has request IDs plus status/stop and no restart method. The target extends that existing boundary with correlated restart status, keeps whole-process scope, treats account scope as optional correlation only, and does not claim account reconnect or add a second acknowledgement channel."
+    },
+    {
+      "id": "MAP-4510706FF1",
+      "verdict": "accepted",
+      "reason": "restart-trigger.ts:18-27 exposes raw URL, arbitrary flag path and unconstrained durations. The target constructs refined process-control options with explicit defaults and cancellation context, removes the flag authority at protocol cutover, and keeps Guardian/UTA lifecycle effects outside trading durability."
+    },
+    {
+      "id": "MAP-A565129D19",
+      "verdict": "accepted",
+      "reason": "restart-trigger.ts:29-37 permits contradictory booleans, raw timestamps and one freeform error. The repaired target adds an explicit Cancelled outcome and maps Ready to whole-process replacement confirmation only; its process result cannot be presented as an account-scoped reconnect or broker readiness."
+    },
+    {
+      "id": "MAP-17FC029A85",
+      "verdict": "accepted",
+      "reason": "restart-trigger.ts:39-43 defines a second optional HealthBody, so a missing startedAt can masquerade as a baseline. The target deletes that duplicate shape, routes probes through the shared decoded response and tags unavailable baseline evidence instead of allowing a wildcard."
+    },
+    {
+      "id": "MAP-9767014E35",
+      "verdict": "accepted",
+      "reason": "restart-trigger.ts:45-51 has no AbortSignal, trusts response JSON through a cast, and collapses HTTP, decode and network failures to null. The target preserves distinct probe evidence, validates the shared health schema and bounds every request by the remaining deadline plus caller cancellation."
+    },
+    {
+      "id": "MAP-B3BED45272",
+      "verdict": "accepted",
+      "reason": "restart-trigger.ts:53-56 has an early no-I/O boolean guard but misses config/product policy and mislabels UTA_DISABLED as lite. The repaired target consumes a local CarrierPolicy projection of the one shared TradingModePolicy resolver, so readonly process control remains enabled while disabled and invalid policy refuse I/O without a duplicate precedence parser."
+    },
+    {
+      "id": "MAP-A6456BE807",
+      "verdict": "accepted",
+      "reason": "restart-trigger.ts:57-59 normalizes only one trailing slash and derives a user-data flag path inside the effect. The target canonicalizes a validated UtaEndpoint and GuardianControlEndpoint once, removes the obsolete second flag authority, and never treats endpoint validity as broker capability."
+    },
+    {
+      "id": "MAP-A9866AE52B",
+      "verdict": "accepted",
+      "reason": "restart-trigger.ts:60-61 accepts zero, negative, NaN and infinite timing values and lets in-flight work exceed the nominal wait. The target uses a pure validated monotonic schedule with 20s/200ms defaults, remaining-time aborts and explicit timeout/cancellation evidence, not a durable scheduler or broker retry."
+    },
+    {
+      "id": "MAP-42056E5B7F",
+      "verdict": "accepted",
+      "reason": "restart-trigger.ts:63-64 stores only pre?.startedAt, making failed baseline evidence undefined and later string inequality a wildcard. The target tags observed versus unavailable baseline, requires changed boot identity or same-request completed/new-boot proof plus local Ready, and keeps owner/status ambiguity non-success."
+    },
+    {
+      "id": "MAP-505C4A4F7D",
+      "verdict": "accepted",
+      "reason": "The fixed .tmp/rename flag in restart-trigger.ts:66-70 gives only local visibility, while Guardian dev/prod watchers have no request-correlated completion. The target removes the duplicate file authority only at end-to-end protocol cutover, puts coalescing/status in the existing Guardian boundary, retains every request ID and keeps process-control evidence outside the trading journal."
+    },
+    {
+      "id": "MAP-E993F5FB47",
+      "verdict": "accepted",
+      "reason": "restart-trigger.ts:72-81 uses Date.now, raw startedAt inequality, no request cancellation and one generic timeout. The target requires correlated process evidence and a decoded local Ready phase under one bounded schedule, distinguishing same-boot, non-Ready, transport and Guardian-owner uncertainty rather than inferring success."
+    },
+    {
+      "id": "MAP-52D552B9B4",
+      "verdict": "accepted",
+      "reason": "url.ts:1-9 documents a stable optional target but conflates lite wording with enabled-carrier outage. The target separates the shared trading policy, derived local carrier gating, endpoint configuration, process readiness and provider/account observations; Alice can remain bootable without granting authority from a URL."
+    },
+    {
+      "id": "MAP-236805847B",
+      "verdict": "accepted",
+      "reason": "url.ts:10-12 returns any trimmed nonempty OPENALICE_UTA_URL unchanged to multiple consumers. The target introduces one pure validated endpoint descriptor, rejects credentials/disallowed authority and malformed explicit input before I/O, preserves valid precedence/path prefixes, and grants no provider capability."
+    },
+    {
+      "id": "MAP-9D3F24C206",
+      "verdict": "accepted",
+      "reason": "url.ts:13-15 defaults empty input to 47333 but interpolates every other raw string. The target preserves the intentional default and whitespace handling, validates integer ports in 1..65535 before network effects and routes the result through the same endpoint descriptor."
+    },
+    {
+      "id": "MAP-AF5DDC0F35",
+      "verdict": "accepted",
+      "reason": "url.ts:17-19 reduces legacy disable flags to a bare boolean while Alice and Guardian resolve related policy separately. The target centralizes precedence and source/envLocked data, represents lite/auto/nano Disabled separately from readonly/pro Unavailable, and keeps the local capability guard distinct from provider capabilities and venue effects."
+    },
+    {
+      "id": "MAP-DF9D77E0FF",
+      "verdict": "accepted",
+      "reason": "url.ts:21-25 lowercases without trimming and maps every unknown nonempty value to false. The target shares a four-state legacy parser, accepts known true and explicit false spellings, rejects typos before effects, preserves explicit trading-mode precedence and records only normalized source data."
+    }
+  ]
+}

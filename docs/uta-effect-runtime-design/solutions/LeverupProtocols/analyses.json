@@ -1,0 +1,1953 @@
+{
+  "group": "LeverupProtocols",
+  "designBasis": "capability-composition-v1",
+  "entries": [
+    {
+      "id": "MAP-63F62A28BF",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/decimals.ts:13-20: QTY_DECIMALS is 10, PRICE_DECIMALS is 18, and USDC_DECIMALS is 6; comments assign each scale to a different native field."
+      ],
+      "currentBehavior": "The module exposes three unscoped numeric constants. The broker applies quantity and price scales to every pair and assumes collateral is USDC.",
+      "problem": "A number does not identify InstrumentId, quote currency, token, network, native field, or uint width. New collateral or products can silently inherit the wrong scale.",
+      "targetModel": "Treat QTY_DECIMALS, PRICE_DECIMALS, and USDC_DECIMALS as adapter evidence only. A declared Leverup instrument/collateral leaf carries field-tagged QuantityScale, PriceScale, CollateralAsset, network, and protocol revision; missing evidence marks the dependent leaf unavailable and non-executable, while only an unsupported field/capability is structurally absent rather than supplying a universal fallback.",
+      "pureTransitions": [
+        "Candidate metadata + native field declaration -> Result<LeverupScaleDescriptor, ScaleMetadataFailure>; reject missing/conflicting scale evidence.",
+        "Instrument-qualified Quantity/Price/Money + field descriptor -> Result<NativeIntegerField, UnitOrScaleFailure>; preserve field tag, width, and descriptor revision."
+      ],
+      "effectBoundary": "Catalog, token metadata, and network evidence are scoped Effects. Scale validation and exact conversion are pure; data reads do not acquire order approval or compensation state.",
+      "durability": "Pull observations retain descriptor revision, field tag, and source/as-of. A controlled open/close effect pins the same evidence in its prepared payload; historical values are not reinterpreted after revision.",
+      "errors": [
+        "ScaleMetadataMissing -> mark the affected declared provider leaf unavailable.",
+        "ScaleMismatch -> typed query/prepare failure; do not sign.",
+        "UnitMismatch -> reject the field binding rather than rescale."
+      ],
+      "preservedBehavior": [
+        "Non-uniform protocol mapping remains explicit: qty 10 decimals; price/SL/TP 18 where verified.",
+        "Verified USDC may use six decimals, but no other token inherits it by position."
+      ],
+      "replacementSteps": [
+        "Move constants behind provider declaration/descriptor construction.",
+        "Load per-network instrument/token evidence before publishing affected leaves.",
+        "Use tagged scale descriptors at numeric and observation boundaries."
+      ],
+      "verificationCases": [
+        "A verified BTC/USD declaration round-trips quantity and price with distinct field scales.",
+        "A seven-decimal collateral against a six-decimal candidate is unavailable before any effect dispatch.",
+        "A catalog revision cannot reinterpret an existing observation or prepared native integer."
+      ],
+      "openQuestions": [
+        "Authoritative scales for non-USDC collateral and every high-leverage pair are not present here; obtain them before advertising capability."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "The source constants are retained as precise protocol evidence, but K03/K04 require them to be attached to a declared Leverup field and instrument/collateral leaf rather than treated as a universal scale table.",
+      "contractAnchors": [
+        "K03",
+        "K04"
+      ]
+    },
+    {
+      "id": "MAP-93BB15270F",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/decimals.ts:22-28: decimalToWei constructs Decimal, multiplies by 10^decimals, truncates with ROUND_DOWN, and converts to bigint without sign/range validation."
+      ],
+      "currentBehavior": "decimalToWei accepts Decimal or arbitrary string, truncates extra precision toward zero, and returns bigint; malformed values throw.",
+      "problem": "Silent truncation changes signed intent, a generic scale can target the wrong field, and uint96/uint128/uint24 limits are unchecked.",
+      "targetModel": "Use a boundary DecimalString parser and a field-specific NativeIntegerSpec {scale, signedness, width, rounding}. The numeric codec is a provider leaf/HOF component; it returns an exact or explicitly rounded tagged integer and never a generic broker-wide order type.",
+      "pureTransitions": [
+        "DecimalString + NativeIntegerSpec -> Result<ExactInteger | RoundedInteger, PrecisionOrRangeFailure>; no Number conversion.",
+        "RoundedInteger + bound policy -> Result<PreparedLeverupField, PrecisionLossOrRangeFailure>; preserve original decimal, effective integer, field tag, and policy digest."
+      ],
+      "effectBoundary": "Parsing, arithmetic, sign, and width checks are pure. A controlled effect handler invokes the codec after its declaration and policy are bound; pulls and caches never run this as a transaction.",
+      "durability": "Only a selected trading effect persists requested value, field spec, native integer, and rounding evidence in its prepared digest. Data observations retain raw/provenance values without inventing a rounding decision.",
+      "errors": [
+        "InvalidDecimal -> typed boundary rejection.",
+        "PrecisionLoss -> reject unless a deployment-specific, versioned policy explicitly permits ROUND_DOWN.",
+        "NativeOverflow or NegativeUnsigned -> reject before signing."
+      ],
+      "preservedBehavior": [
+        "Exact values produce the same bigint.",
+        "Legacy ROUND_DOWN may remain only as named, audited policy; new actions default to rejecting lost precision."
+      ],
+      "replacementSteps": [
+        "Replace generic calls with field-specific declared codecs.",
+        "Bind and persist rounding policy when preparing a controlled effect.",
+        "Check uint96/uint128/uint24 at the native schema boundary."
+      ],
+      "verificationCases": [
+        "A ten-decimal quantity with exact input produces the same bigint and retains its field identity.",
+        "Extra fractional precision under Reject yields PrecisionLoss without a POST.",
+        "Unsigned width and negative cases fail before signer invocation."
+      ],
+      "openQuestions": [
+        "The deployed contract rounding rule is not established here; compatibility policy needs protocol evidence."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "The observed truncation remains a provider fact to preserve, while K03 makes exact numeric schema plus explicit rounding a declaration-bound codec and keeps that policy out of unrelated data reads.",
+      "contractAnchors": [
+        "K03",
+        "K04",
+        "K07"
+      ]
+    },
+    {
+      "id": "MAP-CA68AA9D2A",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/decimals.ts:30-32: weiToDecimal divides bigint or string by 10^decimals and returns an unqualified Decimal."
+      ],
+      "currentBehavior": "weiToDecimal accepts bigint or arbitrary decimal string and callers decide whether the value is qty, price, or collateral.",
+      "problem": "Reverse conversion loses field, instrument, currency, source, and scale provenance; malformed/negative strings can enter projections and unrelated scales can be selected.",
+      "targetModel": "Decode only tagged NativeIntegerField values into Quantity<InstrumentId>, Price<InstrumentId,QuoteCurrency>, or Money<CurrencyCode> using a verified descriptor. The decoder is shared by provider data leaves and optional effect compilers but never emits an unqualified Decimal.",
+      "pureTransitions": [
+        "NativeIntegerField + descriptor -> Result<DomainAmount, NativeDecodeFailure>; validate syntax, sign, width, scale, and field tag.",
+        "DomainAmount + expected field tag -> Result<NativeIntegerField, UnitMismatch>; prevent price/quantity/collateral confusion."
+      ],
+      "effectBoundary": "REST/RPC adapters perform IO and boundary decode; tagged conversion/projection is pure. Accounting and listings do not enter order transaction state merely because they decode an amount.",
+      "durability": "Data observations retain field tag, descriptor revision, source, and as-of. A trading effect may freeze a selected value and its descriptor in the prepared evidence; replay uses the recorded revision.",
+      "errors": [
+        "MalformedNativeInteger -> typed observation failure.",
+        "NativeSignViolation -> reject unsigned observation or effect input.",
+        "ScaleUnavailable -> Partial/Unavailable data result and no amount-dependent effect."
+      ],
+      "preservedBehavior": [
+        "Valid integers decode mathematically as before under verified scale.",
+        "Fees/PnL remain separate typed amounts rather than being flattened."
+      ],
+      "replacementSteps": [
+        "Replace generic reverse conversion at read/effect boundaries.",
+        "Attach descriptor/as-of before projections.",
+        "Remove bare Decimal from provider-facing records."
+      ],
+      "verificationCases": [
+        "A qty integer decodes to Quantity only under the matching ten-decimal field.",
+        "A negative uint128 price is rejected as a sign violation.",
+        "Applying a price descriptor to a quantity field returns UnitMismatch."
+      ],
+      "openQuestions": [
+        "Units for REST fields beyond qty/price require authoritative response evidence."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "Reverse conversion remains useful evidence, but K03/K04 require a field-tagged schema and semantic unit before a value can become a Quantity, Price, or Money projection.",
+      "contractAnchors": [
+        "K03",
+        "K04",
+        "K05"
+      ]
+    },
+    {
+      "id": "MAP-B6898CEF97",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/decimals.ts:34-40: qtyToWei and weiToQty always use QTY_DECIMALS, the global ten-decimal scale."
+      ],
+      "currentBehavior": "Any supplied quantity uses ten decimals and no instrument or field descriptor is required.",
+      "problem": "The helper cannot enforce instrument identity, uint128 range, sign, or per-product scale, and can be reused for another native field.",
+      "targetModel": "Declare quantity as Quantity<InstrumentId> with a verified QuantityFieldSpec. The Leverup open-market leaf composes that unit only when its provider schema declares uint128 qty; REST position pulls decode the same tag, while other providers/products need not expose this field.",
+      "pureTransitions": [
+        "Quantity<InstrumentId> + QuantityFieldSpec -> Result<NativeIntegerField<uint128>, QuantityEncodingFailure>; validate identity, exact scale, sign, and width.",
+        "Tagged native qty + instrument descriptor -> Result<Quantity<InstrumentId>, QuantityDecodeFailure>; preserve unknown pair-base evidence rather than synthesizing identity."
+      ],
+      "effectBoundary": "Arithmetic and field matching are pure. Catalog and REST effects supply descriptors/records; a read pull does not use order approval, WAL, or compensation.",
+      "durability": "Position observations store instrument/pair-base identity, native qty, scale, and revision. A selected open/close effect pins quantity evidence in its prepared payload; ordinary listings remain independently replayable.",
+      "errors": [
+        "QuantityInstrumentMismatch -> typed query/prepare failure.",
+        "QuantityPrecisionLoss or QuantityOverflow -> typed failure.",
+        "UnknownInstrument -> Partial/Unavailable observation; no synthetic quantity."
+      ],
+      "preservedBehavior": [
+        "Ten-decimal convention remains for descriptors that verify it.",
+        "No floating-point intermediate is introduced."
+      ],
+      "replacementSteps": [
+        "Add an instrument-qualified quantity codec.",
+        "Remove direct global QTY_DECIMALS use from domain callers.",
+        "Persist quantity evidence only where a data observation or controlled effect needs it."
+      ],
+      "verificationCases": [
+        "A declared BTC quantity encodes 1.234567 at the verified scale with identity retained.",
+        "Excess precision follows an explicit policy and never silently changes the requested quantity.",
+        "An unlisted pair-base remains in a Partial listing rather than becoming a tradeable instrument."
+      ],
+      "openQuestions": [
+        "Future product scales require deployed catalog evidence."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "The ten-decimal quantity convention is retained only for an instrument declaration that proves it; K04 lets an open leaf compose that unit without imposing it on every provider or data query.",
+      "contractAnchors": [
+        "K03",
+        "K04",
+        "K05"
+      ]
+    },
+    {
+      "id": "MAP-EB598077BB",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/decimals.ts:42-48: priceToWei and weiToPrice always use PRICE_DECIMALS=18 and return only Decimal."
+      ],
+      "currentBehavior": "Price conversion is fixed at 18 decimals and has no quote currency, instrument, oracle source, confidence, or freshness.",
+      "problem": "A stale or wrong-quote price can become a valid-looking integer; adjacent Pyth code first converts to JavaScript number, losing precision.",
+      "targetModel": "Model Price<InstrumentId,QuoteCurrency> and PriceObservation with exact decimal, feed/source, confidence, publish/fetch times, and freshness. A price-field HOF for the open leaf compiles only under its declared uint128/18dp schema and a bound price policy; quote pulls remain data-only.",
+      "pureTransitions": [
+        "PriceObservation + bound LeverupPricePolicyInputV1 -> Result<PricePrecondition, PricePolicyFailure>; check feed, quote, confidence, age, future skew, sign, and exponent exactly.",
+        "PricePrecondition + PriceFieldSpec -> Result<NativeIntegerField, PriceEncodingFailure>; preserve policy/version and explicit rounding."
+      ],
+      "effectBoundary": "Hermes fetch is a MarketData Effect; observation decoding and policy checks are pure. Only a declared trading effect consumes the frozen price; a quote/cache failure cannot trigger compensation.",
+      "durability": "Pull observations retain exact price evidence and policy result. If selected for open/close preparation, the effect records observation digest, descriptor revision, and native integer; it does not persist a transaction for every quote.",
+      "errors": [
+        "PriceFeedMismatch or PriceStale -> data unavailable or effect prepare rejection.",
+        "ConfidenceTooWide, PricePrecisionLoss, or PriceOverflow -> typed failure.",
+        "Malformed exponent -> protocol failure; finite out-of-policy exponent -> policy rejection retaining raw exponent."
+      ],
+      "preservedBehavior": [
+        "Verified prices still use 18dp for entry/SL/TP.",
+        "Pyth publish timestamp remains source time; fetch time is separate provenance."
+      ],
+      "replacementSteps": [
+        "Replace Number-derived values with exact PriceObservation decoding.",
+        "Compose the price precondition only into the relevant controlled effect.",
+        "Add field-width checks and remove unqualified price values."
+      ],
+      "verificationCases": [
+        "A large oracle integer is encoded exactly for a verified 18dp field.",
+        "A stale or wrong-feed observation is unavailable to an open-effect prepare.",
+        "A quote pull remains a finite data result and does not create approval/dispatch state."
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "The 18-decimal price convention remains a provider field fact, while K04/K05 separate a price observation pull from the optional controlled effect precondition that consumes it.",
+      "contractAnchors": [
+        "K03",
+        "K04",
+        "K05",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-98D8B226B2",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/decimals.ts:50-56: amountInToWei and weiToAmountIn accept tokenDecimals; LeverupBroker.ts:235-251 always supplies USDC_DECIMALS."
+      ],
+      "currentBehavior": "The helper is generic only by decimal count while open compilation chooses USDC and six decimals; reverse conversion decodes cash and margin the same way.",
+      "problem": "A decimal count is not token/currency identity and does not enforce balance, buying power, uint96 bounds, or leverage/notional semantics.",
+      "targetModel": "Use CollateralAsset {CurrencyCode, TokenAddress, TokenDecimals, NetworkIdentity} and Money<CurrencyCode> for the declared open-market effect. Account cash/balance observations remain a separate data leaf; only an effect that declares buying-power semantics may compose them with sizing and leverage evidence.",
+      "pureTransitions": [
+        "Money + CollateralAsset -> Result<NativeAmountIn, MoneyEncodingFailure>; require address/currency/chain/decimal agreement and uint96 bounds.",
+        "CashObservation + declared sizing/price/leverage policy -> Result<BuyingPowerAssessment, BuyingPowerFailure>; return a reservation intent only for an authorized effect, never for a data pull."
+      ],
+      "effectBoundary": "Token metadata, balances, and buying-power reads are scoped Effects; conversion and assessment are pure. Reservation/approval/dispatch exists only on the controlled trading path.",
+      "durability": "Cash observations persist collateral identity, metadata revision, amount, block/as-of, and scope. A prepared open effect pins those facts and its sizing relation; failed cache/read data is not a compensatable transaction.",
+      "errors": [
+        "CollateralUnavailable -> mark the affected declared open leaf unavailable.",
+        "TokenMetadataMismatch -> typed query/prepare failure.",
+        "InsufficientBuyingPower or NativeAmountOverflow -> reject before signing.",
+        "CashObservationUnknown -> retain unavailable evidence and do not authorize the effect."
+      ],
+      "preservedBehavior": [
+        "Verified USDC still encodes six decimals.",
+        "LVUSD remains a separately identified collateral candidate; no LVUSD or other non-USDC capability is advertised without network/account evidence."
+      ],
+      "replacementSteps": [
+        "Replace tokenDecimals with validated CollateralAsset.",
+        "Connect balance/decimals reads to CurrencyMetadata without turning reads into transaction state.",
+        "Model leverage/notional and buying-power preconditions only in an open-effect declaration."
+      ],
+      "verificationCases": [
+        "A matching USDC observation encodes 12.345678 exactly.",
+        "A metadata mismatch blocks open preparation before signing.",
+        "An insufficient balance produces no signature or dispatch, while a standalone balance pull remains queryable."
+      ],
+      "openQuestions": [
+        "Whether LVUSD or another collateral is accepted per network is not established here."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "USDC and LVUSD observations remain collateral evidence, but K04/K08 scope amountIn and buying-power checks to a declared open effect instead of spreading order machinery over accounting reads.",
+      "contractAnchors": [
+        "K03",
+        "K04",
+        "K05",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-A8F11986D4",
+      "assessment": "blocked-on-evidence",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/eip712.ts:1-11: module comment records conflicting flat and nested documentation, defaults to nested, and says the loser will be deleted after a future testnet round trip.",
+        "services/uta/src/domain/trading/brokers/others/leverup/LeverupBroker.ts:111-114: broker keeps mutable schemaVariant state and says it flips if the relayer rejects nested."
+      ],
+      "currentBehavior": "The source exports both open and close schema families and leaves the selected variant as mutable adapter state. The comment describes a fallback/confirmation plan, not a verified protocol fact.",
+      "problem": "The primary type and encoded field tree are part of the signed operation. Choosing another schema on retry changes operation identity, while relayer rejection, transport failure, and status timeout are not distinguished.",
+      "targetModel": "Declare an immutable candidate Leverup EIP-712 schema descriptor with protocol/version, primary type, field tree, domain shape, and digest; expose an executable handler only after the deployment is verified. Until then retain the declared write leaf with SchemaEvidenceUnavailable and no signer/relayer path; absent capabilities are not represented as fabricated handlers.",
+      "pureTransitions": [
+        "Network/deployment evidence + schema declaration -> Result<CapabilityDescriptor, SchemaEvidenceFailure>; unavailable evidence marks the affected write leaf unavailable without signing.",
+        "Declared Leverup effect input + immutable schema -> Result<NativeRequest, ProtocolViolation>; compile deterministically and bind schema/version to request identity."
+      ],
+      "effectBoundary": "Evidence acquisition is a scoped provider Effect. Compilation is pure; signer/relayer Effects receive only the selected schema leaf. Rejection, timeout, or Unknown never selects another schema.",
+      "durability": "A controlled effect persists schema version/field digest with its prepared/dispatch records and historical observations. Data leaves do not carry order WAL merely because they share the adapter.",
+      "errors": [
+        "SchemaEvidenceUnavailable -> affected write leaf unavailable; do not sign.",
+        "SchemaRejected -> preserve native evidence and require reviewed capability revision.",
+        "SchemaVersionMismatch -> stale effect/reconciliation failure, never alternate POST."
+      ],
+      "preservedBehavior": [
+        "Field names and EIP-712 domain values are preserved once canonical schema is verified.",
+        "Failed mutation retains original schema identity and is not retried with another payload."
+      ],
+      "replacementSteps": [
+        "Run per-deployment known-vector/acceptance verification.",
+        "Replace mutable SchemaVariant with a capability-bound provider schema declaration.",
+        "Retain historical decoders only for already recorded versions."
+      ],
+      "verificationCases": [
+        "One immutable schema produces the same digest for repeated compilation.",
+        "A relayer rejection produces no alternate schema submission.",
+        "A status timeout keeps the original schema identity in observation/recovery."
+      ],
+      "openQuestions": [
+        "Canonical primary types and relayer acceptance are unavailable in this repository and block write capability."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "The source-level nested/flat conflict is retained as evidence; K02/K03 require one immutable provider schema capability per verified deployment, with no fallback schema submission.",
+      "contractAnchors": [
+        "K02",
+        "K03",
+        "K07",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-351C6A94E7",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/eip712.ts:16-39: OpenDataInput, OpenPositionMessage, and ClosePositionMessage expose raw address-like strings, bigint native fields, salt, and deadline without runtime schemas."
+      ],
+      "currentBehavior": "These interfaces describe values passed to viem but permit any 0x-prefixed string and bigint. They are exported and can be mistaken for actions or durable request records.",
+      "problem": "Template-literal types do not validate address length/checksum, bytes32 salt, unsigned widths, deadline, or unit/Scope relationships.",
+      "targetModel": "Keep OpenDataInput/OpenPositionMessage/ClosePositionMessage as adapter-private native records represented by provider schemas. The fixed UTA boundary sees decoded capability input/output/error records plus bounded sealed references, not viem objects, raw SDK types, or arbitrary JSON.",
+      "pureTransitions": [
+        "Declared effect input -> Result<NativeOpenRecord | NativeCloseRecord, NativeValidationFailure>; enforce addresses, bytes32, unsigned widths, deadlines, and scope association.",
+        "Native response -> Result<ProviderAckOrObservation, ProtocolDecodeFailure>; decode at the provider boundary before exposing the typed result."
+      ],
+      "effectBoundary": "Record construction and validation are pure. Viem signing and HTTP are adapter Effects; SDK/account objects never cross the UTA-facing boundary.",
+      "durability": "Controlled effects persist request digest, schema/version, scope, and dispatch identity; exact bytes/signatures use bounded sealed references only when required. Query records retain bounded evidence without order state.",
+      "errors": [
+        "InvalidAddress or InvalidBytes32 -> protocol validation before signer.",
+        "NativeWidthOverflow or UnsignedValueViolation -> effect preparation failure.",
+        "ScopeBindingMissing -> reject the affected effect association."
+      ],
+      "preservedBehavior": [
+        "Protocol field names/widths remain available at adapter edge.",
+        "Close positionHash remains bytes32 but comes from validated scoped observation."
+      ],
+      "replacementSteps": [
+        "Hide native records from the public barrel and add runtime codecs.",
+        "Define provider-specific conversions from the declared effect input to native records.",
+        "Remove direct callers that construct native messages outside the adapter effect leaf."
+      ],
+      "verificationCases": [
+        "Malformed address/salt/uint input is rejected before signer or POST.",
+        "A valid scoped open record round-trips through its declared schema.",
+        "A close record from another scope is rejected without contacting the relayer."
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "Native interfaces remain provider-private protocol records; K03/K07 require runtime decoding at the UTA boundary while allowing the adapter to keep its SDK and native representations internally.",
+      "contractAnchors": [
+        "K03",
+        "K07",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-73F74DC466",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/eip712.ts:43-50: buildDomain returns fixed name OneClickAgent, version 1, supplied chainId, and supplied oneClickAgent address with no validation."
+      ],
+      "currentBehavior": "buildDomain deterministically copies caller values into a const object, but does not prove RPC endpoint, network tag, and deployed agent agree.",
+      "problem": "A valid-looking domain can sign for the wrong chain or verifying contract, causing rejection or unintended authorization. It has no protocol/catalog revision relation.",
+      "targetModel": "Define VerifiedEip712Domain as an immutable field of the Leverup schema capability, built from verified network/deployment evidence. Fixed name/version remain candidate provider facts, not a global UTA domain default.",
+      "pureTransitions": [
+        "Decoded chain/agent/deployment evidence -> Result<VerifiedEip712Domain, DomainMismatch>; compare chain, verifying contract, network, and schema revision.",
+        "Declared Leverup effect + verified domain -> deterministic typed-data digest input; callers cannot select a raw domain."
+      ],
+      "effectBoundary": "RPC/code/deployment checks are Connection/Provider Effects. Domain construction and digest computation are pure; signing starts only after the relevant write leaf is available.",
+      "durability": "Controlled effects persist network identity, chain, verifying contract, domain/schema version, and digest. A generation change invalidates new effects but does not rewrite historical data observations.",
+      "errors": [
+        "ChainIdMismatch -> dependent capability unavailable.",
+        "VerifyingContractMismatch -> protocol capability unavailable.",
+        "DomainVersionUnsupported -> affected effect leaf unavailable."
+      ],
+      "preservedBehavior": [
+        "Fixed OneClickAgent name/version remain if deployed evidence confirms them.",
+        "Domain is not recomputed during retry."
+      ],
+      "replacementSteps": [
+        "Keep the builder adapter-private behind the schema declaration.",
+        "Verify chain/contract/domain coherence before publishing the write leaf.",
+        "Record domain digest and reject stale generations at effect preparation."
+      ],
+      "verificationCases": [
+        "A matching deployment yields a domain only with independent evidence.",
+        "Chain 10143 paired with live evidence is unavailable/mismatched.",
+        "Changing the verifying contract after preparation invalidates dispatch rather than resigning another domain."
+      ],
+      "openQuestions": [
+        "Deployed code/domain acceptance is external evidence."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "Domain construction remains pure, but K02/K07 require the domain to be an immutable capability-bound protocol extension verified with the network rather than a universal UTA assumption.",
+      "contractAnchors": [
+        "K02",
+        "K03",
+        "K07",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-518E08C180",
+      "assessment": "blocked-on-evidence",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/eip712.ts:52-75: nested OneClickOpenDataInput contains OpenDataInput plus trader, salt, deadline; fields are uint96, uint128, and uint24.",
+        "services/uta/src/domain/trading/brokers/others/leverup/eip712.ts:138-148: nested is the default signOpenPosition branch."
+      ],
+      "currentBehavior": "Nested is the default signer path because a documentation example looked executable, not because a deployed verification is recorded.",
+      "problem": "The contract/relayer may reject nested; there is no schema version, scope, prepared sizing, or dispatch identity in the signed record.",
+      "targetModel": "If deployment evidence accepts the nested tree, expose one nested Leverup open-market leaf whose exact schema contains the source fields and widths: OpenDataInput (pairBase,isLong,tokenIn,lvToken,amountIn,qty,price,stopLoss,takeProfit,broker), trader, salt, and deadline. Compose the leaf from an Order semantic unit and provider-specific sizing/price/protection declarations; if unverified, retain the descriptor as SchemaEvidenceUnavailable with no executable handler.",
+      "pureTransitions": [
+        "Verified nested schema + composed Leverup open input -> Result<NativeOpenEnvelope, OpenSchemaFailure>; validate widths, exact values, and declared protection semantics.",
+        "Native envelope + durable effect identity -> deterministic digest/signed metadata bound to schema/version/scope."
+      ],
+      "effectBoundary": "Compilation is pure; acceptance evidence, signing, and POST are provider Effects. The leaf never falls back to flat after rejection or Unknown.",
+      "durability": "Persist nested schema/version, field digest, native values, effect identity, and redacted request/signature references only for the controlled open effect. Pyth bytes use bounded sealed evidence.",
+      "errors": [
+        "NestedSchemaUnverified -> open leaf unavailable.",
+        "NestedFieldInvalid -> effect preparation failure.",
+        "NativeProtocolRejected -> preserve evidence and require capability revision.",
+        "OutcomeUnknown -> observe the same effect identity without schema change."
+      ],
+      "preservedBehavior": [
+        "Nested field names/widths remain if deployed acceptance confirms them.",
+        "Zero-valued protections remain only after contract semantics are verified."
+      ],
+      "replacementSteps": [
+        "Capture contract/relayer known vectors per network.",
+        "Compose the nested leaf from typed provider schemas and remove mutable selection.",
+        "Write schema/version and request digest before signing/POST."
+      ],
+      "verificationCases": [
+        "A known vector yields the expected nested digest/acceptance.",
+        "Malformed uint96/uint128 or unsupported protection is rejected before signing.",
+        "A POST timeout leaves the same nested identity for observation."
+      ],
+      "openQuestions": [
+        "Deployed primary type and zero-protection semantics are unavailable and block this capability."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "Nested field names and widths remain candidate evidence for one Leverup open leaf; K03/K04/K08 make acceptance and protection semantics capability-scoped rather than a handwritten universal order variant.",
+      "contractAnchors": [
+        "K02",
+        "K03",
+        "K04",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-6E2E6F9904",
+      "assessment": "blocked-on-evidence",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/eip712.ts:77-97: flat OneClickOpenPosition hoists OpenDataInput and outer trader/salt/deadline into a second primary type.",
+        "services/uta/src/domain/trading/brokers/others/leverup/eip712.ts:150-162: flat signing spreads openData and signs a different primary type."
+      ],
+      "currentBehavior": "The flat map is an alternate implementation of the same logical open action and can be activated through SchemaVariant, producing a different type hash.",
+      "problem": "Two native identities for one logical action make rejection/timeout ambiguous; retrying another schema after possible acceptance risks duplicate exposure.",
+      "targetModel": "Treat the flat type tree as a distinct provider schema candidate or historical decoder. It is not a per-call variant and cannot be tried after a nested request may have crossed the dispatch boundary; unless independent deployment evidence supports flat as a legitimate version, the flat variant is structurally absent. The overall open capability is executable only when one canonical version (for example a verified nested version) is evidenced, never by silently selecting nested or flat.",
+      "pureTransitions": [
+        "Provider evidence -> Result<LeverupEip712SchemaVersion, SchemaUnavailable>; select one immutable version for a capability instance.",
+        "Composed Leverup open effect + selected version -> Result<NativeOpenRequest, ProtocolFailure>; request identity includes the type-map digest."
+      ],
+      "effectBoundary": "Type-map data and digest calculation are pure. Capability verification and dispatch are Effects; no schema switch follows rejection, timeout, or Unknown.",
+      "durability": "A selected effect stores schema version/digest under its identity. Historical flat records are decoded only by an explicit versioned reader; data pulls do not inherit either order schema.",
+      "errors": [
+        "FlatSchemaUnverified -> flat executable variant is absent; the overall open capability remains unavailable until a canonical version is evidenced.",
+        "SchemaVersionMismatch -> stale effect failure.",
+        "PossibleDuplicateAfterAlternateAttempt -> RecoveryRequired; no automatic alternate POST."
+      ],
+      "preservedBehavior": [
+        "Flat may survive only as a verified historical/versioned protocol, not undocumented fallback.",
+        "Logical open fields remain represented by the canonical schema."
+      ],
+      "replacementSteps": [
+        "Run isolated vectors and record field ordering/primary type.",
+        "Remove mutable branch/fallback from execution; retain only evidence-backed versions.",
+        "Add a historical decoder only if existing records require it."
+      ],
+      "verificationCases": [
+        "Nested and flat type hashes remain distinguishable.",
+        "One isolated vector classifies the flat candidate without changing live defaults.",
+        "After an unknown nested attempt, no flat request is emitted."
+      ],
+      "openQuestions": [
+        "No evidence identifies canonical primary type or legitimate multi-version deployment."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "Flat encoding remains a separately testable historical or versioned candidate, but K02/K07/K08 forbid selecting it as a per-call fallback after a possibly sent mutation.",
+      "contractAnchors": [
+        "K02",
+        "K03",
+        "K07",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-A9DB1F677B",
+      "assessment": "blocked-on-evidence",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/eip712.ts:99-117: close maps define nested OneClickCloseDataInput and flat OneClickClosePosition with same fields but different primary names.",
+        "services/uta/src/domain/trading/brokers/others/leverup/eip712.ts:165-189: signClosePosition selects close schema through mutable variant."
+      ],
+      "currentBehavior": "Close signs positionHash and deadline under either schema, with no AccountScope, observation revision, or dispatch identity.",
+      "problem": "Unresolved schema and absent durable association prevent safe reconciliation; arbitrary hash or alternate retry could close wrong scope/duplicate.",
+      "targetModel": "Expose close only as a declared Leverup provider leaf over ScopedPositionRef {AccountScope, InstrumentId, positionHash, observationRevision}. Its exact native schema/version is selected before preparation; whole/partial semantics are separate local variants, and absent evidence leaves the descriptor unavailable with no executable handler rather than silently creating a whole-close path.",
+      "pureTransitions": [
+        "Complete scoped position observation + declared close input -> Result<PreparedLeverupClose, ClosePreconditionFailure>; verify scope, instrument, hash, and explicit whole/partial semantics.",
+        "Prepared close effect + canonical schema -> Result<NativeCloseRequest, CloseSchemaFailure>; encode bytes32 hash and uint128 deadline deterministically."
+      ],
+      "effectBoundary": "Position listing is a data Effect; compilation is pure; signing/POST occur only for the close effect after durable intent/approval. Timeout enters observation/recovery for that effect, not schema switching.",
+      "durability": "Persist position hash/revision, schema/version, deadline, scope, and request digest for a close effect. Ordinary listings persist their own evidence without RecoveryCase; only a possible sent close retains execution exclusion.",
+      "errors": [
+        "PositionScopeMismatch or PositionNotObserved -> close preparation failure.",
+        "CloseSchemaUnverified -> close leaf unavailable.",
+        "ExpiredDeadline -> reprepare the unsent effect.",
+        "OutcomeUnknown -> observe/recover the original close identity."
+      ],
+      "preservedBehavior": [
+        "positionHash/deadline remain native fields.",
+        "Partial-close support is not invented; capability states whole/partial semantics explicitly."
+      ],
+      "replacementSteps": [
+        "Verify the canonical close schema and any partial semantics.",
+        "Compose close from a scoped observed position, not an arbitrary hash.",
+        "Persist close identity before signing/POST and connect only its status/position observations."
+      ],
+      "verificationCases": [
+        "A hash observed for another scope cannot prepare a close.",
+        "Expired deadline makes no signer call.",
+        "Lost close response retains the effect identity and execution exclusion."
+      ],
+      "openQuestions": [
+        "Close schema and partial-close semantics are unavailable here."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "Close schema uncertainty stays explicit; K04/K08 permit a provider-specific whole-close leaf with a scoped position reference, without inventing partial or universal Cancel/Modify behavior.",
+      "contractAnchors": [
+        "K02",
+        "K03",
+        "K04",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-12314DC5A5",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/eip712.ts:121-124: generateOpenSalt hashes Date.now and Math.random.",
+        "services/uta/src/domain/trading/brokers/others/leverup/LeverupBroker.ts:258-266: salt is generated immediately before signing and is not persisted before POST."
+      ],
+      "currentBehavior": "Each open gets a keccak hash of local time and Math.random, with no durable mapping to logical action.",
+      "problem": "Math.random is not a robust identity source; restart/lost response removes the relation between action and native salt, and a new retry can duplicate exposure.",
+      "targetModel": "For the controlled open effect, derive NativeIdentityDigest from DispatchId, AttemptId, prepared effect digest, schema/network version, and scope. If the native schema requires salt, allocate it from a credential-independent CSPRNG after durable planning and persist it before signing/POST; never use Date.now/Math.random as authority.",
+      "pureTransitions": [
+        "Durable effect identity + prepared digest -> pure NativeIdentityDigest; identical persisted inputs remain stable.",
+        "Persisted attempt + restart -> the same salt/digest is recovered; missing identity blocks the effect before POST."
+      ],
+      "effectBoundary": "Identity allocation and persistence are execution Effects; digest calculation is pure. Data reads and market-data pulls do not allocate order identity.",
+      "durability": "Persist DispatchId/AttemptId, schema/network, salt/digest, and any opaque lookup association before the mutation boundary. Unknown retains the same identity and forbids a new salt.",
+      "errors": [
+        "IdentityCollision -> integrity failure.",
+        "IdentityAllocationUnavailable -> unsent effect remains prepared.",
+        "OutcomeUnknown -> observation/recovery with no new salt or blind redispatch."
+      ],
+      "preservedBehavior": [
+        "Open still includes required 32-byte salt.",
+        "Safe retries reuse persisted native identity."
+      ],
+      "replacementSteps": [
+        "Remove generateOpenSalt from controlled dispatch.",
+        "Persist salt/digest before signing and POST.",
+        "Obtain native idempotency evidence separately; otherwise observe before any retry decision."
+      ],
+      "verificationCases": [
+        "Restart after planning recovers the same salt/digest.",
+        "Repeated allocation for one attempt is stable and collision-aware.",
+        "Lost POST response is observed with the original identity, not regenerated."
+      ],
+      "openQuestions": [
+        "Relayer/contract salt idempotency is not proven here."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "Salt and dispatch identity remain durable execution constraints, but K08 limits them to the controlled trading effect and K07 leaves native idempotency unclaimed until evidence exists.",
+      "contractAnchors": [
+        "K07",
+        "K08",
+        "K09",
+        "K10"
+      ]
+    },
+    {
+      "id": "MAP-2D927BE0BD",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/eip712.ts:128-136: SchemaVariant is mutable nested/flat union and SignOpenInput carries PrivateKeyAccount, raw chain/agent/message, and optional variant."
+      ],
+      "currentBehavior": "Signer accepts caller-selected variant, raw native message, and credential-bearing account object, usable outside a transaction/scope.",
+      "problem": "Credential, schema, and native payload are public inputs with no AccountScope, PreparedStep, DispatchId, or credential-service relation; callers can sign arbitrary requests.",
+      "targetModel": "The signing boundary accepts only a declared, prepared Leverup effect, immutable schema/domain capability, dispatch identity, and scoped signer capability. Raw account objects, keys, messages, or schema toggles are adapter-private; the public result is typed/redacted.",
+      "pureTransitions": [
+        "Prepared Leverup effect + verified schema/domain + signer requirement -> Result<SignIntent, SignFailure>; validate scope, deadline, and native fields before the signing Effect.",
+        "SignIntent + signature metadata -> Result<SignedNativeRequest, SigningFailure>; preserve digest/schema/effect identity without returning a key/account."
+      ],
+      "effectBoundary": "Credential resolution and signing are scoped Effects. Pure provider validation precedes them; no PrivateKeyAccount or raw key crosses the UTA-facing boundary.",
+      "durability": "Persist AccountId, credential reference version, scope, schema/version, effect identity, and digest; sealed signature references are bounded. Read-only data capabilities persist no signing state.",
+      "errors": [
+        "SignerUnavailable -> dependent write leaf unavailable.",
+        "ScopeAuthorizationFailure -> effect rejected.",
+        "SigningProtocolFailure -> typed failure with no POST.",
+        "CredentialLeakDetected -> revoke capability and retain incident evidence."
+      ],
+      "preservedBehavior": [
+        "Derived trader address remains native account identity.",
+        "Adapter still uses EIP-712 signer behind secret boundary."
+      ],
+      "replacementSteps": [
+        "Remove raw account/message/variant from public signer exports.",
+        "Resolve credential and explicit AccountScope at Layer acquisition.",
+        "Migrate callers to declared effect input and durable identity."
+      ],
+      "verificationCases": [
+        "A signer cannot be invoked without the scoped capability.",
+        "Credential rotation preserves AccountId and old effect history.",
+        "Serialized data/query records contain no key or account object."
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "The signer must consume only a declared, prepared provider effect and scoped credential capability; K07/K08 preserve provider freedom while preventing raw native payloads or keys at the UTA boundary.",
+      "contractAnchors": [
+        "K03",
+        "K07",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-6D6A28953D",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/eip712.ts:138-163: signOpenPosition builds domain, selects nested/flat, spreads openData for flat, and returns raw signature; viem exceptions escape."
+      ],
+      "currentBehavior": "The function combines domain construction, schema selection, native message construction, and signing; flat creates a new unvalidated object and no typed result says what was signed.",
+      "problem": "Generic rejection loses validation/signer/protocol distinction; no digest, schema, dispatch identity, redacted request, or durable intent exists.",
+      "targetModel": "Split a pure compileLeverupOpenEffect from a scoped provider signing operation. The open leaf first commits a durable DispatchPlanned record before signing, then returns SignedNativeRequest {effect identity, schemaVersion, requestDigest, signatureRef, trader}; immediately before the sole relayer POST a writer commits DispatchStarted after revision/lease/CAS checks. It maps viem exceptions to typed provider failures and is not a universal broker action interpreter.",
+      "pureTransitions": [
+        "Composed Leverup open effect + canonical schema -> Result<NativeOpenRequest, OpenCompileFailure>; validate fields, scope, deadline, price/protection, and exact widths.",
+        "Native request + returned signature metadata -> Result<SignedNativeRequest, SigningFailure>; compute digest and bind the durable effect identity."
+      ],
+      "effectBoundary": "Compilation is pure. The adapter signer Effect runs after the controlled effect has crossed its durable planning/authorization gate; data readers never invoke it.",
+      "durability": "Store schema/digest/scope/effect identity and bounded signature reference before relayer POST; logs contain only redacted metadata.",
+      "errors": [
+        "OpenCompileFailure -> reject preparation.",
+        "SigningRejected -> typed no-POST failure.",
+        "SignerTransportUnknown -> retain the effect for conservative reconciliation.",
+        "DeadlineExpired -> reprepare the unsent effect."
+      ],
+      "preservedBehavior": [
+        "Valid signatures authorize the same prepared open fields/trader.",
+        "Signature and Pyth update continue to reach relayer after typed preparation."
+      ],
+      "replacementSteps": [
+        "Split compile/sign at the provider leaf.",
+        "Remove flat-spread and broad direct account.signTypedData paths.",
+        "Persist digest metadata before signing and map exceptions."
+      ],
+      "verificationCases": [
+        "Invalid address/protection fails before signer.",
+        "A successful signer result has its schema/digest in durable effect evidence.",
+        "Signer exception becomes typed SigningRejected.",
+        "An expired effect produces no signature."
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "Open compile/sign remains split, but K03/K07/K08 make it a Leverup leaf handler with an exact schema and typed result rather than a universal broker action interpreter.",
+      "contractAnchors": [
+        "K03",
+        "K07",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-CAE8A402AD",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/eip712.ts:165-190: close signer carries PrivateKeyAccount/raw chain and mutable variant, returning raw signature without validation or typed failure."
+      ],
+      "currentBehavior": "Close signature is an ad hoc native request with no proof that positionHash came from a current scoped observation or durable dispatch.",
+      "problem": "It cannot be reconciled after interrupted relayer call; variant switching changes signed operation and generic exceptions hide position/deadline/credential/remote distinctions.",
+      "targetModel": "Compile and sign a Leverup close effect from a scoped, observed position and the one verified close schema. Return metadata bound to effect identity, schema/version, scope, observation revision, and deadline; do not publish a generic close handler for providers without such a leaf.",
+      "pureTransitions": [
+        "PositionObservation + declared Leverup close input -> Result<NativeCloseRequest, CloseCompileFailure>; validate bytes32 hash, scope, whole/partial semantics, and deadline.",
+        "Native close + signature metadata -> Result<SignedNativeRequest, SigningFailure>; bind digest and bounded redacted metadata."
+      ],
+      "effectBoundary": "Reader lookup is a data Effect; compilation is pure; credential/signing/POST are controlled close effects after durable intent/approval. Unknown affects only that effect.",
+      "durability": "Persist position hash/revision, schema, digest, effect identity, and sealed signature reference for close execution. A standalone position pull is not a RecoveryCase.",
+      "errors": [
+        "PositionObservationMissing -> close leaf cannot prepare.",
+        "CloseCompileFailure or DeadlineExpired -> typed unsent failure.",
+        "SigningRejected -> no POST.",
+        "PostOutcomeUnknown -> observe/recovery with the close identity."
+      ],
+      "preservedBehavior": [
+        "Close continues to carry positionHash/deadline under verified schema.",
+        "Success is an acknowledgement, not fabricated fill."
+      ],
+      "replacementSteps": [
+        "Delete the free-function public close signer after migration.",
+        "Authorize scoped position evidence and compose the close leaf.",
+        "Persist close identity and connect only its status/position observations."
+      ],
+      "verificationCases": [
+        "A cross-scope hash yields PositionScopeMismatch.",
+        "Expired deadline makes no signer call.",
+        "Lost response retains close exclusion and the original identity."
+      ],
+      "openQuestions": [
+        "Close schema and partial semantics require venue evidence."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "Close signing retains scoped observation and durable identity only for the declared close effect; K04/K08 do not turn it into a mandatory full broker surface or claim partial semantics.",
+      "contractAnchors": [
+        "K03",
+        "K04",
+        "K07",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-14017B6DD3",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/eip712.ts:192-196: accountFromPrivateKey directly calls privateKeyToAccount on a 0x-prefixed string and returns PrivateKeyAccount."
+      ],
+      "currentBehavior": "The helper converts a syntactically prefixed key without network, role, scope, or credential lifecycle checks, and returns a reusable account object.",
+      "problem": "Template-literal typing is not custody or authorization; direct construction enables exposure and does not verify Trader Agent permission for network/OneClickAgent.",
+      "targetModel": "Define CredentialRef and ScopedSignerCapability for the Leverup write leaf. The adapter may derive a trader address internally and check Trader Agent authorization, but only the fixed UTA boundary sees an opaque signer capability and public identity evidence.",
+      "pureTransitions": [
+        "CredentialRef + verified public authorization evidence -> Result<SignerRequirement, CredentialFailure>; derive required signer identity without exposing secret bytes.",
+        "ScopedSignerCapability + prepared Leverup effect -> Result<SignedNativeRequest, SigningFailure>; never return a key/account."
+      ],
+      "effectBoundary": "Secret retrieval, account construction, authorization, and signing are Effects. Public data leaves can operate without this capability; pure code validates only public values.",
+      "durability": "Persist AccountId, credential reference version, trader address projection, scope, and generation; never persist key/account. Rotation preserves existing identities and effect records.",
+      "errors": [
+        "CredentialUnavailable -> mark the dependent write leaf unavailable; public read leaves remain separate.",
+        "DerivedAddressUnauthorized -> no write capability.",
+        "CredentialRotationInProgress -> suspend signing with no old-key fallback."
+      ],
+      "preservedBehavior": [
+        "Valid wallet derives same trader address and signs via viem-equivalent service.",
+        "Adapter remains able to sign, with custody/lifetime behind service."
+      ],
+      "replacementSteps": [
+        "Keep private-key conversion inside the credential adapter.",
+        "Validate authorization/network while deriving the write leaf.",
+        "Migrate config and fixtures to CredentialRef and redacted evidence."
+      ],
+      "verificationCases": [
+        "CredentialUnavailable -> mark the dependent write leaf unavailable; public read leaves remain separate.",
+        "An unauthorized address yields no write leaf but does not disable data reads.",
+        "Rotation preserves AccountId and historical dispatch references."
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "Credential custody and authorization remain required for the write leaf, while K07 keeps key/account implementation details inside the adapter and K08 keeps read-only capabilities independent.",
+      "contractAnchors": [
+        "K07",
+        "K08",
+        "K09"
+      ]
+    },
+    {
+      "id": "MAP-7B2ED6A111",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/index.ts:1-2: barrel exports only LeverupBroker and LeverupBrokerConfig/LeverupNetwork; no typed interpreter, connection, capability, observation, or scheduler boundary is exported."
+      ],
+      "currentBehavior": "The public LeverUp entry point exposes the legacy IBroker class and raw config types. Composition cannot import a target action interpreter or scoped connection service from this barrel.",
+      "problem": "Without an executable adapter boundary, runtime keeps using a class that owns credentials, network clients, in-memory order state, and generic IBroker errors. Adding types alone would not route writes, observations, or recovery through target contracts.",
+      "targetModel": "Make the barrel expose a safe Leverup provider descriptor/tree, configuration codec, scoped connection acquisition, and only its declared query/effect leaves. Every declared leaf carries an exact descriptor/schema plus named availability; a missing evidence item makes only that leaf unavailable/non-executable rather than removing the supported capability. It need not expose Modify/Cancel or return Unsupported handlers for absent capabilities.",
+      "pureTransitions": [
+        "Configuration input -> Result<LeverupConnectionRequirement, ConfigurationFailure>; validate non-secret shape without acquiring resources.",
+        "Provider leaf input + declared capability descriptor -> Result<ProviderOutput, ProviderFailure>; each leaf owns its exact input/output/error schema and data/effect category."
+      ],
+      "effectBoundary": "The barrel itself performs no IO. Composition acquires the provider Layer and shared journal/scheduler only for controlled effects; queries use scoped resources without order state.",
+      "durability": "Index exports no persistence authority. Data pulls persist only their own observation/checkpoint when needed; effect leaves use shared durable intent/approval/dispatch/recovery records.",
+      "errors": [
+        "ConfigurationFailure -> reject the provider configuration.",
+        "CapabilityUnavailable -> mark the declared leaf unavailable; an unsupported capability remains structurally absent.",
+        "LegacyExportUse -> migration failure rather than a second execution path."
+      ],
+      "preservedBehavior": [
+        "Engine name and safe network/account entry point remain available.",
+        "No raw key/account/SDK object is exported."
+      ],
+      "replacementSteps": [
+        "Expose the provider descriptor/tree and typed codecs at the pack boundary.",
+        "Migrate callers from LeverupBroker to selected query/effect leaves, then remove the legacy class export.",
+        "Keep native SDK and private-key types out of the public barrel."
+      ],
+      "verificationCases": [
+        "A describe/discover call lists only present leaves and their exact schemas.",
+        "Missing credentials disable write leaves without disabling public data leaves.",
+        "No public path can reach a legacy mutable schema toggle or in-memory order map."
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "The barrel must expose a provider descriptor/tree and its declared query/effect leaves through the fixed UTA boundary; K01/K02 require structural absence for unsupported actions, while public leaves need no invented account scope.",
+      "contractAnchors": [
+        "K01",
+        "K02",
+        "K06",
+        "K07"
+      ]
+    },
+    {
+      "id": "MAP-6528AEB1B4",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/pairs.ts:14-27: LeverupPair stores raw symbol/base/quote, pairBase/pythFeedId, optional highLeverage, and category union."
+      ],
+      "currentBehavior": "LeverupPair mixes labels, native addresses, oracle IDs, leverage marker, and category with no branded identity, network revision, jurisdiction, session, collateral, or permission.",
+      "problem": "Display symbols/raw addresses can be mixed across networks. Four categories cannot express capability, quote conversion, market session, collateral, leverage, or accounting policy.",
+      "targetModel": "Define a versioned InstrumentDescriptor data unit with branded InstrumentId, PairBaseId, PythFeedId, display symbol, currencies, a provider-extensible asset-class value, scales, collateral, session/leverage/fee facts, network, and per-leaf availability. highLeverage becomes explicit policy evidence, not a global action flag or a closed taxonomy.",
+      "pureTransitions": [
+        "Provider catalog record -> Result<InstrumentDescriptor, CatalogDecodeFailure>; validate native identity/feed/address relations.",
+        "InstrumentDescriptor + selected query/effect declaration + explicit Public or Account scope when that leaf requires one -> CapabilityDescriptor/availability decision; publish the public query descriptor with candidate/Partial/Unavailable status, and publish an executable effect only when its evidence is complete."
+      ],
+      "effectBoundary": "Descriptor decoding is pure. Catalog/network/feed checks are Effects; Instrument reads remain data-only and do not create order approval or compensation.",
+      "durability": "Data observations and any selected effect pin catalog version/checksum and descriptor identity. Unknown policy facts remain unavailable rather than being filled by defaults.",
+      "errors": [
+        "CatalogDecodeFailure -> catalog data unavailable.",
+        "PairBaseFeedMismatch -> affected instrument unavailable.",
+        "JurisdictionUnknown/SessionMetadataMissing/LeveragePolicyMissing -> mark only dependent leaves unavailable."
+      ],
+      "preservedBehavior": [
+        "Labels/native IDs remain at adapter edge.",
+        "Existing asset classes can map to richer variants without silent reclassification."
+      ],
+      "replacementSteps": [
+        "Add runtime schema/decoder and keep raw pair records adapter-local.",
+        "Populate policy facts from authoritative sources.",
+        "Derive each provider leaf from descriptor plus scope instead of a category-wide action list."
+      ],
+      "verificationCases": [
+        "Same display symbol on different networks yields distinct InstrumentIds.",
+        "A high-leverage pair without policy evidence retains its declared trading leaf as unavailable/non-executable.",
+        "Missing session metadata does not invalidate unrelated instrument metadata pulls."
+      ],
+      "openQuestions": [
+        "Jurisdiction/session/leverage/fee metadata is not present here; catalog owner must supply it."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "Pair metadata becomes a declaration-backed Instrument data unit and per-leaf capability input; K02/K04 keep asset, session, collateral, and native extensions precise without inventing an account scope for public instruments.",
+      "contractAnchors": [
+        "K02",
+        "K03",
+        "K04",
+        "K05"
+      ]
+    },
+    {
+      "id": "MAP-D33182231F",
+      "assessment": "blocked-on-evidence",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/pairs.ts:29-60: MAINNET_PAIRS says only 20 of 23 documented pairs are captured and marks 500x pairBase values 0x...0003/0004 as placeholders."
+      ],
+      "currentBehavior": "A mutable static array advertises 20 entries across categories, including two placeholder pairBase values. It lacks source revision, deployment proof, and the three missing documented pairs.",
+      "problem": "Capability derivation can advertise incomplete/placeholder instruments. Remote rejection or omission is not represented as typed listing/catalog evidence.",
+      "targetModel": "Represent the mainnet list as a versioned InstrumentCatalogSnapshot with per-entry evidence and availability. The documented 20/23 list and placeholder pairBase values can remain historical candidates; public Instrument resolution returns Partial/Unavailable evidence for those entries, while no executable trading-effect handler is published and no synthetic contracts are produced.",
+      "pureTransitions": [
+        "Authoritative catalog evidence -> Result<InstrumentCatalogSnapshot, CatalogEvidenceFailure>; check count, uniqueness, addresses, feeds, placeholders, and revision.",
+        "Snapshot + symbol/pair-base -> Result<InstrumentDescriptor, InstrumentUnavailable | CatalogConflict>; preserve Partial/Unavailable listing evidence.",
+        "Snapshot + selected provider leaf -> CapabilityDescriptor; only verified entries expose an executable effect handler, while public query resolution retains named candidate/Partial/Unavailable status."
+      ],
+      "effectBoundary": "Catalog acquisition is a scoped data Effect. Snapshot validation and lookup are pure; no order transaction is created by an incomplete catalog.",
+      "durability": "Persist catalog source/checksum/revision/observedAt and per-entry status. Effect plans pin the revision; data observations retain historical revision and are not silently rewritten.",
+      "errors": [
+        "CatalogIncomplete -> Partial listing and affected leaves unavailable.",
+        "PlaceholderAddress -> InstrumentUnavailable.",
+        "CatalogConflict -> refuse publication of the conflicting leaf.",
+        "CatalogEvidenceStale -> refresh before dependent effect preparation."
+      ],
+      "preservedBehavior": [
+        "Current entries may remain historical candidates, not complete capability.",
+        "Known names/feeds are preserved when verified."
+      ],
+      "replacementSteps": [
+        "Obtain authoritative 23-pair/deployment facts.",
+        "Verify or mark placeholder entries unavailable.",
+        "Wire snapshot revision into Instrument query and selected effect declarations."
+      ],
+      "verificationCases": [
+        "A placeholder never reaches signer/POST.",
+        "A missing pair is visible as Partial evidence, not an empty complete list.",
+        "Catalog revision prevents reinterpretation of a historical pair-base.",
+        "Each published pairBase/feed binding has evidence."
+      ],
+      "openQuestions": [
+        "Authoritative list, addresses, and revision are absent; complete mainnet capability is blocked."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "The incomplete and placeholder catalog remains evidence for unavailable instrument leaves; K02/K04 require structural absence or named availability instead of synthetic contracts or universal support, with no default account scope for public catalog data.",
+      "contractAnchors": [
+        "K02",
+        "K03",
+        "K04",
+        "K05"
+      ]
+    },
+    {
+      "id": "MAP-ACD640430F",
+      "assessment": "blocked-on-evidence",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/pairs.ts:62-68: TESTNET_PAIRS is MAINNET_PAIRS and comments say testnet addresses are undocumented and calls may fail at relayer."
+      ],
+      "currentBehavior": "Testnet selection returns mainnet pairBase/feed IDs while contract constants use testnet addresses; divergence is discovered only at remote call.",
+      "problem": "A syntactically valid request can target the wrong network. Reject/unsupported/timeout occurs after signing and may be conflated with generic failure/unknown.",
+      "targetModel": "Keep independent live/testnet InstrumentCatalogSnapshot and NetworkIdentity bindings. A testnet query leaf may be Partial/Unavailable; declared testnet open/close leaves remain unavailable and non-executable until pair/feed/collateral/agent/endpoints/chain jointly verify, and mainnet data is never a fallback.",
+      "pureTransitions": [
+        "NetworkIdentity + catalog evidence -> Result<NetworkInstrumentBinding, NetworkMismatch>; reject mainnet identities under testnet.",
+        "Binding + selected provider query/effect declaration -> CapabilityDescriptor; dependent effects are executable only when evidence is complete, otherwise the declared leaf retains named unavailability."
+      ],
+      "effectBoundary": "Catalog/network verification is a scoped Effect; matching and capability derivation are pure. A relayer rejection is not the first proof of an unsupported data declaration.",
+      "durability": "Data observations and controlled effects retain network identity and catalog revision; a testnet effect cannot replay to live. Possible sent effects retain their original network for observation.",
+      "errors": [
+        "TestnetCatalogMissing -> testnet effect leaf unavailable before signing.",
+        "NetworkBindingMismatch -> typed preparation failure.",
+        "EndpointNetworkMismatch -> dependent connection unavailable.",
+        "UnsupportedPair -> InstrumentUnavailable, not a generic handler result."
+      ],
+      "preservedBehavior": [
+        "Mainnet catalog preserved for live only.",
+        "Testnet unavailability is explicit rather than hidden alias."
+      ],
+      "replacementSteps": [
+        "Remove the alias and supply independently sourced testnet descriptors.",
+        "Validate identities before publishing each dependent leaf.",
+        "Keep endpoint and catalog NetworkIdentity aligned."
+      ],
+      "verificationCases": [
+        "Missing testnet metadata blocks before signer.",
+        "Mainnet data injected into testnet returns mismatch.",
+        "A verified testnet request carries only testnet identities.",
+        "A testnet post-boundary timeout remains bound to testnet for observation/recovery."
+      ],
+      "openQuestions": [
+        "Authoritative testnet pair addresses and endpoint contract are absent."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "Mainnet/testnet separation is retained as provider availability evidence; K02/K07 require network-bound capability leaves and do not let a relayer rejection define a global action contract.",
+      "contractAnchors": [
+        "K02",
+        "K07",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-902BBDA309",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/pairs.ts:70-76: getPairs chooses array by network and findPairBySymbol uses exact case-sensitive equality, returning undefined when absent."
+      ],
+      "currentBehavior": "Catalog selection returns mutable arrays. Symbol lookup accepts arbitrary strings, requires exact spelling, and signals absence with undefined.",
+      "problem": "Undefined/mutability allow unknown symbols to become no-op or synthetic later. Display spelling is not canonical identity and lookup lacks revision, network, and availability; account scope belongs only to account-scoped consumers.",
+      "targetModel": "Expose immutable `resolveInstrument` as a pure Instrument query over a revisioned provider snapshot. Apply only the explicit LeverupSymbolPolicyV1 and return a typed InstrumentDescriptor/InstrumentNotFound/Unavailable result; resolution does not synthesize an order contract or imply an effect leaf.",
+      "pureTransitions": [
+        "Raw symbol -> Result<CanonicalSymbol, InvalidSymbol>; trim/uppercase/separator rules are explicit.",
+        "CanonicalSymbol + snapshot -> Result<InstrumentDescriptor, InstrumentNotFound | InstrumentUnavailable>; preserve missing/partial evidence.",
+        "InstrumentDescriptor + selected leaf -> CapabilityDescriptor; unsupported leaves are absent, not Unsupported method responses."
+      ],
+      "effectBoundary": "Snapshot loading/refresh is a data Effect; normalization and resolution are pure. No order WAL, approval, or compensation is involved in a symbol query.",
+      "durability": "Query observations retain canonical symbol, InstrumentId, network, and catalog revision. A selected trading effect separately pins the descriptor in its own plan.",
+      "errors": [
+        "InvalidSymbol -> typed query rejection.",
+        "InstrumentNotFound -> explicit no-match result.",
+        "InstrumentUnavailable -> preserve evidence and dependent-leaf availability."
+      ],
+      "preservedBehavior": [
+        "Known canonical symbols resolve as before.",
+        "Aliases require explicit catalog policy, not accidental case behavior."
+      ],
+      "replacementSteps": [
+        "Replace getPairs/findPairBySymbol with immutable typed resolution.",
+        "Migrate query/effect callers to InstrumentId/descriptors.",
+        "Delete undefined and synthetic fallback behavior."
+      ],
+      "verificationCases": [
+        "Canonical and explicitly permitted casing resolve the same InstrumentId.",
+        "Unknown symbol returns InstrumentNotFound with no effect dispatch.",
+        "Mutating a source array cannot alter an existing snapshot query."
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "Canonical symbol resolution is a pure public Instrument query leaf under K03/K04; it must not synthesize an order contract, make all downstream trading actions appear present, or invent an account scope.",
+      "contractAnchors": [
+        "K02",
+        "K03",
+        "K04",
+        "K05"
+      ]
+    },
+    {
+      "id": "MAP-6690E83E34",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/pairs.ts:78-81: findPairByPairBase lowercases arbitrary input and returns first matching pair or undefined."
+      ],
+      "currentBehavior": "PairBase resolution is a case-insensitive string search without address validation, deployment/feed/token/network checks or revision.",
+      "problem": "Textual match cannot prove deployed/current identity. Stale/cross-network/placeholder pair can enter observations; legacy callers may silently skip unknown values.",
+      "targetModel": "Use a branded PairBaseId bound in the provider Instrument data unit to an InstrumentId, PythFeedId, network, token metadata, and revision. Return Resolved, Unknown, or Conflicting evidence; never use a textual hit to create an effect capability.",
+      "pureTransitions": [
+        "Raw pairBase -> Result<PairBaseId, InvalidAddress>; validate address shape/checksum policy.",
+        "PairBaseId + snapshot -> Result<InstrumentDescriptor, PairBaseResolutionFailure>; verify binding and revision.",
+        "Observed position + resolution -> PositionObservation or Partial evidence; retain unknown rows."
+      ],
+      "effectBoundary": "Parsing/matching are pure. REST observation is a data Effect; only an explicitly selected close effect may consume a Complete scoped observation.",
+      "durability": "Persist pairBase, resolution status, descriptor/revision when known, unknown/conflicting evidence, and source/as-of. Do not place an ordinary unknown lookup in order recovery state.",
+      "errors": [
+        "InvalidPairBase -> typed observation failure.",
+        "UnknownPairBase -> Partial/Unavailable data evidence.",
+        "PairFeedMismatch -> descriptor unavailable.",
+        "CatalogRevisionUnavailable -> defer dependent leaf."
+      ],
+      "preservedBehavior": [
+        "Case-insensitive hex normalization remains for valid addresses.",
+        "Known pairBase resolves same instrument/feed when evidence agrees."
+      ],
+      "replacementSteps": [
+        "Replace lowercased string lookup with branded/versioned resolver.",
+        "Retain unknown positions in data reconciliation.",
+        "Cross-check pair/feed/token/network when loading the catalog."
+      ],
+      "verificationCases": [
+        "Mixed-case valid address resolves one identity under explicit policy.",
+        "Placeholder/cross-network address is Unknown/Unavailable.",
+        "An unlisted pair-base appears in a Partial listing instead of being dropped."
+      ],
+      "openQuestions": [
+        "On-chain pair/feed registry evidence is outside pairs.ts."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "Pair-base lookup remains provider identity evidence and becomes a typed public Instrument resolution result; K03/K04 retain Unknown/Conflicting data rather than coercing it into a write action or default account scope.",
+      "contractAnchors": [
+        "K02",
+        "K03",
+        "K04",
+        "K05"
+      ]
+    },
+    {
+      "id": "MAP-970DB739F5",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/pyth.ts:14-23: HERMES_BASE is fixed and PythUpdateResponse declares binary hex data plus optional parsed prices/confidence/exponent/publish time without runtime validation."
+      ],
+      "currentBehavior": "The interface allows missing parsed data, arbitrary encoding, raw hex strings, and optional fields; fetch functions trust JSON through a cast.",
+      "problem": "Optional/raw fields do not establish feed identity, schema version, response size, confidence, freshness, or instrument binding. One envelope serves both native update bytes and accounting prices without separating evidence.",
+      "targetModel": "Declare separate `market-data.pyth.updates` and `market-data.pyth.price` leaves with HermesV2Envelope schemas for binary update evidence and parsed PriceObservation. The updates leaf may return binary-only evidence for a declared native-update consumer, while the price leaf requires an exact requested parsed feed; neither path shares an optional raw object.",
+      "pureTransitions": [
+        "Unknown JSON + bound market-data policy -> Result<HermesV2Envelope, SchemaDecodeFailure>; enforce declared bounds and validate every supplied parsed entry.",
+        "Versioned parsed-envelope entry + InstrumentDescriptor -> Result<PriceObservation, FeedBindingFailure> for the `.price` leaf; the `.updates` leaf retains binary evidence without performing this projection.",
+        "Envelope -> RedactedUpdateEvidence; hash/seal binary bytes only for a consuming controlled effect."
+      ],
+      "effectBoundary": "Hermes HTTP, cancellation, limits, and resource lifetime are MarketData Effects. Schema decoding and feed binding are pure; ordinary pulls do not use order transactions.",
+      "durability": "Pull results persist source, schema version, feed IDs, update hash, publish/fetch times, and policy outcome when retained. A controlled effect references bounded sealed bytes; it does not make every market-data response a dispatch record.",
+      "errors": [
+        "HermesNetworkUnavailable -> MarketDataUnavailable.",
+        "PythSchemaViolation -> typed protocol data failure with redacted hash.",
+        "FeedBindingMismatch -> quote/effect precondition failure.",
+        "PayloadLimitExceeded -> policy rejection with observed size.",
+        "UnsupportedEncoding/unknown version -> protocol failure; binary-only cannot authorize a quote."
+      ],
+      "preservedBehavior": [
+        "Binary update data remains available to relayer compiler.",
+        "Confidence/exponent/publish time are retained."
+      ],
+      "replacementSteps": [
+        "Add runtime schemas and separate update evidence from PriceObservation.",
+        "Move endpoint/transport into the scoped MarketData leaf.",
+        "Add bounded redaction/sealed references and remove casts."
+      ],
+      "verificationCases": [
+        "Binary-only response is valid only for a native-update consumer and never a quote.",
+        "Malformed encoding fails schema decode.",
+        "An unknown parsed feed is not bound to the instrument.",
+        "Oversized response is rejected before storage."
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "Hermes binary and parsed values remain distinct provider data schemas; K03/K05 allow a finite public pull result without account or order state, while K08 permits binary evidence only when a declared effect explicitly consumes it.",
+      "contractAnchors": [
+        "K03",
+        "K04",
+        "K05",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-C5F7182D33",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/pyth.ts:31-48: fetchPythUpdateData rejects empty feed list, builds multi-feed URL, performs uncancelled fetch, truncates non-2xx text, casts JSON, and checks only nonempty binary.data."
+      ],
+      "currentBehavior": "Any nonempty 0x feed array produces one public request with parsed=true and returns raw response. There is no timeout, cancellation, dedupe, size bound, response completeness, or typed Result.",
+      "problem": "Hung/oversized requests can consume action attempts; malformed/duplicate IDs and missing parsed evidence are not distinguished. Binary bytes can be signed without proving matching current instrument evidence.",
+      "targetModel": "Expose `market-data.pyth.updates` (`fetchUpdates` at the adapter edge) as a scoped finite market-data pull with provider-declared FeedSet, response, error, and policy schemas. Normalize/dedupe/sort requested feeds and report Partial/Unavailable coverage; only an open-effect declaration may consume frozen update evidence.",
+      "pureTransitions": [
+        "Raw feed IDs -> Result<CanonicalFeedSet, FeedIdFailure>; reject empty/malformed/unsupported IDs.",
+        "CanonicalFeedSet + bound market-data policy + response -> Result<HermesV2Envelope, ProtocolOrCoverageFailure>; enforce declared feed/byte/timeout/cancellation policy and exact parsed IDs when required.",
+        "Envelope + selected Leverup open effect -> Result<NativePythUpdateEvidence, PythPreconditionFailure>; bind update hash to the selected instrument/price."
+      ],
+      "effectBoundary": "Fetch/cancellation/response limits are MarketData Effects; future streams own backpressure as a separate resource concern. URL construction, normalization, decoding, and policy checks are pure. A failed fetch does not trigger compensation or approval state.",
+      "durability": "A retained pull observation stores feed set, source, update hash, publish/fetch times, policy/version, and catalog revision. A selected effect references the same hash/sealed bytes; retry does not silently fetch a different latest value.",
+      "errors": [
+        "EmptyFeedSet or InvalidFeedId -> query input failure.",
+        "MarketDataTimeout/Unavailable -> finite pull failure; no effect signing.",
+        "MarketDataPolicyUnavailable -> no policy-dependent fetch.",
+        "MissingRequiredFeed -> Partial/Unavailable.",
+        "PayloadLimitExceeded/unsupported encoding -> typed policy/protocol failure."
+      ],
+      "preservedBehavior": [
+        "Multi-feed requests remain supported for pair/collateral needs.",
+        "Bounded non-2xx diagnostics remain available.",
+        "Validated binary.data remains relayer input."
+      ],
+      "replacementSteps": [
+        "Replace global fetch with scoped MarketData pull.",
+        "Add schema/completeness/size/cancellation policy.",
+        "Freeze selected update identity at the effect boundary and remove implicit retry fetch."
+      ],
+      "verificationCases": [
+        "Duplicate IDs produce one canonical set.",
+        "Aborting a hanging request yields MarketDataTimeout and no order state.",
+        "Missing requested feed is Partial/Unavailable.",
+        "A restarted selected effect reuses the stored update hash."
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "Feed normalization and bounded HTTP remain a resource-scoped finite public market-data pull; K05 forbids transaction approval/compensation for the fetch, with K08 freezing selected evidence only at an account-scoped open effect boundary.",
+      "contractAnchors": [
+        "K03",
+        "K05",
+        "K07",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-6966FD8244",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/pyth.ts:54-73: fetchPythPrice selects parsed[0], converts with Number and Math.pow(10, expo), returns Date from publish_time, and forwards binary.data without confidence/age/feed-ID checks."
+      ],
+      "currentBehavior": "The convenience function assumes parsed[0] matches the requested feed and returns a JavaScript number plus publish Date and raw update bytes. Sign, zero, confidence, age, future timestamp, and exponent are unchecked.",
+      "problem": "Number loses precision for large oracle integers; parsed ordering can bind another feed. Stale/low-confidence/future values can become signed prices.",
+      "targetModel": "Expose `market-data.pyth.price` as a typed PriceObservation query leaf: InstrumentId/FeedId/QuoteCurrency, exact DecimalString, confidence, publish/fetch times, source, update evidence, freshness, and `quoteShape: SingleSourceMid`. A separately declared open-effect price precondition consumes it under bound policy; the convenience query does not sign or dispatch or synthesize bid/ask.",
+      "pureTransitions": [
+        "Parsed provider entry + bound LeverupPricePolicyInputV1 + explicit now -> Result<PriceObservation, OraclePriceFailure>; exact integer/exponent parsing, feed equality, and policy checks.",
+        "PriceObservation + instrument/effect declaration -> Result<PreparedPrice, PricePreconditionFailure>; require quote/feed/freshness/confidence and policy binding.",
+        "PreparedPrice + declared native field -> Result<NativeIntegerField, PriceEncodingFailure>; persist evidence only for the selected effect."
+      ],
+      "effectBoundary": "Hermes fetch is a data Effect. Numeric conversion, freshness, policy, and binding are pure; a price query/cache failure does not create a transaction or compensation path.",
+      "durability": "Data observations retain exact oracle evidence and as-of. A prepared effect pins feed, exponent, confidence, policy/version, descriptor revision, and update hash; it never reads an implicit latest quote at dispatch.",
+      "errors": [
+        "ParsedFeedMismatch -> query/effect precondition failure.",
+        "Malformed/non-finite price -> protocol failure; disallowed finite sign -> policy failure.",
+        "OracleStale/OracleFuture/ConfidenceTooWide -> unavailable or prepare rejection.",
+        "ExponentMalformed -> schema failure; ExponentOutsidePolicy -> policy rejection retaining raw exponent.",
+        "PriceEncodingOverflow -> effect compile failure."
+      ],
+      "preservedBehavior": [
+        "Quote timestamp still derives from publish_time; fetch time is separate.",
+        "Legacy Quote remains a single-source Pyth mid with explicit quoteShape; no independent bid/ask is invented, and binary update remains for the open request but is not freshness proof alone."
+      ],
+      "replacementSteps": [
+        "Replace Number/Math.pow with exact decoding.",
+        "Require feed equality and bound policy only where the effect requires it.",
+        "Persist selected precondition evidence and remove implicit current-price assumptions."
+      ],
+      "verificationCases": [
+        "An integer beyond Number range remains exact.",
+        "Wrong feed yields mismatch.",
+        "Stale/future/zero/negative/wide-confidence values do not enter effect preparation.",
+        "A uint128 boundary either encodes exactly or returns overflow."
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "Exact oracle decoding and policy checks remain source obligations, but K05 separates public Quote/PriceObservation delivery from K08 price consumption by an explicitly scoped trading effect.",
+      "contractAnchors": [
+        "K03",
+        "K04",
+        "K05",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-A94BD9AD27",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/reader-client.ts:15-22: module imports viem client/transport types and parses minimal ERC20 ABI for balanceOf/decimals.",
+        "services/uta/src/domain/trading/brokers/others/leverup/reader-client.ts:67-75: ReaderClient exposes publicClient after constructing it directly from net.rpcUrl."
+      ],
+      "currentBehavior": "Viem PublicClient and ERC20 ABI are adapter details, but publicClient is exposed and callers can invoke arbitrary SDK methods. REST reads use global fetch in another method.",
+      "problem": "SDK objects and untyped transport failures cross into broker and bypass scoped connection/cancellation policy. Exposed client permits reads outside AccountScope and makes readiness look like any successful RPC call.",
+      "targetModel": "Hide viem PublicClient and ERC20 ABI behind a provider connection and expose only typed read leaves such as chain health, token metadata, public market data, and account-scoped balance. SDK values never become UTA records; each account read carries explicit scope while public reads use a Public scope variant.",
+      "pureTransitions": [
+        "Connection input + explicit Public/Account scope when required -> Result<ScopedReadRequirement, ConnectionFailure>; validate endpoint/network without acquiring transport.",
+        "Decoded provider read + declared scope variant/generation -> Result<DomainObservation, QueryFailure>; attach as-of and typed units."
+      ],
+      "effectBoundary": "Transport creation/close, RPC/REST timeout, cancellation, limits, and reconnect are scoped resource Effects. ABI/result decoding is adapter-local pure code; no order approval/dispatch is involved in a read.",
+      "durability": "Persist connection generation and observation metadata where a read is retained; never PublicClient. Durable data jobs reacquire resources after restart independently of effect jobs.",
+      "errors": [
+        "ConnectionUnavailable -> dependent read leaf unavailable.",
+        "RpcProtocolViolation -> discard malformed result.",
+        "ScopeNotBound -> reject account-scoped read with no default wallet."
+      ],
+      "preservedBehavior": [
+        "Viem remains usable at native boundary.",
+        "Indexed positions and on-chain balance remain separate read capabilities."
+      ],
+      "replacementSteps": [
+        "Make PublicClient/ABI private.",
+        "Acquire transport through a scoped provider Layer.",
+        "Migrate callers to typed read leaves and map SDK failures at the adapter boundary."
+      ],
+      "verificationCases": [
+        "An expired scope makes the dependent read unavailable.",
+        "Malformed balance output is a typed protocol failure.",
+        "An unscoped account read is rejected while public data leaves remain available."
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "Viem remains an adapter implementation detail; K05/K07 require narrow typed read leaves, distinguish Public from Account scope, and keep RPC resources separate from relayer effects and transaction authority.",
+      "contractAnchors": [
+        "K03",
+        "K05",
+        "K07"
+      ]
+    },
+    {
+      "id": "MAP-4996C21AA2",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/reader-client.ts:31-57: RestPositionRecord uses raw strings/booleans/number timestamp, status OPEN/CLOSED, and optional closeInfo; no runtime decoder or observation identity."
+      ],
+      "currentBehavior": "REST JSON is cast directly to RestPositionRecord. Protocol-looking strings are not schema-checked for addresses, decimal syntax, timestamp units, statuses, or pair/token/feed relations.",
+      "problem": "Raw data can poison accounting/reconciliation. Number timestamp lacks unit intent, unknown statuses are unrepresentable, and records lack observation revision/DispatchId/PositionId association.",
+      "targetModel": "Decode REST JSON with a provider position schema into PositionObservation: ScopedPositionRef when scope is known, branded pair/token identities, typed Quantity/Price/Money where units are evidenced, Open/Closed/Unknown status, source/as-of/revision, and retained closeInfo/unknown evidence. This is a data unit, not an order state.",
+      "pureTransitions": [
+        "Unknown JSON -> Result<RestPositionObservation, RestDecodeFailure>; validate required fields, units, hash/address, timestamp, and status.",
+        "Decoded record + catalog + explicit AccountScope when the source is account data -> Result<ScopedPositionObservation, PositionBindingFailure>; require network/token binding and retain closeInfo.",
+        "Observation -> PositionProjection; only an explicitly selected close effect may use it as a before-image."
+      ],
+      "effectBoundary": "Schema/unit decoding is pure. REST fetch/body limits are data Effects; untrusted records cannot reach accounting or close compilation before decoding.",
+      "durability": "Persist position hash, source/fetched/as-of, catalog/connection revision, status, typed fields, and unknown evidence as data observation. If selected for close, copy the required evidence into that effect plan; otherwise no RecoveryCase/WAL.",
+      "errors": [
+        "RestSchemaViolation -> typed data observation failure.",
+        "UnknownPositionStatus -> Partial/Unknown projection; no default.",
+        "PositionBindingMismatch -> observation unavailable.",
+        "AmountDecodeFailure -> mark that position incomplete and block only dependent accounting/effect use."
+      ],
+      "preservedBehavior": [
+        "All fields including closeInfo and individual fees remain represented.",
+        "OPEN/CLOSED retain their semantics as explicit variants."
+      ],
+      "replacementSteps": [
+        "Add runtime position schema/decoder and keep raw record adapter-private.",
+        "Bind positions to scope/catalog/revision while retaining closed/unknown rows.",
+        "Migrate account/position query and close preparation to typed observations."
+      ],
+      "verificationCases": [
+        "Valid OPEN retains decoded fields and closeInfo without inventing values.",
+        "CLOSED rows remain available as reconciliation evidence.",
+        "Unknown status/wrong qty/token produces Partial/typed failure.",
+        "Wrong timestamp unit/range remains unknown rather than silently accepted."
+      ],
+      "openQuestions": [
+        "Fee/PnL units and timestamp semantics are comments only; authoritative API examples are needed."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "REST position rows are account-scoped provider data observations with unknown/partial provenance; K03/K05 keep them out of order approval and only a scoped close effect may select one as a frozen before-image.",
+      "contractAnchors": [
+        "K03",
+        "K04",
+        "K05",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-6CE514231C",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/reader-client.ts:59-65: PaginatedPositions has content/pageNumber/pageSize/totalPages/totalElements but no runtime validation or cursor boundary."
+      ],
+      "currentBehavior": "The envelope has counters that can reveal multiple pages, yet client asks only page 0 and has no completeness marker/checkpoint.",
+      "problem": "Rows beyond page one disappear; empty/partial/stale data can look like complete empty account, unsafe for exposure/close/recovery.",
+      "targetModel": "Decode account-scoped paginated positions into a finite `ListingResult<PositionObservation>` with Complete, Partial, or Unavailable variants and a cursor boundary. Page counters are evidence; page zero alone never means complete unless the provider proves the boundary.",
+      "pureTransitions": [
+        "Page + expected query -> Result<DecodedPage, ReaderProtocolFailure>; validate counters, continuity, and content.",
+        "Accumulator + next cursor -> Result<ListingResult, PaginationFailure>; Complete only at a verified total boundary.",
+        "ListingResult + selected consumer -> allow an effect precondition only when completeness policy permits; ordinary listing stays a data result."
+      ],
+      "effectBoundary": "Page HTTP/backoff/cancellation are Reader data Effects; accumulation and completeness are pure. Durable read checkpoints may resume pulls without order approval or compensation.",
+      "durability": "Persist query scope, page/cursor, counters, covered namespaces, observedAt, generation, and completeness for retained data pulls. A close effect separately records the Complete evidence it selected.",
+      "errors": [
+        "PaginationCounterMismatch -> Partial/ProtocolFailure.",
+        "PageLimitExceeded -> Partial.",
+        "ReaderTimeout -> Unavailable/read retry.",
+        "Empty Complete is valid only with complete counters and a verified boundary."
+      ],
+      "preservedBehavior": [
+        "Counters remain evidence and all content retained.",
+        "A truly complete empty account differs from unsupported/partial listing."
+      ],
+      "replacementSteps": [
+        "Add runtime envelope schema and bounded page iterator.",
+        "Introduce ListingResult and read checkpoints.",
+        "Require Complete only for consumers that need safety-critical absence; do not force every data read into order state."
+      ],
+      "verificationCases": [
+        "Two pages yield Complete with both rows.",
+        "A missing page yields Partial.",
+        "Inconsistent counters yield mismatch.",
+        "Restart resumes a data pull without duplicate/omitted rows."
+      ],
+      "openQuestions": [
+        "Whether API has cursor semantics beyond page/size is undocumented."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "Pagination completeness is a pull-result property under K05, not an order transaction state; a close/recovery caller may consume Complete evidence, while ordinary listing remains a data query.",
+      "contractAnchors": [
+        "K03",
+        "K05",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-D8D93BC61D",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/reader-client.ts:67-76: ReaderClient stores NetworkConstants and constructs a PublicClient directly from net.rpcUrl; no REST resource, health, reconnect, or typed requirement."
+      ],
+      "currentBehavior": "Constructor creates an unscoped long-lived RPC client; REST later uses global fetch, so transports have no shared lifecycle/health state.",
+      "problem": "Lifetime, endpoint reach, throttling, cancellation, and generation are invisible. RPC readiness does not imply REST completeness or relayer write capability, and restart loses observation work relation.",
+      "targetModel": "Construct a Leverup provider connection with independent RPC, REST reader, Hermes market-data, and relayer capability leaves. Public Instrument/market-data leaves use an explicit Public scope variant; account reads and controlled effects require AccountScope. Each leaf carries NetworkIdentity/generation and availability evidence, and the connection is not a universal IBroker or transaction state machine.",
+      "pureTransitions": [
+        "Network candidates + endpoint evidence -> Result<ConnectionIdentity, ConnectionFailure>; derive independent leaf availability.",
+        "Connection identity + declared Public or Account scope -> typed query/effect requirements; stale generation invalidates only dependent new effects."
+      ],
+      "effectBoundary": "Layer acquisition, transport lifetime, health, reconnect, limits, and cancellation are resource Effects. Capability transitions and decoders are pure; data resources do not run order recovery.",
+      "durability": "Persist connection identity/generation and retained read observations. Controlled effects persist their own dispatch/recovery records; reconnect never rewrites an old observation or sent effect.",
+      "errors": [
+        "RpcUnavailable/ReaderUnavailable -> mark only the dependent declared leaves unavailable; preserve their schemas.",
+        "EndpointGenerationChanged -> invalidate new dependent effects.",
+        "PossibleSentEffect -> keep its original identity for observation/recovery."
+      ],
+      "preservedBehavior": [
+        "RPC balance and indexed positions remain separate.",
+        "RPC probe remains useful evidence but not complete readiness."
+      ],
+      "replacementSteps": [
+        "Move transports into scoped provider Layers with independent leaves.",
+        "Add generation/reconnect handling and separate read checkpoints from effect jobs.",
+        "Separate startup resource readiness from any controlled-effect recovery."
+      ],
+      "verificationCases": [
+        "REST down/RPC up preserves balance read while positions are unavailable.",
+        "Generation change invalidates a prepared open effect.",
+        "Restart reacquires clients and resumes a read checkpoint without losing a sent-effect identity."
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "Connection lifecycle and generation remain scoped resource evidence; K05/K07 keep RPC, REST, Hermes, and relayer leaves independent and distinguish Public data from Account-scoped facts instead of treating one connection as a universal broker handler.",
+      "contractAnchors": [
+        "K02",
+        "K05",
+        "K07",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-68B42E34DB",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/reader-client.ts:80-90: fetchOpenPositions asks size=limit&page=0, casts JSON, filters status OPEN, and throws truncated generic Error for non-2xx."
+      ],
+      "currentBehavior": "Method returns only first-page OPEN records, discarding CLOSED/unknown statuses and totalPages. HTTP/schema errors become Error strings.",
+      "problem": "It cannot prove account completeness or remote absence after mutation. Missing row may mean another page, closed state, stale index, unsupported endpoint, or unknown outcome; early filtering erases evidence.",
+      "targetModel": "Expose `observePositions` as a finite account-scoped REST pull over all provider statuses and pages. Derive an open-position view from Complete observations, while CLOSED/Unknown/partial evidence remains visible; only a selected close effect may associate the observation with a dispatch identity.",
+      "pureTransitions": [
+        "Pages -> Result<ListingResult<PositionObservation>, ReaderFailure>; validate and retain all records.",
+        "Complete listing + status predicate -> pure OpenPositionView; absence is data evidence, not rejection.",
+        "Listing + selected close-effect identity -> reconciliation input; incomplete data remains Partial/Unknown rather than becoming a transaction outcome."
+      ],
+      "effectBoundary": "REST/timeouts/pagination are Reader data Effects. Filtering and reconciliation are pure; effect recovery is added only after a close POST may have occurred.",
+      "durability": "Persist pages/checkpoints/completeness/status/hash/source/as-of as data observations. A possible sent close separately retains exclusion/RecoveryCase; an ordinary timeout does not.",
+      "errors": [
+        "ReaderHttpRejected -> typed observation failure.",
+        "ListingPartial -> Partial/Unavailable data result.",
+        "PositionNotFoundInComplete -> absence evidence only.",
+        "UnknownStatus -> retain the row and unknown status."
+      ],
+      "preservedBehavior": [
+        "OPEN rows feed views after Complete.",
+        "Closed rows/fees remain for recovery."
+      ],
+      "replacementSteps": [
+        "Exhaust pages and schema-decode all statuses.",
+        "Move OPEN filtering to a pure projection.",
+        "Associate position evidence with a close effect only when that effect exists.",
+        "Replace generic Error with typed data failure."
+      ],
+      "verificationCases": [
+        "OPEN on page two appears in the complete view.",
+        "CLOSED after a close remains reconciliation evidence.",
+        "Timeout/incomplete listing is not an order rejection.",
+        "Complete absence is recorded as evidence rather than a generic close error."
+      ],
+      "openQuestions": [
+        "Closed-row retention window is external reader API fact."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "Open-position projection is a finite account-scoped REST pull with retained CLOSED/Unknown rows; K05 keeps it free of order WAL/compensation, while K08 adds dispatch association only when reconciliation is actually for a sent close.",
+      "contractAnchors": [
+        "K03",
+        "K04",
+        "K05",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-1F4643BAB5",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/reader-client.ts:94-101: getUsdcBalance reads balanceOf at net.usdc for supplied address and casts the SDK result to Promise<bigint>."
+      ],
+      "currentBehavior": "Method returns a bare bigint for configured USDC with no AccountId/AccountScope, currency/token, block/as-of, or typed RPC failure.",
+      "problem": "Balance can be misattributed to account/network/token and cannot be replayed as accounting observation. SDK errors escape and raw bigint bypasses Money units.",
+      "targetModel": "Return a typed CashObservation {AccountScope, AccountId, CurrencyCode, token, Money, NetworkIdentity, BlockReference|Unavailable, asOf, source, generation} from an account-scoped balance read leaf. It is a data result; a controlled open effect may require it as a precondition without making balance retrieval transactional.",
+      "pureTransitions": [
+        "RPC uint256 + CurrencyMetadata -> Result<Money, BalanceDecodeFailure>; validate token/decimals/network and unsigned value.",
+        "CashObservation + selected effect requirements -> Result<BuyingPowerEvidence, BuyingPowerFailure>; mismatched scope fails.",
+        "Read failure -> typed Unavailable, never fake zero."
+      ],
+      "effectBoundary": "RPC read is a scoped data Effect; ABI validation, bigint-to-Money, and projection are pure. Reservation/approval/dispatch remain outside the read leaf.",
+      "durability": "Append CashObservation with block/as-of/generation when retained. A prepared open effect pins the observation identity; unknown cash blocks that effect but does not create compensation state.",
+      "errors": [
+        "BalanceRpcUnavailable -> Unavailable, not zero.",
+        "TokenNetworkMismatch -> metadata failure.",
+        "BalanceDecodeFailure -> discard malformed value.",
+        "ScopeMismatch -> reject projection/effect precondition."
+      ],
+      "preservedBehavior": [
+        "USDC balanceOf remains cash source for verified descriptor.",
+        "Bigint value remains exact in Money."
+      ],
+      "replacementSteps": [
+        "Hide PublicClient and add a scoped balance read.",
+        "Add block/as-of and currency metadata.",
+        "Replace bare bigint callers without adding order state to the reader."
+      ],
+      "verificationCases": [
+        "A known balance carries token/scope/as-of evidence.",
+        "A non-bigint result fails decode.",
+        "Wrong network token fails mismatch.",
+        "RPC unavailable returns no zero and prevents only dependent effect preparation."
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "Balance remains an account-scoped typed cash observation pull; K05 keeps it independent of order transactions, and K08 permits its block evidence to be selected as a precondition without making the read itself an effect execution.",
+      "contractAnchors": [
+        "K03",
+        "K04",
+        "K05",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-2B8DD3E4BD",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/reader-client.ts:103-110: getUsdcDecimals reads decimals from net.usdc and returns a raw number; LeverupBroker.ts:386 and :394-426 use hardcoded USDC_DECIMALS instead."
+      ],
+      "currentBehavior": "Chain metadata method is disconnected from cash, margin, and amountIn conversion; broker uses six decimals regardless of observed number.",
+      "problem": "Configured and actual token decimals can diverge by powers of ten. Raw number has no token/network/revision provenance and cannot be authoritative metadata.",
+      "targetModel": "Define CurrencyMetadata {CurrencyCode, TokenAddress, TokenDecimals, NetworkIdentity, observedAt, source, revision} as a versioned read/cache value. Money/cash/margin/amountIn codecs require matching metadata when their declaring leaf needs it; no global six-decimal fallback is introduced.",
+      "pureTransitions": [
+        "RPC decimals + expected token/network -> Result<CurrencyMetadata, TokenMetadataFailure>; validate range/address/chain.",
+        "CurrencyMetadata + tagged native amount -> Money; data projections retain the metadata revision.",
+        "Metadata revision change -> invalidate dependent new effect preparation; historical observations stay on their recorded revision."
+      ],
+      "effectBoundary": "Decimals read/cache refresh is a scoped data Effect; validation/cache/conversion are pure. A failed cache does not trigger order compensation or silently select another asset.",
+      "durability": "Persist metadata revision/token/decimals with retained observations and any effect plan that consumes them. New preparation requires current coherent metadata.",
+      "errors": [
+        "TokenDecimalsUnavailable -> dependent currency/leaf unavailable.",
+        "TokenDecimalsMismatch -> block dependent effect/accounting projection.",
+        "UnsupportedDecimals -> typed data failure.",
+        "MetadataStale -> refresh before a dependent effect."
+      ],
+      "preservedBehavior": [
+        "USDC six-decimal conversion remains when chain confirms six.",
+        "Chain observation is authority; config is consistency check."
+      ],
+      "replacementSteps": [
+        "Connect getUsdcDecimals to CurrencyMetadata.",
+        "Replace USDC_DECIMALS call sites only where the declaration requires token metadata.",
+        "Persist revision/as-of and invalidate dependent effects."
+      ],
+      "verificationCases": [
+        "Chain-confirmed six decimals drive a USDC value.",
+        "Chain seven versus candidate six yields mismatch.",
+        "A post-prepare metadata change forces reprepare of the dependent effect.",
+        "Read failure leaves data/effect capability unavailable rather than using a default."
+      ],
+      "openQuestions": [
+        "Actual live/testnet USDC decimals require chain evidence."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "Token decimals remain versioned Currency metadata from a network read resource; K03/K05 prevent a cache failure from becoming a trading or compensation state, while an explicitly scoped effect may require matching metadata.",
+      "contractAnchors": [
+        "K03",
+        "K04",
+        "K05",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-D8B1941723",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/relayer-client.ts:13-52: open/close requests and status responses use raw strings/template literals, booleans executed/success, optional txnHash/reason, and no dispatch/attempt/scope identity."
+      ],
+      "currentBehavior": "Interfaces describe JSON fields but do not validate runtime responses. Two booleans cannot distinguish pending, rejected, still working, malformed, and unknown reachability.",
+      "problem": "A status cast can be confused with acknowledgement/fill. Missing identity/evidence means restart cannot associate inputHash, txnHash, positionHash, scope, schema, or request digest with a durable operation.",
+      "targetModel": "Define provider action-specific runtime schemas for NativeOpenRequest, NativeCloseRequest, RelayerAck, and RemoteObservation. `RemoteOutcome = Confirmed | Rejected | StillWorking | Unknown` is used only for a controlled effect whose request identity is known; ordinary query errors remain provider/query failures.",
+      "pureTransitions": [
+        "Untrusted JSON + expected provider schema -> Result<RelayerMessage, ProtocolFailure>; validate hash/address/uint/boolean invariants and action identity.",
+        "Decoded status + sent effect record -> pure RemoteOutcome; terminal states require provider semantics plus validated evidence, otherwise Unknown.",
+        "RelayerAck + effect digest -> durable acknowledgement association under the same dispatch identity."
+      ],
+      "effectBoundary": "HTTP is a scoped relayer Effect; schema decoding/outcome classification are pure. Raw JSON/Error.message do not cross the UTA boundary.",
+      "durability": "Retain request digest, opaque lookup, txn/reason evidence, status, scope, schema, and observation time for the selected effect. Unknown creates/retains recovery only for a possible mutation.",
+      "errors": [
+        "RelayerSchemaViolation -> typed protocol failure with redacted hash.",
+        "RemoteRejected -> terminal known rejection only under declared evidence.",
+        "StillWorking -> durable status observation work.",
+        "OutcomeUnknown -> suspend redispatch and retain RecoveryCase for the sent effect."
+      ],
+      "preservedBehavior": [
+        "inputHash/txnHash/reason remain evidence when validated.",
+        "Open and close payloads stay action-specific, not one untyped union."
+      ],
+      "replacementSteps": [
+        "Replace interfaces with provider runtime schemas.",
+        "Associate every sent effect with scope/dispatch/schema metadata.",
+        "Migrate submit/status observation to exhaustive typed outcomes without a global response union."
+      ],
+      "verificationCases": [
+        "A documented pending response maps StillWorking; undocumented booleans remain Unknown.",
+        "Malformed hash/boolean yields schema failure.",
+        "A provider-confirmed terminal success with transaction/position evidence maps Confirmed.",
+        "Uncertain reachability yields Unknown, not rejection."
+      ],
+      "openQuestions": [
+        "Exact relayer status semantics are not documented; acceptance evidence must define mapping."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "Relayer messages become action-specific provider schemas with typed observation outcomes; K03/K07 preserve native protocol freedom and K08 limits Unknown/recovery semantics to a sent, account-scoped trading effect.",
+      "contractAnchors": [
+        "K03",
+        "K07",
+        "K08",
+        "K10"
+      ]
+    },
+    {
+      "id": "MAP-339E61F930",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/relayer-client.ts:54-63: RelayerClient stores baseUrl, POSTs open/close to fixed MONAD query endpoints, and returns only inputHash.",
+        "services/uta/src/domain/trading/brokers/others/leverup/LeverupBroker.ts:276-313: broker tracks inputHash only in an in-memory map and returns immediately."
+      ],
+      "currentBehavior": "sendOpenPosition/sendClosePosition perform POST through a generic helper and return opaque inputHash. No durable DispatchPlanned/Started barrier, timeout/cancellation policy, or post-boundary failure classification exists.",
+      "problem": "A successful POST is not linked to transaction/step/job state; timeout after relayer acceptance can look rejected. New salt/signature retry can duplicate exposure, and restart loses lookup.",
+      "targetModel": "Expose a Leverup open/close dispatch leaf only after its provider request schema, credential, endpoint, and effect identity are prepared. Require durable `DispatchPlanned` before signing and `DispatchStarted` immediately before POST, classify pre-boundary failure separately, and return an opaque provider acknowledgement for later observation.",
+      "pureTransitions": [
+        "Prepared Leverup effect + dispatch identity -> Result<DispatchRequest, DispatchPreparationFailure>; schema, endpoint, identity, and payload must agree.",
+        "DispatchStarted + HTTP result -> Result<RelayerAck, RemoteOutcome>; after the POST boundary, timeout/non-contract response is Unknown until observed.",
+        "RelayerAck -> durable acknowledgement and status-observation work for that effect."
+      ],
+      "effectBoundary": "POST/timeout/cancel/decoding are relayer Effects; journal barriers are execution authority. The provider client owns no generic retries or in-memory order state.",
+      "durability": "Persist planned/started identity before mutation, ack/opaque lookup after response, and observation work thereafter. Commit-success/response-loss is resolved by the original digest/lookup, never a new POST.",
+      "errors": [
+        "DispatchNotPlanned -> refuse the effect.",
+        "Pre-POST HTTP failure -> known unsent failure; a response after crossing POST remains Unknown unless native no-mutation semantics prove otherwise.",
+        "PostBoundaryTimeout/ConnectionLost -> Unknown and observe.",
+        "AckMalformed -> retain the sent effect for reconciliation."
+      ],
+      "preservedBehavior": [
+        "Documented open/close paths and MONAD parameter remain after endpoint verification.",
+        "Nonblocking acknowledgement remains possible after durable bookkeeping."
+      ],
+      "replacementSteps": [
+        "Move HTTP behind typed provider effect leaves.",
+        "Integrate the durable effect barrier before POST.",
+        "Delete the in-memory submission map as authority.",
+        "Use native idempotency evidence or observe-before-retry."
+      ],
+      "verificationCases": [
+        "DispatchStarted survives a restart before POST.",
+        "Dropped response after server acceptance yields Unknown/status observation.",
+        "A local pre-POST failure has no duplicate; post-boundary non-2xx is not assumed rejection.",
+        "POST without durable planning is prevented."
+      ],
+      "openQuestions": [
+        "Relayer idempotency/deduplication behavior is unproven."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "POST remains a controlled effect boundary with durable identity and phase classification; K08 retains WAL/CAS/Unknown rules, while K07 forbids a generic provider POST or universal retry policy.",
+      "contractAnchors": [
+        "K07",
+        "K08",
+        "K09",
+        "K10"
+      ]
+    },
+    {
+      "id": "MAP-25EDC2AA39",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/relayer-client.ts:65-72: getStatus GETs inputHash URL, truncates non-2xx text, and casts arbitrary JSON to RelayerStatusResponse."
+      ],
+      "currentBehavior": "Status lookup has no observation timestamp, protocol version, request/action association, or evidence classification. HTTP errors are truncated Error strings.",
+      "problem": "Failed GET does not prove mutation failure; malformed JSON can become booleans. Without durable observations, reconciliation cannot justify terminal state or retain Unknown.",
+      "targetModel": "Expose status as a provider-specific observation leaf over an OpaqueLookupRef and expected effect identity. Its input uses an explicit provider-lookup scope, or AccountScope only when a controlled-effect association supplies one; no account is invented for a standalone lookup. Decode the response into typed RemoteObservation; reachability or semantic ambiguity stays Unknown only when the lookup belongs to a possible sent effect.",
+      "pureTransitions": [
+        "Status JSON + expected provider schema/effect -> Result<RemoteObservation, StatusDecodeFailure>; enforce identity and field invariants.",
+        "Observation + sent effect -> pure reconciliation: Confirmed/Rejected/StillWorking/Unknown according to evidence.",
+        "Observation -> append-only evidence; never overwrite a prior sent-effect event."
+      ],
+      "effectBoundary": "GET/timeout/backoff/cancel are status-observation Effects. Decoding and reconciliation are pure; a failed data lookup cannot itself trigger mutation.",
+      "durability": "Append inputHash/opaque lookup, as-of, endpoint generation, redacted digest, and outcome for sent effects. Standalone provider status pulls retain query evidence only.",
+      "errors": [
+        "StatusHttpUnavailable -> Unknown/observe retry for a possible sent effect.",
+        "StatusSchemaViolation -> typed protocol failure and recovery for a possible sent effect.",
+        "RemoteRejected -> terminal only with documented semantics.",
+        "StatusIdentityMismatch -> discard result and flag evidence."
+      ],
+      "preservedBehavior": [
+        "inputHash remains lookup key.",
+        "txnHash/reason remain optional validated evidence; no guessed values."
+      ],
+      "replacementSteps": [
+        "Add provider status decoder and typed observation API.",
+        "Associate status with the originating effect only when one exists.",
+        "Use durable observation work instead of direct mutable status mutation."
+      ],
+      "verificationCases": [
+        "A documented pending response yields StillWorking; undocumented executed=false remains Unknown.",
+        "A provider-confirmed terminal failure yields Rejected.",
+        "GET timeout after a possible POST yields Unknown/RecoveryRequired for that effect.",
+        "A different inputHash is rejected as identity mismatch."
+      ],
+      "openQuestions": [
+        "Unknown inputHash semantics are not specified; preserve Unknown."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "Status lookup is a provider-specific observation leaf; K05/K07 preserve opaque lookup semantics and typed pull evidence, and K08 applies RecoveryCase only when the lookup belongs to a possible mutation.",
+      "contractAnchors": [
+        "K03",
+        "K05",
+        "K07",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-96515A5FA2",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/relayer-client.ts:74-93: pollUntilExecuted uses 1500ms interval/30000ms deadline, returns first executed status, and turns timeout into executed=false/success=false/reason=poll timeout."
+      ],
+      "currentBehavior": "Polling owns an in-memory timer and returns first executed status or a synthetic status after thirty seconds. There is no durable lease/checkpoint/backoff/identity or post-crash continuation.",
+      "problem": "Timeout is indistinguishable from rejection; accepted mutations can remain pending and a crash loses the timer, encouraging blind redispatch.",
+      "targetModel": "Replace timer authority with an explicit status-observation pull/job. The scheduler may persist a resource-scoped observation checkpoint and bound policy; only a possible sent trading effect gets durable lease/recovery semantics, and timer expiry never becomes rejection or redispatch.",
+      "pureTransitions": [
+        "Observation + explicit policy -> pure advanceObservation: terminal evidence, StillWorking, or Unknown.",
+        "Observation job state + bound schedule + now -> Result<LeaseAction, ObservationJobFailure>; missing policy leaves the pull unavailable without an implicit cadence.",
+        "Sent-effect recovery evidence + authorized decision -> retain/advance that effect; no blind mutation."
+      ],
+      "effectBoundary": "Timers, leases, GET, cancellation, and backoff are scheduler/resource Effects. Classification is pure; ordinary data polling has no order locks or compensation.",
+      "durability": "Persist query/effect checkpoints, lease owner/epoch, observations, and recovery only for a possible sent effect. Restart resumes durable observation work; timeout never synthesizes Rejected.",
+      "errors": [
+        "LeaseExpired -> reclaim observation work with a new epoch, no redispatch.",
+        "RemoteStillWorking -> schedule another observation under explicit policy.",
+        "ObservationUnknown -> RecoveryRequired for a sent effect; query-only ambiguity remains Unavailable/Unknown.",
+        "ObservationPolicyUnavailable -> no implicit timer.",
+        "SchedulerUnavailable -> retain durable observation state."
+      ],
+      "preservedBehavior": [
+        "Original interval/timeout may inform scheduling defaults, not terminal semantics.",
+        "Status remains available asynchronously through durable observation."
+      ],
+      "replacementSteps": [
+        "Replace pollUntilExecuted with provider status observation work.",
+        "Persist checkpoints/leases and keep read jobs distinct from effect recovery.",
+        "Add observe-before-retry and remove timer authority."
+      ],
+      "verificationCases": [
+        "A worker crash resumes GET under a new epoch without redispatch.",
+        "StillWorking beyond 30 seconds remains working when provider evidence says so.",
+        "Transport ambiguity for a sent effect yields RecoveryRequired.",
+        "A standalone read poll reports Unknown/Unavailable rather than creating a transaction."
+      ],
+      "openQuestions": [
+        "Relayer finality/retention and schedule are operational policies."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "The local timer is not authoritative; K05 treats status observation as a resource-scoped pull/job, while K08 reserves durable lease and recovery behavior for a dispatched effect rather than ordinary data polling.",
+      "contractAnchors": [
+        "K05",
+        "K07",
+        "K08",
+        "K10"
+      ]
+    },
+    {
+      "id": "MAP-A283DD30CA",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/relayer-client.ts:95-106: private post accepts body unknown, JSON.stringify serializes it, fetch POSTs JSON, truncates error text, and casts successful JSON to generic T."
+      ],
+      "currentBehavior": "One generic helper handles open and close and trusts caller-selected response types. It has no schema, redaction, deadline/cancel, response bound, or pre/post mutation distinction.",
+      "problem": "Generic type erases action/result/error/observation associations and permits malformed/secret-bearing payloads. Error text loses HTTP/protocol evidence and arbitrary JSON may be treated as acknowledgement.",
+      "targetModel": "Replace generic post<T> with provider-declared action leaves whose request/response/error schemas are exact and independently discoverable. Open and close may each have a native request schema; actions without a declaration are not represented in the provider tree.",
+      "pureTransitions": [
+        "Declared native request + provider schema -> Result<SerializedRequest, SerializationFailure>; enforce canonical serialization, redaction, and bounds.",
+        "HTTP response + declared ack/error schema -> Result<RelayerAck | ProviderError, ProtocolFailure>; decode before exposing lookup.",
+        "Transport result + effect phase -> unsent failure before POST, Unknown after crossing POST unless native no-mutation evidence proves otherwise."
+      ],
+      "effectBoundary": "HTTP is a scoped provider Effect with timeout/cancel/size/endpoint policy. Serialization, decoding, digest, and phase classification are pure; helper owns no retries.",
+      "durability": "Persist redacted request digest/schema/version and bounded evidence only for controlled effects; use sealed references for signatures/bytes. Query leaves retain their own finite response evidence.",
+      "errors": [
+        "SerializationFailure -> no POST.",
+        "Pre-POST rejection -> known unsent failure; post-boundary non-2xx remains Unknown absent provider proof.",
+        "TransportUnknown -> Unknown/observation for sent effect.",
+        "AckSchemaViolation -> retain the sent effect for reconciliation.",
+        "ResponseTooLarge -> bounded provider failure."
+      ],
+      "preservedBehavior": [
+        "JSON content type and documented endpoint payloads remain.",
+        "Bounded diagnostics remain, but structured status/code/digest is authoritative."
+      ],
+      "replacementSteps": [
+        "Add open/close schema-indexed provider leaves and delete post<T>.",
+        "Add transport/redaction/phase policy at the effect boundary.",
+        "Migrate callers to typed acknowledgements, errors, and observations."
+      ],
+      "verificationCases": [
+        "Malformed request causes no POST.",
+        "Connection loss after send yields Unknown with digest retained.",
+        "Ack without required lookup fails schema decoding.",
+        "Oversized error body remains bounded."
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "The generic POST helper is replaced by provider-declared request/response/error schemas; K03/K07 preserve adapter implementation freedom, and K08 adds phase barriers only for controlled mutation leaves.",
+      "contractAnchors": [
+        "K03",
+        "K07",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-09A529447A",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/types.ts:8-22: LeverupBrokerConfig has network, optional id/label, and raw 0x-prefixed privateKey; comments warn that the key controls wallet funds.",
+        "services/uta/src/domain/trading/brokers/others/leverup/LeverupBroker.ts:83-95: legacy schema accepts privateKey as string and casts it after parsing."
+      ],
+      "currentBehavior": "Public config carries full private key and AccountId/AccountScope are not explicit. Key is parsed only for syntax before deriving viem account.",
+      "problem": "Secret material crosses config/public boundaries and identity can become coupled to whichever key is pasted. No rotation, permissions, authorization evidence, or explicit subAccountId exists.",
+      "targetModel": "Parse a non-secret Leverup connection intent containing AccountId, network intent, CredentialRef, and optional requested SubAccountId. Resolve explicit AccountScope and derive each declared provider query/effect leaf with independent availability evidence; missing evidence blocks its handler but does not turn a supported capability into structural absence, and a credential never implies a complete broker action tree.",
+      "pureTransitions": [
+        "Connection intent + account-directory/credential evidence -> Result<VerifiedAccountScope, ConfigFailure>; AccountScope is explicit even for one wallet.",
+        "CredentialRef rotation -> new credential generation with stable AccountId/scope/history.",
+        "Verified scope + network/provider evidence -> provider capability tree with independent data and controlled-effect leaves."
+      ],
+      "effectBoundary": "Config parsing is pure. Secret retrieval/derivation/authorization and Layer acquisition are Effects; key bytes remain private. Public reads may be available without signer capability.",
+      "durability": "Persist AccountId/SubAccountId, CredentialRef version, network identity, and generation; never key. Effect records retain their historical scope while data observations remain readable.",
+      "errors": [
+        "ConfigSchemaFailure -> reject config.",
+        "CredentialUnavailable -> mark dependent write leaves unavailable without unsafe fallback.",
+        "TraderAgentUnauthorized -> dependent write leaves are unavailable/authorization-hidden; public read leaves remain distinct.",
+        "SubAccountRequired/UnknownScope -> reject unscoped account effect."
+      ],
+      "preservedBehavior": [
+        "live/testnet and display label remain configurable.",
+        "Valid wallet still derives same trader address, with custody behind ref."
+      ],
+      "replacementSteps": [
+        "Replace privateKey with CredentialRef.",
+        "Add explicit AccountId/SubAccountId and provider evidence.",
+        "Migrate factory/preset/logging/tests away from raw key."
+      ],
+      "verificationCases": [
+        "Rotation preserves AccountId and effect history.",
+        "Unauthorized wallet has no write leaf while data reads can remain available.",
+        "Missing subaccount yields ScopeRequired.",
+        "Serialized intent/plan contains no private key."
+      ],
+      "openQuestions": [],
+      "contractDisposition": "reframed",
+      "contractRationale": "Network and credential config remain boundary inputs; K02/K07 derive only the declared read/write leaves for the resolved scope, with no assumption that a credential grants every broker action.",
+      "contractAnchors": [
+        "K02",
+        "K03",
+        "K07",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-B24803E3AD",
+      "assessment": "designed",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/types.ts:24-36: NetworkConstants contains raw chainId, rpcUrl, five contract addresses, relayerBase, and readerBase without health, deployment version, token metadata, feed catalog, or jurisdiction."
+      ],
+      "currentBehavior": "NetworkConstants is a raw bag of values; it cannot express whether RPC, services, contracts, and catalog form one coherent deployment or which capabilities are reachable.",
+      "problem": "A chainId/address string does not grant write authority or bind token decimals, EIP domain, market rules, and account scope. Components can be stale or mixed across networks.",
+      "targetModel": "Decode raw NetworkConstants into a candidate, then derive independent provider leaves from a VerifiedNetworkDescriptor carrying NetworkIdentity, chain, endpoint identities, contracts/tokens, catalog/schema revisions, and connection generation. Read reachability is not funded write readiness.",
+      "pureTransitions": [
+        "Raw constants -> Result<NetworkDescriptorCandidate, ConfigDecodeFailure>; validate URI/address/chain shapes.",
+        "Candidate + RPC/contract/catalog/service evidence -> Result<VerifiedNetworkDescriptor, NetworkCoherenceFailure>.",
+        "Descriptor + selected provider leaf -> capability availability; each leaf carries its own resource/effect requirements."
+      ],
+      "effectBoundary": "Parsing/coherence checks are pure after boundary decode; RPC/code/endpoint/catalog/metadata probes are scoped Effects. Health transitions do not mutate history.",
+      "durability": "Persist descriptor checksum/version, NetworkIdentity, endpoint/contract/token/catalog/schema revisions, and generation with retained observations and controlled effects.",
+      "errors": [
+        "NetworkCoherenceFailure -> dependent leaves unavailable.",
+        "EndpointUnreachable -> mark only the dependent declared capability unavailable.",
+        "DeployedVersionUnknown or AddressNetworkMismatch -> no affected write leaf."
+      ],
+      "preservedBehavior": [
+        "RPC/Diamond/OneClickAgent/USDC/LVUSD/WMON/relayer/reader remain represented.",
+        "Healthy RPC remains useful query evidence, not complete readiness."
+      ],
+      "replacementSteps": [
+        "Replace raw NetworkConstants at the public boundary.",
+        "Probe independent resource identities before publishing leaves.",
+        "Bind revisions/checksums to selected effect plans and retained observations."
+      ],
+      "verificationCases": [
+        "Cross-network contract produces coherence failure.",
+        "Relayer down with RPC up preserves independent data reads.",
+        "Descriptor revision invalidates only dependent new effects.",
+        "Persisted checksum recreates historical network evidence."
+      ],
+      "openQuestions": [
+        "Deployment bytecode/version evidence is not in type declaration."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "Raw network constants remain candidates; K02/K07 require each provider leaf to carry its own endpoint and availability evidence, separating data reach from controlled write readiness.",
+      "contractAnchors": [
+        "K02",
+        "K05",
+        "K07",
+        "K08"
+      ]
+    },
+    {
+      "id": "MAP-7DDADCCAD1",
+      "assessment": "blocked-on-evidence",
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/brokers/others/leverup/types.ts:38-61: NETWORK_CONSTANTS hardcodes live/testnet chain/RPC/contracts and uses the same production relayerBase and readerBase for both.",
+        "services/uta/src/domain/trading/brokers/others/leverup/reader-client.ts:4-7: comments say testnet should use api-testnet.leverup.xyz while constants provide production reader base."
+      ],
+      "currentBehavior": "Live uses chain 143/production services; testnet uses chain 10143/testnet contracts/RPC but still production relayer/reader URLs. No startup check proves endpoint environment coherence.",
+      "problem": "Testnet credentials may send toward production service or read wrong account data. Wrong endpoint can reject, mislead, or time out after signing; this is a security/reconciliation boundary.",
+      "targetModel": "Use independent live/testnet endpoint descriptors with explicit service-environment identity. Until chain 10143, reader/relayer, contracts, catalog, and domain all verify together, testnet dependent leaves—especially writes—remain unavailable; production URLs are never fallback.",
+      "pureTransitions": [
+        "Network tag + endpoint/chain/service evidence -> Result<VerifiedDeploymentDescriptor, EnvironmentMismatch>; compare chain, service environment, contracts, and schema/domain.",
+        "Descriptor + selected query/effect declaration -> per-leaf availability; queries may be Partial/Unavailable while writes remain unavailable/non-executable.",
+        "Health event -> pure availability transition; unknown never switches endpoint."
+      ],
+      "effectBoundary": "URI/coherence checks are pure after boundary decode; RPC/HTTP/service probes are Connection Effects. Endpoint is fixed by NetworkIdentity and any selected effect plan.",
+      "durability": "Persist environment identity, endpoint/deployment/catalog/schema evidence, and generation with observations/effect plans. A testnet effect never replays to live.",
+      "errors": [
+        "EnvironmentMismatch -> dependent leaves unavailable.",
+        "EndpointUnavailable -> mark only the dependent declared data/effect leaf unavailable.",
+        "CrossNetworkResponse -> discard and retain evidence.",
+        "PossibleProductionLeak -> stop affected effect and create security/recovery evidence."
+      ],
+      "preservedBehavior": [
+        "Live/testnet constants remain configuration candidates only; even a live-tagged record requires verified chain, deployment, service, and catalog identity before write capability.",
+        "live/testnet tags remain but do not alone authorize endpoint selection."
+      ],
+      "replacementSteps": [
+        "Obtain verified testnet service endpoints/environment evidence.",
+        "Split endpoint descriptors and remove shared production assignment.",
+        "Probe chain/service/contracts/token/catalog before publishing dependent leaves.",
+        "Prevent endpoint switching after an effect crosses DispatchStarted."
+      ],
+      "verificationCases": [
+        "Testnet config with production endpoint is rejected before signer.",
+        "Live endpoint reports chain 143/live identity.",
+        "Testnet chain observed through live endpoint yields mismatch.",
+        "Lost response retains original endpoint/network for observation."
+      ],
+      "openQuestions": [
+        "Correct testnet URLs/service evidence are absent and block testnet writes."
+      ],
+      "contractDisposition": "reframed",
+      "contractRationale": "Testnet endpoint divergence remains an empirical availability blocker; K02/K07 make the network-specific leaves unavailable rather than falling back to production or fabricating capabilities.",
+      "contractAnchors": [
+        "K02",
+        "K07",
+        "K08",
+        "K09"
+      ]
+    }
+  ],
+  "crossGroupContracts": [
+    "Instrument and market-data boundary: composition-contract.md#K02-K05; Leverup publishes only declared Instrument/market-data leaves with fixed CapabilityDescriptor metadata, explicit Public scope for public data, and no account default or closed action inventory.",
+    "Account facts and controlled effects: composition-contract.md#K04,#K08; Leverup CashObservation/PositionObservation require explicit AccountScope, while a selected open/close effect pins units, CurrencyMetadata, price evidence, and before-image without making ordinary reads transactional.",
+    "Provider schema boundary: composition-contract.md#K01-K03,#K07; Leverup declares exact input/output/error schemas and native extensions per leaf, with RuntimeSchemaCodec at the UTA boundary and adapter-private SDK/protocol internals.",
+    "EIP-712 and native identity: composition-contract.md#K07-K08; Leverup open/close schema/domain/version and DispatchId/AttemptId are fixed before signing, and no rejection/Unknown result changes schema or native identity.",
+    "Data delivery: composition-contract.md#K05-K06; Hermes and REST pulls return finite typed results, any future push is a resource-scoped stream with lifecycle/backpressure, and neither uses order approval, WAL, or compensation.",
+    "Relayer outcome: composition-contract.md#K07-K10; an action-specific acknowledgement is not a fill, possible post-boundary mutation is Unknown, and only the affected account-scoped effect enters durable observation/recovery.",
+    "Trigger/review boundary: composition-contract.md#K09-K10; a source event is evidence rather than authority, and ReturnToAgent retains an unsent Leverup effect with durable review/outbox and explicit disposition but creates no broker dispatch.",
+    "Network/credential boundary: composition-contract.md#K02,#K07-K09; endpoint/environment, credential, and AccountScope evidence independently derive dependent leaves; public data need not carry a fabricated account and credential rotation cannot change historical effect identity.",
+    "Verification boundary: composition-contract.md#K12; experiments must prove schema-driven discovery, structural absence, finite pull/stream distinction, pre-handler rejection, and no-dispatch ReturnToAgent/duplicate-event behavior without claiming native guarantees absent evidence."
+  ],
+  "additionalFindings": [
+    "LeverupBroker.ts:216-227 仅接受 MKT，非 MKT 直接失败且未知 pair/缺 quantity 也在签名前失败；该行为应转成只发布有证据的 Leverup open leaf 与 typed validation，不能把其他 Order 变体或通用 provider 行为伪装成已支持。",
+    "LeverupBroker.ts:231-255 先取 Pyth price，再按 qty*price 假设 quote=USD、leverage=1 计算 amountIn，并把 tpsl 的 stopLoss/takeProfit 直接写入 native 数值；Leverup open leaf 必须保留 Notional/Units、QuoteConvertedUnits、报价 precondition、ProtectionSpec 与显式 native support/absence，不能默默保留一倍杠杆假设。",
+    "LeverupBroker.ts:319-325 modifyOrder/cancelOrder 固定返回 unsupported；目标 provider tree 不发布这两个叶子，不能把 cancel-and-replace 当作 cancel 成功，也不要求其他 provider 提供空实现。",
+    "LeverupBroker.ts:327-374 closePosition 忽略 quantity，查到第一条 pairBase 匹配的 OPEN position 后整仓签 close；只有证据支持的 whole-close leaf 可用，partial 输入必须显式 unavailable，不能静默丢 quantity。",
+    "LeverupBroker.ts:378-414 getAccount 用 USDC 现金加 margin，并仅扣 funding/holding，open/execution fee 与真实 PnL 未建模；Account/position data projections 只能使用有单位/as-of 的 account observations，缺失费用/PnL 应为不完整或待估值，不可继续输出伪精确净值。",
+    "LeverupBroker.ts:416-448 getPositions 遇未知 pair 静默 continue，marketPrice 使用 entryPrice，marketValue 使用 margin 且 unrealized/realized PnL 为零；目标 account position projection 必须保留 UnknownInstrument 与 valuation uncertainty，不能以空结果或 entry price 冒充市价。",
+    "LeverupBroker.ts:450-492 orderTracking 仅存在进程内，getOrder status 网络异常时保留旧状态；持久化 effect dispatch/RemoteObservation 后，重启须能用 opaque lookup descriptor 查询，网络异常须返回 Unknown 而不是隐藏在旧 Submitted 状态。",
+    "LeverupBroker.ts:494-518 getQuote 把 Pyth mid 同时作为 bid/ask，getMarketClock 恒定 isOpen=true；public Quote 应标记 single-source/mid-only，SessionPolicy 不得由恒真 market clock 代替，交易时段能力需显式验证。",
+    "LeverupBroker.ts:522-527 只宣称 CRYPTO_PERP + MKT，尽管 pairs 含 forex/stock/commodity；public Instrument data 可保留类别事实，但交易叶子必须按 InstrumentDescriptor 与网络/账户证据逐项派生，类别列表不能暗示可交易。",
+    "LeverupBroker.ts:535-546 resolveNativeKey 对未知 symbol 合成 CRYPTO_PERP Contract；public Instrument resolution 必须返回 InstrumentNotFound/Unavailable 并保留证据，删除 synthetic identity 以免交易解析绕过 capability absence。",
+    "LeverupBroker.ts:551-566 _account、_setSchemaVariant、_fetchOpenPositionsRaw 暴露 credential/native/schema/test hooks；迁移后这些不应成为公共运行面，测试使用 scoped fake services、Public/Account scope fixtures 与 redacted observations。"
+  ]
+}

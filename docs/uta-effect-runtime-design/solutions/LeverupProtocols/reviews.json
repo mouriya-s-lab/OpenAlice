@@ -1,0 +1,214 @@
+{
+  "group": "LeverupProtocols",
+  "designBasis": "capability-composition-v1",
+  "analysesSha256": "7c3b97542c6f8453e3d04beb178162b411342f02b99de8dfd3088fa90ffafb69",
+  "designSha256": "1b79d6b2f7c4b85f1020fe14523e63f90036170a16653812869c6cd27417d10b",
+  "contractSha256": "73f5235ae86d3f1c9038dfd214e7207cdfb1833be7bc369f628d7d3f9017dd4f",
+  "entries": [
+    {
+      "id": "MAP-63F62A28BF",
+      "verdict": "accepted",
+      "reason": "decimals.ts exposes unscoped 10dp quantity, 18dp price, and 6dp USDC candidates, while LeverupBroker applies them broadly. The target correctly makes scales field- and instrument-qualified, preserves exact conversion and revision provenance, and marks missing collateral/product evidence unavailable before an effect; the non-USDC and high-leverage scale obligation remains empirical in design §9."
+    },
+    {
+      "id": "MAP-93BB15270F",
+      "verdict": "accepted",
+      "reason": "decimals.ts uses Decimal ROUND_DOWN without unsigned-width checks. The target makes parsing, scale, signedness, width, and rounding a provider-specific codec, so precision loss, negative unsigned values, malformed decimals, and overflow fail before signing while legacy truncation remains only an explicitly evidenced policy."
+    },
+    {
+      "id": "MAP-CA68AA9D2A",
+      "verdict": "accepted",
+      "reason": "weiToDecimal accepts a caller-selected bare scale and returns an unqualified Decimal. The proposed tagged NativeIntegerField decoder preserves field, instrument, currency, source, and revision before producing Quantity, Price, or Money, and keeps REST/RPC decoding outside order transaction state."
+    },
+    {
+      "id": "MAP-B6898CEF97",
+      "verdict": "accepted",
+      "reason": "qtyToWei/weiToQty hard-code ten decimals and do not bind pair identity or uint128 limits. The target retains that convention only for an evidenced quantity field, carries InstrumentId and catalog revision, and leaves an unknown pair-base as Partial/Unavailable instead of manufacturing a tradeable quantity."
+    },
+    {
+      "id": "MAP-EB598077BB",
+      "verdict": "accepted",
+      "reason": "priceToWei/weiToPrice hard-code 18dp and the adjacent Pyth path first converts oracle integers through Number. The target requires exact PriceObservation, quote/feed identity, freshness/confidence policy, and declared native width before effect preparation; price-policy thresholds remain provider evidence rather than an invented default."
+    },
+    {
+      "id": "MAP-98D8B226B2",
+      "verdict": "accepted",
+      "reason": "LeverupBroker uses USDC and six decimals for amountIn while the helper itself lacks token identity, buying-power evidence, and uint96 enforcement. The target separates Account cash reads from collateral composition, requires matching CurrencyMetadata and network, and retains LVUSD/non-USDC acceptance as an empirical leaf-specific gate without making balance retrieval transactional."
+    },
+    {
+      "id": "MAP-A8F11986D4",
+      "verdict": "accepted",
+      "reason": "eip712.ts exports nested and flat trees while LeverupBroker keeps a mutable schemaVariant and may flip after rejection. The target treats the schema as an immutable candidate, retains the declared write descriptor with SchemaEvidenceUnavailable until deployment evidence exists, and forbids schema fallback after rejection, timeout, or Unknown; canonical EIP and relayer acceptance remain empirical."
+    },
+    {
+      "id": "MAP-351C6A94E7",
+      "verdict": "accepted",
+      "reason": "The eip712 native interfaces are exported as permissive address-like strings and bigint values, not runtime-validated UTA records. The target keeps those records adapter-private, validates addresses, bytes32, unsigned widths, deadlines, and scope at the provider boundary, and exposes only decoded schemas plus bounded sealed references."
+    },
+    {
+      "id": "MAP-73F74DC466",
+      "verdict": "accepted",
+      "reason": "buildDomain copies chain and verifying address but does not establish that RPC, network, and deployed OneClickAgent agree. The target derives an immutable VerifiedEip712Domain from independent deployment evidence and invalidates a dependent effect on mismatch without recomputing a different domain during retry."
+    },
+    {
+      "id": "MAP-518E08C180",
+      "verdict": "accepted",
+      "reason": "The source selects nested signing because of an unverified documentation default. The target gives nested one exact provider schema only when a known vector/deployment accepts it, otherwise retains the descriptor as unavailable with no handler and never falls back to flat; the nested primary-type and zero-protection questions stay empirical."
+    },
+    {
+      "id": "MAP-6E2E6F9904",
+      "verdict": "accepted",
+      "reason": "The flat map is a second native type tree selectable per call, which could change the signed identity after an uncertain attempt. The repaired target makes flat a distinct version candidate or historical decoder, structurally absent when unsupported, while allowing a separately evidenced canonical nested version to execute; no alternate POST follows a possible mutation."
+    },
+    {
+      "id": "MAP-A9DB1F677B",
+      "verdict": "accepted",
+      "reason": "Close signing currently accepts positionHash/deadline without scoped observation, revision, or durable effect identity. The target requires a declared close leaf over ScopedPositionRef, explicit whole/partial semantics, and one evidenced schema; absent evidence leaves the descriptor unavailable rather than silently turning quantity loss into whole close."
+    },
+    {
+      "id": "MAP-12314DC5A5",
+      "verdict": "accepted",
+      "reason": "eip712.ts derives salt from Date.now and Math.random with no restart-stable relation to the logical action. The target persists DispatchId/AttemptId, prepared digest, schema/network/scope, and any required CSPRNG salt after durable planning, so Unknown recovery reuses the original identity instead of generating a duplicate."
+    },
+    {
+      "id": "MAP-2D927BE0BD",
+      "verdict": "accepted",
+      "reason": "signOpenPosition accepts caller-selected schema, raw native message, and PrivateKeyAccount. The target narrows signing to a prepared Leverup effect, immutable schema/domain, dispatch identity, and scoped signer capability, returning redacted typed metadata while keeping keys and account objects private."
+    },
+    {
+      "id": "MAP-6D6A28953D",
+      "verdict": "accepted",
+      "reason": "signOpenPosition combines domain construction, schema selection, native construction, and signing, and returns only a signature. The target now separates pure compilation from scoped signing, records DispatchPlanned before signing, records DispatchStarted only after the pre-POST revision/lease/CAS barrier, and classifies signer failures without exposing a universal action interpreter."
+    },
+    {
+      "id": "MAP-CAE8A402AD",
+      "verdict": "accepted",
+      "reason": "The close helper has no proof that positionHash belongs to a current account-scoped observation and no durable association for an interrupted POST. The target compiles one verified close schema from a scoped revisioned position, binds digest/deadline/effect identity, and routes post-boundary uncertainty to observation/recovery rather than alternate signing."
+    },
+    {
+      "id": "MAP-14017B6DD3",
+      "verdict": "accepted",
+      "reason": "accountFromPrivateKey returns a reusable account from only a syntactically prefixed key. The target moves retrieval, derivation, and Trader Agent authorization behind CredentialRef and ScopedSignerCapability, marks dependent write leaves unavailable on credential failure, and preserves AccountId/history across rotation without disabling independent reads."
+    },
+    {
+      "id": "MAP-7B2ED6A111",
+      "verdict": "accepted",
+      "reason": "index.ts exports only the legacy IBroker class/config, leaving credential, transport, and in-memory state reachable through the old surface. The target's provider barrel exposes a descriptor/tree, exact per-leaf schemas, configuration codec, and scoped resources; missing evidence marks only the declared leaf unavailable, while unsupported Modify/Cancel capabilities remain structurally absent."
+    },
+    {
+      "id": "MAP-6528AEB1B4",
+      "verdict": "accepted",
+      "reason": "LeverupPair combines display labels, pairBase, Pyth IDs, leverage, and a closed four-value category union without network or revision identity. The target models an immutable InstrumentDescriptor with provider-extensible asset class, explicit policy facts, and independent Public/Account scope and availability, so category metadata cannot imply trading support."
+    },
+    {
+      "id": "MAP-D33182231F",
+      "verdict": "accepted",
+      "reason": "pairs.ts advertises only 20 of 23 documented entries and includes placeholder pairBase addresses. The target preserves those candidates as versioned catalog evidence, returns public resolution as Partial/Unavailable, and withholds only the executable trading-effect handler; it does not synthesize Contract identities, and catalog completeness remains empirical."
+    },
+    {
+      "id": "MAP-ACD640430F",
+      "verdict": "accepted",
+      "reason": "TESTNET_PAIRS aliases MAINNET_PAIRS although network constants use testnet contracts, so mismatch is discovered too late. The target keeps independent network/catalog bindings, marks declared testnet leaves unavailable until all identities cohere, and never falls back to mainnet data or endpoint semantics; testnet deployment evidence remains retained."
+    },
+    {
+      "id": "MAP-902BBDA309",
+      "verdict": "accepted",
+      "reason": "pairs.ts exposes mutable arrays and case-sensitive symbol lookup returning undefined. The target uses an immutable revisioned snapshot and an explicit LeverupSymbolPolicyV1 to return typed Instrument resolution results, with public query evidence separated from any effect capability and no synthetic contract fallback."
+    },
+    {
+      "id": "MAP-6690E83E34",
+      "verdict": "accepted",
+      "reason": "pairBase lookup is textual and case-insensitive without address, deployment, feed, token, network, or revision validation, and unknown values can be silently skipped downstream. The target binds a branded PairBaseId to an evidenced InstrumentDescriptor and preserves Unknown/Conflicting rows as Partial data rather than creating an effect identity."
+    },
+    {
+      "id": "MAP-970DB739F5",
+      "verdict": "accepted",
+      "reason": "pyth.ts combines optional parsed entries and binary bytes in one raw interface and casts arbitrary JSON. The target separates `market-data.pyth.updates` from `market-data.pyth.price`, validates a versioned Hermes envelope and exact requested feed, and permits binary evidence only for a declared native-update consumer, not as a quote."
+    },
+    {
+      "id": "MAP-C5F7182D33",
+      "verdict": "accepted",
+      "reason": "fetchPythUpdateData accepts any nonempty feed array, performs uncancelled global fetch, and returns raw response data. The target's `market-data.pyth.updates` leaf is a finite scoped pull with canonical FeedSet, bounded response/cancellation policy, Partial/Unavailable coverage, and frozen selected evidence; its failure never enters order approval or compensation."
+    },
+    {
+      "id": "MAP-6966FD8244",
+      "verdict": "accepted",
+      "reason": "fetchPythPrice trusts parsed[0], converts through Number/Math.pow, and projects one Pyth mid as both quote sides in LeverupBroker. The target requires exact PriceObservation and policy checks, explicitly labels the legacy projection SingleSourceMid, refuses invented bid/ask, and keeps price pulls separate from dispatch; age/confidence/exponent policy remains evidence-bound."
+    },
+    {
+      "id": "MAP-A94BD9AD27",
+      "verdict": "accepted",
+      "reason": "reader-client.ts exposes PublicClient and a minimal ABI, allowing arbitrary SDK reads outside the intended lifecycle. The target hides SDK objects behind independent typed read leaves, uses Public scope for public data and explicit AccountScope for account balance, and keeps transport/reconnect effects out of order approval."
+    },
+    {
+      "id": "MAP-4996C21AA2",
+      "verdict": "accepted",
+      "reason": "reader-client.ts casts REST rows directly, retaining raw status strings and numeric timestamps without unit, hash, token, or scope decoding. The target produces PositionObservation with Open/Closed/Unknown variants, preserved closeInfo and unresolved provenance, and only lets a complete scoped observation serve as a selected close before-image."
+    },
+    {
+      "id": "MAP-6CE514231C",
+      "verdict": "accepted",
+      "reason": "The reader client fetches page zero, filters OPEN rows, and has no completeness marker despite provider counters. The target uses a finite ListingResult with Complete/Partial/Unavailable and verified cursor boundaries, retains read checkpoints, and does not treat an incomplete empty page as account absence or transaction state."
+    },
+    {
+      "id": "MAP-D8D93BC61D",
+      "verdict": "accepted",
+      "reason": "The broker constructs a long-lived RPC client while REST uses separate global fetch, so reachability and generations are conflated. The target derives independent RPC, reader, Hermes, and relayer leaves with per-leaf NetworkIdentity/generation and explicit Public/Account scope; reconnect cannot rewrite observations or run order recovery."
+    },
+    {
+      "id": "MAP-68B42E34DB",
+      "verdict": "accepted",
+      "reason": "fetchOpenPositions requests only page zero and OPEN status, discarding CLOSED, Unknown, closeInfo, and pagination evidence. The target retains all statuses and pages as account data, derives an open view only from Complete evidence, and reserves recovery semantics for a possible sent close rather than a reader timeout."
+    },
+    {
+      "id": "MAP-1F4643BAB5",
+      "verdict": "accepted",
+      "reason": "getBalance returns a bare bigint for configured USDC with no scope, token/network metadata, block reference, or typed failure. The target returns a scoped CashObservation with Money and BlockReferenceUnavailable when necessary, preserves exact bigint value, and lets only a selected effect consume the observation as a precondition."
+    },
+    {
+      "id": "MAP-2B8DD3E4BD",
+      "verdict": "accepted",
+      "reason": "Token decimals are read separately but amount conversion still assumes six decimals, so configured and observed metadata can diverge. The target makes CurrencyMetadata versioned by token/network/revision, blocks dependent preparation on mismatch or staleness, and keeps ordinary metadata cache failure outside trading recovery."
+    },
+    {
+      "id": "MAP-D8B1941723",
+      "verdict": "accepted",
+      "reason": "relayer-client.ts models status with executed/success booleans and casts arbitrary JSON, which cannot distinguish pending, rejection, fill, or unknown reachability. The target decodes action-specific messages and uses Confirmed/Rejected/StillWorking/Unknown only for a known controlled effect, retaining opaque lookup and evidence instead of treating ack as fill."
+    },
+    {
+      "id": "MAP-339E61F930",
+      "verdict": "accepted",
+      "reason": "sendOpenPosition/sendClosePosition POST through a generic helper and return inputHash without durable planning, a pre-POST writer barrier, or restart-safe observation. The target requires DispatchPlanned before signing and DispatchStarted immediately before POST, preserves the original digest/lookup after response loss, and classifies post-boundary ambiguity as Unknown rather than retrying a new salt."
+    },
+    {
+      "id": "MAP-25EDC2AA39",
+      "verdict": "accepted",
+      "reason": "getStatus uses only an inputHash URL and a raw JSON cast, with no timestamp, action association, or evidence classification. The target defines an exact status input with provider-lookup scope, adds AccountScope only when a controlled effect supplies it, and keeps standalone lookup evidence distinct from Unknown/Recovery for a possible sent mutation."
+    },
+    {
+      "id": "MAP-96515A5FA2",
+      "verdict": "accepted",
+      "reason": "LeverupBroker owns an in-memory timer and synthesizes executed=false after thirty seconds, so a crash or timeout can be mistaken for rejection. The target moves polling to a durable observation job with explicit policy, lease/checkpoint, and effect-specific recovery; timer expiry remains StillWorking/Unknown evidence and never authorizes redispatch."
+    },
+    {
+      "id": "MAP-A283DD30CA",
+      "verdict": "accepted",
+      "reason": "relayer-client.ts post<T> accepts unknown payloads and trusts caller-selected response types, erasing action, phase, and error associations. The target replaces it with independently discoverable open/close leaves whose request/ack/error schemas are exact, bounded, redacted, and phase-aware; undeclared actions have no handler."
+    },
+    {
+      "id": "MAP-09A529447A",
+      "verdict": "accepted",
+      "reason": "types.ts and LeverupBroker expose raw privateKey config and do not model AccountId, SubAccountId, authorization, or rotation. The target parses non-secret connection intent, resolves explicit AccountScope, derives each leaf's independent availability, and keeps credential failure from hiding unrelated public reads or changing historical effect identity."
+    },
+    {
+      "id": "MAP-B24803E3AD",
+      "verdict": "accepted",
+      "reason": "NetworkConstants is only a raw chain/address/URL bag, and a healthy RPC does not prove service, catalog, contract, or write coherence. The target creates a candidate then a VerifiedNetworkDescriptor with independent endpoint and deployment evidence, so read reachability cannot fund write readiness and revisions invalidate only dependent new effects."
+    },
+    {
+      "id": "MAP-7DDADCCAD1",
+      "verdict": "accepted",
+      "reason": "types.ts pairs testnet chain/contracts with production reader and relayer URLs, with no environment coherence check. The target requires independent live/testnet endpoint descriptors, keeps testnet dependent leaves unavailable until chain/service/catalog/domain evidence agrees, fixes the selected network across dispatch and recovery, and never uses production fallback; correct testnet URLs remain empirical."
+    }
+  ]
+}

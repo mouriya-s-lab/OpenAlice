@@ -1,0 +1,776 @@
+{
+  "group": "Polling",
+  "designBasis": "capability-composition-v1",
+  "entries": [
+    {
+      "id": "MAP-A173AC5D0E",
+      "assessment": "designed",
+      "contractDisposition": "reframed",
+      "contractRationale": "本条描述的是测试边界，不是一个 provider SDK。受控下单 fixture 仍需 K08 的提交闸门、唯一身份和恢复证据；订单观察则只消费 provider 声明的精确叶子。InProcessRetainedLedger 与 DurableMockVenue 是测试拥有的两条重启证据 seam，不把 MockBroker 的行为升级为原生 venue 保证，也不暗示全局 broker action map。",
+      "contractAnchors": [
+        "K01",
+        "K03",
+        "K07",
+        "K08",
+        "K12"
+      ],
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/order-sync-poller.spec.ts:1-13: the fixture imports Vitest, IBKR Order, UnifiedTradingAccount, MockBroker, and the legacy poller; createUTA constructs new MockBroker() and new UnifiedTradingAccount(broker) and returns both handles.",
+        "services/uta/src/domain/trading/brokers/mock/MockBroker.ts:1-17: MockBroker is explicitly an in-memory exchange simulator whose control-panel state is held in process memory."
+      ],
+      "currentBehavior": "每个测试直接拥有一个内存 MockBroker 和一个 UnifiedTradingAccount，并从 legacy order-sync-poller 导入 timer/tick 实现；fixture 没有 SQLite journal、Effect Layer、durable job/lease store、projection checkpoint 或可在 worker 重启后继续的 broker boundary。",
+      "problem": "这种 fixture 只能证明同一进程中 Git commits、MockBroker 内存订单和 poller 方法调用的结果，不能证明 writer commit 先于 broker mutation、lease epoch fencing、worker 重启后的 unknown reconciliation，或者 Git 之外的 authority。MockBroker 与 UTA 同时被 fixture 创建也会让一次进程重启自然清空远端模拟状态，无法触发 first falsifier 的 broker-accepted/UTA-died 分支。",
+      "targetModel": "定义 PollingVerticalSliceFixture 作为测试边界，而不是生产 God object：它组合一个仅用于私有账户/订单事实的 AccountScope、JournalWriter+SQLite 测试库、由 provider 声明的 listing/lookup/dispatch capability leaves、DurableScheduler、ProjectionReader 与 root Scope。provider 叶子的输入、结果和领域错误由声明 schema 推导；fixture 不创建全局 ActionContractMap、完整 Broker handler 或封闭 Order 变体。公共 Candle/News/Instrument 能力若被同一测试重用，按其自身 schema 运行，不凭空附加 AccountScope。MockBroker 的远端订单 ledger 必须与可被重启的 scheduler/UTA worker 分离：InProcessRetainedLedger 只覆盖 worker/Scope 重启，DurableMockVenue 由独立 venue process 持有 durable ledger，覆盖 UTA process-kill/reopen/crash；这两者的 deterministic native identity/dedup 是 test-owned contract，不冒充 live-venue durability。",
+      "pureTransitions": [
+        "classifyRecovery(durableEffectRows, dispatchAttempts, leases, remoteObservations, now) -> NoWork | QueueUnsent | ObserveUnknown | ResumeCompensation | OperatorRequired；QueueUnsent/ResumeCompensation 只适用于受控交易效果，普通观察 job 只进入 Ready/Observe/OperatorRequired。fixture 在每次 restart 后断言分类只由 durable rows 和传入 observation 决定，不读取旧 running flag。",
+        "foldOrderObservation(events) -> OrderProjection；同一 provider order/execution identity 与 revision 重放只产生一个状态/填充事实，Git audit projection 可从同一事件折叠重建。",
+        "testScenario(placeAcknowledgement, brokerState, crashBoundary) -> expected durable state：未跨 DispatchStarted 的交易效果可 QueueUnsent，已跨边界必须 ObserveUnknown；数据观察取消只保存 observation checkpoint，不启动交易补偿，也不得把 brokerOrderId 当 TransactionId。"
+      ],
+      "effectBoundary": "fixture setup 才负责打开临时 SQLite、迁移、装配 provider capability layers、启动 supervised scheduler fibers；domain fold/classify 不做 IO。测试通过 Clock/Scope 注入确定调度和 shutdown。InProcessRetainedLedger 与 worker lifecycle 分离，DurableMockVenue 在独立进程持有 durable ledger，二者各自标明证据边界。交易测试经由 typed application/receipt handle，观察测试经由声明的 listing/lookup handler；不把 UTA 或 SDK 对象当作 authority。fixture teardown 先停止 admission/worker，再 drain writer、关闭 capability layers 与数据库，并单独关闭 DurableMockVenue。",
+      "durability": "受控交易 command 的 receipt、prepare/approval/revision、EffectJob、DispatchAttempt 与 lease 在一个 writer transaction 中落库，commit receipt 返回前不能发生 broker mutation。观察事实另存 REMOTE_OBSERVATIONS、provider schema version/fingerprint、observedAt、native order/execution identity 与 job checkpoint；这些是可重放的数据事实，不是为每个数据帧建立交易 WAL。worker restart 从 SQLite 恢复 jobs/leases/attempts，过期 lease 使用新 epoch，旧 worker late write 被 CAS 拒绝；UTA process-kill/reopen 由 DurableMockVenue 的 durable ledger 验证 broker-accepted 后的 ObserveUnknown/no-blind-retry。任何 fixture ledger 都不能作为真实 venue persistence 或 native idempotency 证据。",
+      "errors": [
+        "StorageFailure({ operation, database })：等待 receipt 的 caller 收到 typed failure，不能静默退回内存 Git。",
+        "OutcomeUnknown({ dispatchId, evidence })：模拟交易效果可能已到达 broker 后 worker 失联，测试要求生成 observe/recovery work，而不是再次 place。",
+        "CapabilityUnavailable({ scope, capability })：声明的私有 listing/lookup leaf 暂时不可用时，job 保留具名 availability/degraded 状态，不伪造空列表；结构上不存在的 leaf 不出现在 capability tree。",
+        "TestHarnessLifecycleFailure({ phase })：setup/teardown 失败必须阻止该测试声明 vertical slice 成功，并保留已提交的 journal evidence。"
+      ],
+      "preservedBehavior": [
+        "保留 MockBroker 的可控市场价格、pending limit order 和 fill/cancel 语义作为确定性远端 actor；它仍用于验证 order observation，而不是被降级为 vi.fn。",
+        "保留现有测试可观察的 order status、filled quantity 和 weighted average price 结果，但把来源改为 durable order/execution projection 和 Git audit projection。",
+        "有意删除 direct new UnifiedTradingAccount(new MockBroker()) 作为唯一 fixture 路径，因为它无法表达 scoped capability layer、journal authority 和重启边界；旧路径只保留为历史行为证据，不与新 scheduler 双写。"
+      ],
+      "replacementSteps": [
+        "先实现共享的 PollingVerticalSliceFixture，并同时提供 InProcessRetainedLedger（worker-only lifecycle）与 DurableMockVenue（独立进程/持久 ledger 的 UTA crash seam）；不要在 production source 中加入 test-only fallback。",
+        "将本 spec 的 createUTA 调用方（MAP-F6CFDCE6F2、MAP-B4499C0EF7、MAP-855D4FE105、MAP-2D60F8CF3A）迁移为 application + scheduler fixture，让 provider capability declaration 驱动各场景的精确 schema。",
+        "在 durable slice 可启动后删除对 startOrderSyncPoller 的测试 authority 依赖；legacy fixture 只保留必要的 domain behavior evidence，不能继续以旧 API 双写。"
+      ],
+      "verificationCases": [
+        "prepare/approve 后在 DispatchPlanned commit 与 broker call 之间杀 worker：重启后同一交易 job 只产生一次合法 QueueUnsent 或 ObserveUnknown 分类，InProcessRetainedLedger 没有第二个订单。",
+        "DurableMockVenue 接受 limit buy 后杀掉并重开 UTA process：SQLite 从 durable rows 恢复，原 dispatch 只生成 ObserveUnknown/observe job，按 test-owned native identity 观察到 Submitted/filled，绝不第二次 place。",
+        "两个独立 AccountScope 同时有私有订单 jobs：一个 provider leaf 返回 typed failure，另一个仍完成并写入自己的 projection；SQLite writer 不把失败污染到另一 partition。",
+        "重复启动/停止 fixture：shutdown 完成后不再有可写 worker 或未 drain receipt；强杀后的下一次启动仍从 journal 和 DurableMockVenue 恢复，而不是把空 Git 当成无工作。"
+      ],
+      "openQuestions": []
+    },
+    {
+      "id": "MAP-9A7B5853BF",
+      "assessment": "designed",
+      "contractDisposition": "reframed",
+      "contractRationale": "该 helper 只服务于一个受控 place capability 的测试，不应被写成所有 provider 都接受的 PlaceOrder 形状。K03/K04 要求由 provider 声明推导输入并保留原生扩展；K08 的 approval/WAL/dispatch identity 仍只约束交易效果，MockBroker 的递增 id 仅是 observation evidence。",
+      "contractAnchors": [
+        "K02",
+        "K03",
+        "K04",
+        "K07",
+        "K08",
+        "K12"
+      ],
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/order-sync-poller.spec.ts:15-25: placePendingLimitBuy stages a string-valued limit BUY, commits a Git message, calls push with status().pendingHash!, requires submitted[0].orderId, and returns that broker id.",
+        "services/uta/src/domain/trading/UnifiedTradingAccount.ts:844-915: legacy sync reads Git pending orders and returns a SyncResult after querying broker order state; the old push/sync path is not a durable transaction receipt.",
+        "services/uta/src/domain/trading/brokers/mock/MockBroker.ts:278-324: MockBroker allocates an in-memory mock-ord-N id and returns success/submitted for limit orders."
+      ],
+      "currentBehavior": "helper 以 `pendingHash` 作为 push 前置条件，只检查第一个 submitted result 的 orderId；它把 legacy Git commit/push 当作 place flow，并将 broker-native order id 直接暴露给后续测试。没有 commandId、transaction revision、approval binding、DispatchIdentity 或 commit-after-response recovery。",
+      "problem": "pendingHash 是 Git projection 的进程内标识，不是 transaction identity；push 返回前后若 UTA 进程死亡，helper 无法查询同一命令的 receipt，也无法区分 acknowledgement、fill 和 unknown。只取 `submitted[0]` 还会丢多 step 结果，且 MockBroker 的递增 order id 不构成 venue idempotency 证明。",
+      "targetModel": "将 helper 的返回值建模为本测试 capability 专用、可序列化的 PlaceOrderTestHandle = { commandId, transactionId, revision, receipt, stepId, dispatchId }；其中 receipt 必须是该 provider place leaf 声明推导出的精确 receipt/result schema，不是 unknown 或全局 Broker receipt；它不是全局 Order 类型全集。Place capability 的 payload/schema 由 provider 声明推导，精确保留 AccountScope、InstrumentId、decimal quantity/price、client identity 以及该 provider 合法的 limit/native fields；扩展字段通过同一声明组合进入 dispatch payload，不由内核手写互斥 order variants。PreparedPlanRecord 只保存可序列化的 plan/digest/preconditions/criterion/compensation assessment；DispatchIdentity 独立保存 transaction/step/attempt，若该 provider leaf 声明 clientOrderId 才按其 exact native schema 保存，brokerOrderId 只作为 Ack/Observation 的 native evidence。",
+      "pureTransitions": [
+        "CreateDraft(provider-declared exact place input, commandId) -> DraftReceipt；Prepare(expectedVersion, facts, policy, now) -> provider-specific PreparedPlanRecord 或 PrepareFailure，必须保留 provider leaf 的价格、数量、scope 与 capability evidence，不把未声明字段补成默认值。",
+        "Approve(bound revision,digest,expiry) -> Accepted(TransactionApproved, DispatchJobIntent)；writer commit 后才允许 Scheduler claim。重复 commandId + 同 payload -> 原 receipt，重复 commandId + 不同 digest -> IdempotencyConflict。",
+        "DispatchStarted(epoch) + provider leaf Ack/result -> Acknowledged/Executing + observation job when that leaf exposes a lookup association；Ack/result 的 input/output/error 仍由 provider exact schema 定义，若返回 native order identity 才作为 Ack/Observation evidence 保存。Observation(StillWorking|Confirmed|Rejected|Unknown) -> corresponding event/projection transition，不把 Ack 映射成 Filled。"
+      ],
+      "effectBoundary": "helper 通过 TransactionApplication/JournalWriter/Scheduler 测试 API 发该 provider capability 的 command 和驱动 worker；不调用 uta.stagePlaceOrder、uta.commit、uta.push 或 raw broker。只有 durable receipt 完成后，DispatchWorker 才调用 provider-declared typed dispatch；随后 ObserveWorker 按 provider 的 native identity/lookup schema 读取状态并写 journal。测试查询 broker id 时走 projection/receipt reader，不能把 helper 当成 broker SDK。",
+      "durability": "command receipt 的 unique key 为 (principalScope, commandId) 并绑定 payload digest；prepare/approval/revision、DispatchPlanned、EffectJob 和 DispatchStarted 必须原子写入。dispatch attempt 使用 (stepId,direction,attempt) 唯一约束和 stable idempotency identity；响应丢失时按原 commandId 查询，不重新 mint command 或 dispatch id。provider-native order id、execution id 和 retention/freshness evidence 单独持久化，不能从测试递增值推断。",
+      "errors": [
+        "ProviderInputRejected({ capability, field, reason })：provider schema/semantic constraint 在 handler 前拒绝未声明或非法字段。",
+        "IdempotencyConflict({ commandId, existingDigest, suppliedDigest })：helper caller 改用原 command 或新 commandId，不能覆写已接受交易。",
+        "ApprovalExpired({ transactionId, revision }) / RevisionConflict：停止该交易 admission 并要求重新 prepare，不能沿用 pendingHash。",
+        "BrokerRejected({ dispatchId, rejection })：记录 provider leaf 的 rejection 与 transaction step outcome，不把它转成通用 Error.message。",
+        "OutcomeUnknown({ dispatchId, evidence })：进入 Reconciling/Observe job；禁止基于缺少 orderId 再发 place。"
+      ],
+      "preservedBehavior": [
+        "保留 limit BUY 使用十进制字符串 totalQuantity=10、lmtPrice=150 的精度边界；provider codec 只在边界解析，不把 number 引入域内。",
+        "保留 helper 最终能得到 broker order identity 供后续 observation，但明确它是 native observation field，不再是 transaction identity。",
+        "有意移除 status().pendingHash 和 submitted[0] 的隐式非空假设；多 step 应返回逐 step typed outcome，空/拒绝由显式 failure 处理。"
+      ],
+      "replacementSteps": [
+        "在测试 fixture 中为该 provider place leaf 分配稳定 commandId/client identity，并以 TransactionApplication 的 CreateDraft→Prepare→Approve 调用取该 leaf 的 typed DurableReceipt；provider 原生字段随声明 schema 一起通过。",
+        "将 MAP-F6CFDCE6F2、MAP-B4499C0EF7 与 MAP-2D60F8CF3A 的 helper 调用改为读取 step/dispatch/projection，而不是调用 status().pendingHash。",
+        "删除 legacy Git push 作为测试执行入口；Git 仅由 journal events 异步重建为 audit projection，不能让 helper 继续以旧 API 双写。"
+      ],
+      "verificationCases": [
+        "同一 commandId 相同 payload 提交两次：两次返回同一 durable receipt 和同一 dispatch identity，broker ledger 只有一笔订单；该结果只证明 scheduler identity，不证明 venue idempotency。",
+        "提交成功后丢掉 HTTP/测试响应，再以 commandId 查询：得到已 commit 的 receipt 与 job；不能返回未提交并重新 place。",
+        "worker 在 DispatchStarted 后崩溃且 broker 可能已接受：重启只创建 Observe job，native order id 发现后追加单一 Ack/observation；不存在第二个 dispatch。",
+        "provider 明确 rejected 或未返回 order id：step 结果是 typed BrokerRejected/OutcomeUnknown，helper 不用非空断言伪造字符串 order id。"
+      ],
+      "openQuestions": [
+        "MockBroker 当前递增 order id 没有 venue-side idempotency；第一条测试只能验证 scheduler 的 stable identity/no-blind-retry，不能把该 mock 行为当作 native idempotency evidence。"
+      ]
+    },
+    {
+      "id": "MAP-F6CFDCE6F2",
+      "assessment": "designed",
+      "contractDisposition": "reframed",
+      "contractRationale": "本场景同时包含一个受控交易效果与其后的订单数据观察。交易部分保留 K08 的 durable intent/approval/dispatch/recovery，观察部分只使用 provider 声明的状态 schema；setMarkPrice 是 simulator control，不能变成通用 native freshness 或 execution-id 保证。",
+      "contractAnchors": [
+        "K03",
+        "K04",
+        "K05",
+        "K07",
+        "K08",
+        "K12"
+      ],
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/order-sync-poller.spec.ts:27-54: the test starts the legacy poller, places a pending limit order, asserts a first tick leaves one pending order, changes AAPL mark to 149, ticks again, stops, and checks a [sync] Git record with filled/10/149.",
+        "services/uta/src/domain/trading/brokers/mock/MockBroker.ts:554-563: setMarkPrice stores a Decimal mark and auto-matches pending limit/stop orders at the new mark.",
+        "services/uta/src/domain/trading/UnifiedTradingAccount.ts:829-915: sync uses a whole-account listing when available, confirms only listing-absent pending orders, and writes a Git sync commit after broker state reads."
+      ],
+      "currentBehavior": "在同一进程内，push 后第一 tick 通过 Git pending list 调用 sync 但 limit 仍 Submitted；`setMarkPrice('AAPL','149')` 直接改变 MockBroker 并自动填单；第二 tick 把 broker filled qty/price 写进一个 `[sync]` Git commit，测试最后检查 pending 已清空。",
+      "problem": "测试只观察 Git 和内存 broker 的最终状态，没有断言 DispatchPlanned 的 durable barrier、EffectJob lease、RemoteOutcome 或 crash-before-ack。它把 poller 的 tick 顺序当作恢复机制；若在 broker accepted 与 Git sync 之间死亡，旧测试无法判断是否重复下单。",
+      "targetModel": "把场景建模为一个 provider-declared Place capability 的受控交易效果，加上独立 order-lifecycle observation capability。Place 的 dispatch Ack 只使订单进入 Submitted projection；MockBroker.setMarkPrice 是外部 simulator actor，使下一次 provider observation 返回 Confirmed/filled snapshot；order projection 写 Filled、Fill record(quantity/price decimal) 与 audit projection。TransactionState 的终止仍由该交易声明的 criterion 决定，不能把 observation fill、数据交付和 dispatch acknowledgement 合成一个全局 tag。普通数据读取/流不经过 approval、compensation 或 order lock。",
+      "pureTransitions": [
+        "OrderObservation(provider submitted snapshot) -> StillWorking 与 durable next notBefore；first observe 对未触发的 limit order 不生成 terminal event。",
+        "OrderObservation(filled, cumulativeQty=10, avgPrice=149) + pending OrderRef -> OrderFilled event/Fill projection；decimal strings 原样通过 canonical codec，重复 provider execution identity 不重复计量。",
+        "Durable dispatch boundary + crash -> classifyRecovery = ObserveUnknown；重新观察到 filled 后完成原 step/job，不能因旧 lease expiry 生成新的 PlaceOrder。"
+      ],
+      "effectBoundary": "测试只通过 MockBroker 的 simulator-control actor 改变 mark price；ObserveWorker 通过 provider-declared observation handler 取得 typed snapshot，JournalWriter 先持久化 remote observation fact，再由 projector 更新 orders/executions/audit，并关联该次 source observation 后刷新且带 sequence/freshness 的 account/position/order snapshot。Clock 和 scheduler worker 可由 fixture 手动唤醒，但 tick 不是 authority；数据观察取消不触发交易补偿。",
+      "durability": "DispatchPlanned/EffectJob 与交易 event 在一个 SQLite commit 中写入；每次 ObserveAttempt 带 dispatch/order identity、worker epoch、observedAt 和 provider schema version。Order projection、source account/position/order snapshot 与 checkpoint 按 event sequence 原子更新；Git sync 文本只由 audit projection 生成，重放不依赖 Git hash。观察数据的 durable fact 不等于 provider 已证明的 retention/freshness。",
+      "errors": [
+        "ObservationFailure({ orderRef, cause })：保留 observation job Ready/RetryAt 与 attempt evidence，不能写 Filled 或清除 pending。",
+        "OutcomeUnknown({ dispatchId, evidence })：交易进入 Reconciling，scheduler 只调 observe。",
+        "MalformedOrderObservation({ capability, field })：停止该 observation worker/保留 redacted payload，不能按空状态结算。",
+        "ProviderFreshnessUnknown({ orderRef, evidence })：保持 Unknown/OperatorRequired，不能把 simulator timing 当作 native finality。",
+        "ProjectionFailure({ sequence, projection })：journal outcome 仍是 authority，projection 标记 lag 并可重建，不回滚已写入远端事实。"
+      ],
+      "preservedBehavior": [
+        "保留 first pass 中 order 仍 working、第二个 broker fact 使它 filled 的业务语义。",
+        "保留 filled quantity=10 与 filled price=149 以及 weighted Decimal 结果进入可查询 order/execution/audit view；不再要求字面 Git commit 作为唯一证明。",
+        "有意补上 crash-before-ack/no-blind-duplicate 检查，这是原 spec 缺失且不能被最终 fill assertion 替代的安全属性；不把该检查扩散为所有数据读取的交易事务。"
+      ],
+      "replacementSteps": [
+        "在 durable fixture 中用 application Place capability 流替代 placePendingLimitBuy 的 legacy push，记录 transaction/step/dispatch ids。",
+        "将 broker.setMarkPrice 保留为外部 simulator actor，但通过 scheduler wake/clock 推进 provider observation job；每个阶段读取 journal、job、dispatch 和 projections。",
+        "删除对 sync Git commit 是否存在的 authority 断言，改为 order/execution event 和可重建 audit projection 断言；可保留 sync 文本作为兼容展示 evidence。"
+      ],
+      "verificationCases": [
+        "limit order 尚未 crossing：一次 observation 返回 StillWorking，pending/order projection 仍 Submitted，不能提前产生 Filled event。",
+        "mark price 149 触发填单：下一个 observation 写一条 filled observation，order projection 只产生一次 Filled，quantity/price 分别为 10/149。",
+        "在 broker accepted 但 acknowledgement 未写入时终止 worker：重启后 no-blind-retry，先 observe provider native identity；若观察到 filled，只有一笔 execution。",
+        "重复投递同一 observation 或乱序旧 observation：按 provider execution identity/order revision 去重或拒绝旧版本，累计 quantity 不增加第二次；这仍不证明真实 adapter freshness。"
+      ],
+      "openQuestions": [
+        "MockBroker 的 `setMarkPrice` 是测试控制面，不证明真实 venue 的 order-status freshness 或 execution identity；真实 adapter acceptance 仍需分别取得。"
+      ]
+    },
+    {
+      "id": "MAP-B4499C0EF7",
+      "assessment": "designed",
+      "contractDisposition": "reframed",
+      "contractRationale": "源码行为只涉及账户私有订单观察的准入；UnifiedTradingAccount 把 keyless 定义为 public-data-only，而 funded readOnly 仍是 account tier，只禁止 mutation；K02/K07 要求把结构上没有的 leaf 与暂时不可用区分，K05/K08 则把普通公共数据与交易效果隔离。因此不能把 readOnly 误当作 observation absence 或全局 provider 禁能开关，也不能让健康布尔值丢掉已接受的私有工作。",
+      "contractAnchors": [
+        "K02",
+        "K05",
+        "K07",
+        "K08",
+        "K09",
+        "K12"
+      ],
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/order-sync-poller.spec.ts:56-68: despite its title, the fixture creates one normal UTA, only asserts no sync call with no pending orders, then asserts one sync call after placing a pending order; it does not create keyless or unhealthy accounts.",
+        "services/uta/src/domain/trading/UnifiedTradingAccount.ts:49-55,233-243,557-563: keyless is a public-data-only account; funded readOnly remains an account tier with readable reach and only blocks external mutation; `health` is a separate account capability state."
+      ],
+      "currentBehavior": "测试标题声称 keyless/unhealthy skip，但实际只覆盖 healthy、非 keyless UTA 的 no-pending short circuit 与 pending 后一次 sync 调用。poller 的 `uta.keyless || uta.health !== 'healthy'` 分支没有 fixture 或 durable assertion。",
+      "problem": "以 spy 是否调用 sync 作为唯一证据会把‘没有工作’、‘keyless 公共数据账户没有私有订单叶子’、‘funded readOnly 仅禁止 mutation’和‘暂时 degraded 等待恢复’混成同一个 silent skip；它也无法证明 pending work 在不健康期间没有丢失，或恢复后会继续。",
+      "targetModel": "定义 account-scoped private-order observation 的 scheduler admission decision：NoWork（durable 查询确认没有 pending/observe work）、Excluded({ reason: Keyless })（keyless public-data account 没有该私有叶子）；结构上没有声明 leaf 时从 capability tree 省略，不生成 admission outcome；声明存在但暂时不可用时用 Deferred({ reason: ConnectionUnavailable | Degraded, retryAt })/具名 availability，而不是 Excluded。funded readOnly 仍可接受私有 listing/lookup observation，但不得取得 transaction dispatch/mutation capability。Accepted(jobId) 表示已持久准入。公共 Candle/News/Instrument 查询由其自身 capability schema 决定，不附加默认 AccountScope 或 subaccount。若已有交易效果进入 RecoveryRequired，保留 Order/Account conflict exclusion 并把 owner 转给 durable RecoveryCase；只有 CAS 证明未跨 DispatchStarted 才能退休并释放 reservation。",
+      "pureTransitions": [
+        "admitAccountObservation(scope, accountMetadata, durableWork, declaredCapability, now) -> NoWork | Excluded(Keyless) | Deferred | Accepted；结果携带 scope/reason，结构缺失不是运行时空数组，funded readOnly 的 observation admission 不因其 mutation restriction 被排除。",
+        "Deferred(ConnectionUnavailable) + ConnectionRestored -> Ready(job)；Deferred 不改变 transaction/dispatch identity，也不释放仍需要的 effect conflict lock。",
+        "NoWork -> no private-order broker IO 仅在 writer/query 确认无 durable work；公共数据读取仍可独立按其 leaf policy 运行，presence of a pending order in projection 必须创建或保留 Observe work，即使当前预计没有状态转移。"
+      ],
+      "effectBoundary": "Scheduler 从 Journal/Projection reader 读取 scope-scoped private order work，向 provider connection layer 查询 reach/declared capability availability；admission outcome 写 job state/next schedule，worker 由 supervised effect fiber 执行。结构上没有 capability leaf 时根本不创建 job；测试 fault 注入发生在 provider capability boundary，而不是 mock sync 方法；keyless 与 funded readOnly fixture 通过 typed account metadata 构造，后者可观察但不可 mutation，不能借助全局 IBroker switch。",
+      "durability": "NoWork 不写伪造 completion；Deferred 的原因、availability 与 capability descriptor fingerprint 可持久化为 job/audit metadata，结构缺失或 Excluded(Keyless) 不创建伪造 job。Ready/Leased/Completed/Failed 状态遵守 lease owner+epoch+deadline；恢复扫描只重启 durable Ready/expired work，绝不从内存 getInstances 推断 pending。公共数据缓存失败不会触发交易补偿。",
+      "errors": [
+        "CapabilityUnavailable({ scope, capability })：已声明的 private-order observation leaf 暂时不可用时报告具名 availability/degraded 并保留 work；结构上未声明的 leaf 从 capability tree 省略，不生成伪造 handler 或 job。keyless scope 由 Excluded(Keyless) 表达，而不是空 listing。",
+        "ConnectionUnavailable({ scope, reach, retryAt })：保留 job 并按 typed Schedule 重试，不能影响其它 scope 或公共数据 capability。",
+        "AdmissionBackpressure({ queue, capacity, jobKind })：accepted work 不丢；调用方看到显式拒绝或等待。",
+        "RecoveryRequired({ dispatchId, residual, recoveryCaseId })：未知交易 outcome 不被 health skip 掩盖；durable RecoveryCase owner 保留 Order/Account conflict exclusion，需 observation/operator path。"
+      ],
+      "preservedBehavior": [
+        "保留真正 NoWork 时不进行私有订单 broker round-trip 的成本优化。",
+        "保留 keyless 不执行私有账户/订单 work 的安全边界；funded readOnly 可以观察其已声明的私有事实，但不能取得 transaction dispatch/mutation capability；公共数据查询仍按自身 leaf 运行，不能因为 scheduler 重构而伪造 credentials、funded account 或 private capability。",
+        "有意改掉健康检查失败时的 silent drop：对已接受 durable work 记录 Deferred/CapabilityUnavailable，并在恢复后继续；不改变独立账户可继续运行的公平性。"
+      ],
+      "replacementSteps": [
+        "把 spec fixture 拆成 no-work、keyless public-data、funded read-only、degraded/recovering、healthy pending 五种明确 AccountScope/availability 状态；公共数据 fixture 不强加账户 scope。",
+        "用 journal/job/projection state 和 provider capability call evidence 断言 admission；删除只检查 syncSpy 次数的标题与实现不一致部分。",
+        "将 poller 的 keyless/health 条件迁入 typed account-observation policy，确保它与 listing capability descriptor 共享 availability 语义，不在各 worker 复制 boolean skip。"
+      ],
+      "verificationCases": [
+        "healthy account scope 无 durable pending/observe work：scheduler 返回 NoWork，private order listing/lookup 调用数为零；不影响独立公共 data leaf。",
+        "keyless scope 有公开查询能力但没有 private-order capability：不会创建 private Dispatch/Observe job，结果包含 Excluded(Keyless)；funded readOnly scope 若声明 listing/lookup leaf 可创建 Observe job，但永远不能创建 transaction Dispatch。",
+        "funded scope 的 order job 在 ConnectionUnavailable：job 保持 Ready/RetryAt，另一 healthy scope 同时完成；恢复后原 job 被 claim 一次。",
+        "未知 dispatch 在 offline 期间：transaction 保持 Reconciling/RecoveryRequired，不因 health skip 变成 Completed；连接恢复后只做 observation。"
+      ],
+      "openQuestions": []
+    },
+    {
+      "id": "MAP-855D4FE105",
+      "assessment": "designed",
+      "contractDisposition": "retained",
+      "contractRationale": "现有 target 已正确保留 External provenance、稳定 native identity、Complete/Partial/Unavailable listing 和“不进入 Alice dispatch”的核心边界；本次只把它明确收窄为 provider-declared account listing/observation leaves，并强调数据观察不使用订单事务。K05 的数据效果分离与 K02/K03/K07 的结构缺失/availability 规则使原有外部观察结论可直接保留，IBKR 覆盖仍按实证限制。",
+      "contractAnchors": [
+        "K02",
+        "K03",
+        "K04",
+        "K05",
+        "K07",
+        "K12"
+      ],
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/order-sync-poller.spec.ts:70-101: the test places a limit order directly on MockBroker, proves Git has no pending id, expects tick 1 to make an [observed] commit/pending order, then changes price and expects tick 2 to make a [sync] filled commit.",
+        "services/uta/src/domain/trading/UnifiedTradingAccount.ts:953-981: observeExternalOrders lists open orders, diffs against every Git-known order id, stamps contracts, records unknown orders in one observed Git commit, and returns the count.",
+        "services/uta/src/domain/trading/git/interfaces.ts:58-65: getPendingOrderIds/getKnownOrderIds and recordObservedOrders are Git-level APIs, not durable scheduler APIs."
+      ],
+      "currentBehavior": "外部 actor 直接通过 broker.placeOrder 创建订单，Git 初始不知道它；slow lane 的第一次 tick 调用 observeExternalOrders，将 listing 中未知订单 squash 成 `[observed]` commit；该 commit 使订单进入 pending list，下一次 fast lane sync 后才记录 filled。",
+      "problem": "外部订单的存在与首次观察仅存在于内存 Git commit；重复 listing、进程重启、listing 空/不完整、订单在观察和 sync 间终态变化都没有 REMOTE_OBSERVATIONS、schedule checkpoint 或 stable external identity。测试还默认 tick 1 是观察时机，无法证明 restart 后仍会发现订单。",
+      "targetModel": "建立 ExternalOrderObserved observation record：{ scope: AccountScope, provider-native identity/extension, instrumentId, resolved local alias only when the provider/account mapping proves it, order snapshot, provenance: External, observedAt, sourceRevision }，并创建以 provider connection、scope、provider identity、revision 去重的 lifecycle Observe job。记录的 provider-native fields 仍由该 listing/observation leaf 的精确 schema 定义，不形成通用订单类型。listing 是 provider 可选择声明的账户私有 capability leaf：若结构上没有该能力，树中没有 listing 命令；若声明存在但当前未登录/断连，则保留 capability identity 并报告 availability。其结果可编码为 ListingResult = Complete(scope, namespaceCoverage, cursorBoundary, observedAt, orders) | Partial(coveredNamespaces, missingEvidence) | Unavailable(reason)。首次 Complete listing 只产生 journal observation + OrderProjection row + audit view，不创建 approval、transaction dispatch、order lock 或 compensation，也不把外部 action 当 Alice PlaceOrder；终态 observation 再更新 order/execution projection。",
+      "pureTransitions": [
+        "ListingResult.Complete(scope, namespaceCoverage, cursorBoundary, observedAt, orders) + knownIdentitySet -> NewExternalOrders | NoNewOrders；只对确实未知且带稳定 provider native id 的 entry 生成 ExternalOrderObserved intents，Partial/Unavailable 不产生 absence conclusion。",
+        "ExternalOrderObserved(submitted) -> OrderProjection.ExternalSubmitted + ObserveOrderLifecycle job；重复同 identity/revision 返回 Unchanged，数据事实重放不启动交易效果。",
+        "External lifecycle observation -> StillWorking(schedule next) | Confirmed(terminal snapshot, fills) | Rejected(rejection) | Unknown(evidence)；Unknown 保持 reconciliation checkpoint，不能清除 external row，也不能自动创建 Alice dispatch。"
+      ],
+      "effectBoundary": "ObserveWorker 通过 scoped provider connection/declared listing port 取得带 completeness、observedAt 与 native identity 的结果；writer 原子写 REMOTE_OBSERVATIONS、job dedup、order projection event，以及当前 source 在 listing 后刷新并带 sequence/freshness 的 account/position/order snapshot 输入，audit exporter 异步读取 events。测试的直接 broker.placeOrder 必须明确是 external-actor harness，不是 scheduler dispatch。该数据路径不调用交易 approval/compensation；只有后续明确用户请求才重新进入受控 effect capability。",
+      "durability": "REMOTE_OBSERVATIONS 以 provider-scoped order/execution identity+revision 唯一化，External Observe job 有 schedule identity、scope、observation partition key（不是交易 conflict lock）、notBefore 和 lease epoch。Projection checkpoint 记录 journal sequence，并保留 source snapshot freshness/sequence 关联；重启从 last checkpoint 或完整 journal replay 重构 known identities，不从 git.getKnownOrderIds 单独决定是否已观察。durability 记录事实与恢复 checkpoint，不声称 provider 的 retention、freshness 或 replay 保证。",
+      "errors": [
+        "ListingResult.Unavailable({ scope, reason })：声明的 listing capability 暂不可用时，不生成无外部订单结论；已有 durable OrderRef 可单独保留 per-order observation job，未知外部订单保持 discovery disabled/operator required。",
+        "ListingResult.Partial({ scope, coveredNamespaces, missingEvidence })：缺一个 provider namespace 不能把 partial list 当完整，job 重试/降级并保留 evidence。",
+        "ExternalOrderIdentityMissing({ rawRef })：无法稳定 dedup 的 entry 进入 OperatorRequired/不投影为可跟踪 order，不能以数组位置补 id。",
+        "ObservationUnknown({ orderRef, evidence })：timeout/restart 后不造 sync terminal view，排 reconciliation；数据观察未知不触发交易补偿。"
+      ],
+      "preservedBehavior": [
+        "保留外部订单最终能回答发生了什么的 narrative：首次观察可在 audit projection 中展示 observed，终态可展示 sync，但二者都是 journal-derived views。",
+        "保留 slow discovery 后 lifecycle 进入快速 per-order observation 的意图；调度实现改用 durable follow-up job 而非内存 pending list。",
+        "有意不把外部订单转成 Alice approval/transaction；其 provenance 必须是 External，并让后续用户操作重新走完整 action protocol。"
+      ],
+      "replacementSteps": [
+        "把测试外部 actor 产生的订单通过 provider-declared MockBroker listing boundary 接入，断言它不出现在 Alice dispatch events 但能被 Observe job 发现。",
+        "将 observed/sync 字符串断言改为 REMOTE_OBSERVATIONS、OrderProjection、audit projection 和 dedup identity 断言；这些事实不被伪装成交易 WAL。",
+        "为 Complete listing、ListingResult.Unavailable/Partial、重启和同 native id 重复 listing 分别建立场景；删除 getKnownOrderIds 作为唯一 pending authority 的调用。"
+      ],
+      "verificationCases": [
+        "外部 limit order 在 Complete listing 中首次出现：创建一个 external observation 和一个 lifecycle job，OrderProjection=Submitted，audit 有一条 observed view，且没有 Alice dispatch。",
+        "同一订单连续出现在三次 listing：REMOTE_OBSERVATIONS/order job/projection 仍各一套，不增加重复订单或重复填充。",
+        "外部订单在首次观察后被填充：Observe 返回 Confirmed filled，projection 记录 provider 返回的 cumulative qty/price，audit sync view 只出现一次。",
+        "listing timeout、Partial 或 worker restart：状态为 Unknown/Retry/OperatorRequired，重启后按 identity 重新 observe；绝不将空 listing 当成订单不存在或盲目 redispatch。"
+      ],
+      "openQuestions": [
+        "IBKR 当前 `reqOpenOrders` 只返回该 clientId 的订单（IbkrBroker.ts:766-775），手工 TWS 订单的 permId/reqAllOpenOrders 证据尚未存在；外部观察对这类订单必须保持 capability-limited，不能宣称全账户覆盖。"
+      ]
+    },
+    {
+      "id": "MAP-2D60F8CF3A",
+      "assessment": "designed",
+      "contractDisposition": "reframed",
+      "contractRationale": "A/B 隔离是账户私有观察与交易效果的真实安全属性，不是要求所有 provider 暴露同一 handler。K07/K08 让每个 provider leaf 返回结构化错误并把 unknown 交易效果交给恢复；K05 的公共数据读取可按自己的资源分区，不继承订单锁。",
+      "contractAnchors": [
+        "K05",
+        "K07",
+        "K08",
+        "K09",
+        "K10",
+        "K12"
+      ],
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/order-sync-poller.spec.ts:103-118: two UTA instances each receive a pending order; account A.sync is mocked to reject Error('exchange down'), account B.sync is spied, and the test requires B to run plus a string log containing the error.",
+        "services/uta/src/domain/trading/order-sync-poller.ts:62-91: the legacy loop catches observation/sync errors per account and continues the outer account iteration.",
+        "services/uta/src/domain/trading/UnifiedTradingAccount.ts:409-437: broker call errors are wrapped as BrokerError, update health counters, and rethrow to the caller."
+      ],
+      "currentBehavior": "单个 tick 顺序遍历两个 UTA；A.sync rejection 被 catch 后写入字符串 log，B 仍被调用。测试没有验证 job lease、failure attempt、retry time、unknown outcome、structured account/transaction context 或 supervision。",
+      "problem": "继续下一个账户是有价值的隔离语义，但 catch+string 只保留错误文本，无法区分已知 broker rejection、连接不可用和 dispatch unknown；失败工作也没有 durable retry 或 recovery row。若整个 poller fiber 被异常破坏，测试不能证明 B 的独立进展或 A 的最终可恢复性。",
+      "targetModel": "以 AccountScope/ConnectionId 为私有账户 partition，给 A/B 独立 observation workers、job leases、projection sequence 与 observation partition keys；只有交易效果 job 才拥有 transaction conflict keys。公共数据 capability 若被同一进程消费，不因 A 的账户失败而被默认绑定到该 scope。每个 job 返回 JobOutcome ADT。若是交易计划明示的独立 steps，才允许 FailurePolicy.ContinueOnKnownRejection；ConnectionUnavailable 不视为 rejection，Unknown 暂停该交易剩余 forward steps。观察失败可 Ready(attempt+backoff) 或 Failed(failureRef)；交易 Unknown 只能 Reconciling/RecoveryRequired，由 durable RecoveryCase owner 保留 conflict exclusion。",
+      "pureTransitions": [
+        "settlePartitionJob(job, providerObservationOutcome | ObservationFailure, policy, now) -> Completed | Ready(nextAttemptAt) | Failed(failureRef) | RecoveryRequired(recoveryCaseId)；RecoveryRequired 保留交易 conflict exclusion 并转交 durable RecoveryCase owner，不改变其它 account partition state。",
+        "claim(scopeA keys) 与 claim(scopeB keys) -> 独立 Leased(owner,epoch,deadline)；同一 scope/order observation partition 必须 single-flight，交易 effect lock 只由 effect job 持有，跨 scope 不因共享 scheduler 而全局串行。",
+        "structuredFailure(failure, ExecutionContext) -> redacted event/metric/log payload；raw Error.message 只可作为受控 diagnostic，不是 provider domain outcome。"
+      ],
+      "effectBoundary": "每个 account partition worker 在 supervised Scope 中调用 provider-declared observation leaf；只有交易效果 job 才通过 transaction-kernel 的 dispatch port。JournalWriter 原子写 failure reference、attempt、next notBefore 和 checkpoint；Root supervisor 监控 worker defect，但不得因 A 的 expected failure 取消 B，sink 写失败也不回滚 journal fact。",
+      "durability": "A/B 的私有 observation jobs、transaction EffectJobs、各自 lease 与适用的 partition/conflict keys 分开持久化；交易 conflict key 只保护交易效果，观察 partition key 只防止重复读取。failure attempt 与 retry policy 写入同一 writer command，数据库 commit 后才唤醒下一次 run。旧 worker epoch 不得覆盖新 owner；重启按 Ready/expired lease/Unknown 分类，而不是从 UTA iterable 重建。公共数据缓存/流的 cursor 与背压状态独立保存，不共享交易 RecoveryCase。",
+      "errors": [
+        "ConnectionUnavailable({ scope, reach })：A 的 observation job 留在 Ready 并带 retry schedule；B 可完成。",
+        "BrokerRejected({ scope, dispatchId, rejection })：只作为该交易 step 的已知失败；仅在显式 ContinueOnKnownRejection 下继续后续独立 steps，ConnectionUnavailable/Unknown 不得伪装成 rejection。",
+        "OutcomeUnknown({ dispatchId, evidence, recoveryCaseId })：A 的交易进入 Reconciling，冲突排他权转交 durable RecoveryCase owner，后继只做 observe；不能按错误 retry place/sync mutation。",
+        "WorkerDefect({ partition, defectRef })：停止或重启 A worker 并保留 journal evidence；不牵连 B worker 或公共数据 reader。",
+        "ObservabilitySinkUnavailable({ context })：指标/log 可降级，但不能删除或阻止 journal outcome。"
+      ],
+      "preservedBehavior": [
+        "保留 A 失败不阻塞 B 的 independent AccountScope progress，这是旧测试实际证明的部分。",
+        "保留失败对操作者可见；从包含 exchange down 的 raw string 改为带 scope/job/dispatch/failure tag 的 structured event。",
+        "有意增加 A 的 durable recovery/retry assertion，并不把继续 B 解释为 A 已完成或被安全忽略，也不把观察失败升级为交易补偿。"
+      ],
+      "replacementSteps": [
+        "将两个 direct UTA fixture 改为两个 AccountScope + durable jobs，使用 provider capability boundary 的 fault injector 产生 typed connection/observation failure，而非 mock sync。",
+        "断言每个 partition 的 lease/failure/retry/projection rows；另验证 B outcome 在 A failure transaction 中仍可独立 commit。",
+        "把 scheduler failure policy 显式放入相应 transaction plan/job schema，并删除 poller 层 catch-string 作为唯一错误通道；公共 data readers 使用自己的 failure/cursor contract。"
+      ],
+      "verificationCases": [
+        "A 的 listing/observe 返回 ConnectionUnavailable，B 的 Observe job 同一时间被 claim 并 Completed；A 的 job 有 retryAt 和 failureRef。",
+        "A worker 在 lease 中途 crash：B 继续，A 的旧 epoch write 被拒绝；重启后 A 只被新 epoch 重新 claim。",
+        "A dispatch outcome Unknown：A 只产生 Observe/Reconciling work，不产生第二次 dispatch；B 的 independent order 正常完成。",
+        "structured sink 关闭：journal 仍含 typed failure 和 sequence，下一次 query 能重建 A/B 状态；公共数据 reader 的 cursor 不被清空。"
+      ],
+      "openQuestions": []
+    },
+    {
+      "id": "MAP-8D05311B0B",
+      "assessment": "designed",
+      "contractDisposition": "reframed",
+      "contractRationale": "模块注释描述的是旧实现的全局轮询，而 K01/K02/K05/K08 要求把它收窄为能力组合入口：外部发现与订单状态观察是可声明的数据叶子，交易 Dispatch 仅由交易内核产生并由受控 wrapper 处理。保留 fast/slow 产品意图，但不再把 Git 或完整 IBroker 当目标契约。",
+      "contractAnchors": [
+        "K01",
+        "K02",
+        "K03",
+        "K05",
+        "K08",
+        "K12"
+      ],
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/order-sync-poller.ts:1-18: module comments define a Git-based place→approve(push)→poll→sync lifecycle and explicitly call pending ids an in-memory Git-log scan; the comment claims broker calls require pending orders, but the implementation's separate slow external lane can list a healthy account before the pending-id guard.",
+        "services/uta/src/domain/trading/UnifiedTradingAccount.ts:917-919: getPendingOrderIds delegates to TradingGit rather than a durable job store.",
+        "services/uta/src/domain/trading/git/TradingGit.ts:692-748: pending ids are reconstructed by scanning in-memory commits newest-first, including bracket legs and operation contracts."
+      ],
+      "currentBehavior": "该模块把 poller 描述为缺失的成交感知循环：fast lane 从 Git pending orders 发现订单并给 healthy UTA 做 broker round-trip；slow lane 则在 observePass 对 healthy、非 keyless UTA 调用外部 listing，即使当前没有 pending id。结果以 sync commit 写回 filled/cancelled；它没有 dispatch identity、journal event、durable job、lease、observation checkpoint 或 crash protocol。",
+      "problem": "注释宣称所有 broker round-trip 都需要 pending order，但 `tick` 的 slow external lane 在 `getPendingOrderIds()` 检查之前即可调用 `observeExternalOrders`，所以‘空 pending 即零 broker IO’只适用于 fast lane。两条 lane 仍把 Git commits 当执行 authority，重启丢 tick cadence、poll state 和未完成 pass；health boolean 也无法表达 capability unavailable、unknown outcome 或 durable retry。",
+      "targetModel": "将模块替换为 polling scheduler composition contract，而不是新的 universal broker SDK：ObserveExternalOrdersJob(scope,scheduleId) 是账户私有 listing capability 的 durable work；ObserveOrderJob(orderRef,dispatchIdentity) 是已知订单状态 capability 的 durable work；ReconcileUnknownJob(dispatchId) 只承接可能跨越交易远端边界的 effect recovery；DispatchJob 仅由 transaction-kernel 产生。provider 可为每个叶子声明精确 input/output/error schema、native lookup 参数与资源需求；结构上不支持的 leaf 不出现，运行时断连只报告 availability。每个 scheduler job 使用本地生命周期 ADT：Ready/Leased(owner,epoch,deadline)/Deferred/Completed/Failed；与交易 effect 关联且跨远端边界不明时，另记录 ObserveUnknown/RecoveryRequired，不能压成 Failed 或 QueueUnsent。这些 job variants 只是调度生命周期，不是全局 action taxonomy、完整 Broker handler 或封闭 Order 变体。job 绑定适用的 AccountScope（公共 data job 不带该字段）、order/connection partition/conflict keys、notBefore、attempt 与 schedule identity；公共 data capability 不凭空加入账户 scope。",
+      "pureTransitions": [
+        "deriveObservationWork(durable transaction/order projections, declared capability facts, schedule, now) -> typed JobIntent[]；无 Git/UTA timer 读取，并分别产生 pending-order 与 due external-discovery intents。",
+        "provider observation result Confirmed | Rejected | StillWorking | Unknown -> versioned observation event + next JobIntent；Unknown 不能转 QueueUnsent/dispatch，只有交易 effect classifier 才可决定 recovery branch。",
+        "classifyRecovery(journal, attempts, leases, observations, now) -> NoWork | QueueUnsent | ObserveUnknown | ResumeCompensation | OperatorRequired；启动先执行该纯分类，再开放交易 admission；普通数据流只恢复 cursor/lifecycle。"
+      ],
+      "effectBoundary": "新模块只是 scheduler service/interpreter 的 composition entry，依赖 JournalReader/Writer、Clock、declared provider capability handles、ProjectionReader 与 ObservabilitySink；domain decision 不导入 SDK/timer/SQL。手动 wake 可公开为优化，但不能从 Iterable<UnifiedTradingAccount> 恢复 authority。外部 discovery durable schedule、order observation 和 market-telemetry stream 使用不同 port/policy；数据观察不拿 approval/compensation。",
+      "durability": "交易 events、DispatchAttempts、transaction EffectJobs、RemoteObservations、order/execution projections 和 checkpoints 由单一 writer 管理；job dedup key 按 (kind, sourceIntentIdentity)，dispatch outcome 与 job progress 原子提交。Git JSON/commit hash 只是 audit projection 输入，不参与 transaction identity 或 pending recovery。公共 data capability 的 cursor/replay evidence 独立持久化，不能用交易 WAL 或 Git pending hash 代替。",
+      "errors": [
+        "CapabilityUnavailable({ scope, capability })：明确 observation/dispatch leaf 不可用，按该 leaf policy defer 或 operator action；结构不存在时从 capability tree 省略。",
+        "OutcomeUnknown({ dispatchId, evidence })：交易 effect 持久化 Unknown 并安排 observe/recovery，不盲重发；普通数据交付 unknown 则停在具名 stream error/cursor state。",
+        "DurableAdmissionRejected({ reason: QueueFull | Conflict | InvalidPlan })：accepted work 永不静默丢弃，caller 收到 typed failure。",
+        "ProjectionLag({ sequence, projection })：query 体现 freshness/checkpoint，不把 stale projection 当空 pending 或无订单。"
+      ],
+      "preservedBehavior": [
+        "保留自动检测 Alice-created order 的 fill/cancel 和外部订单 narrative 目标，但把它们分成交易效果与观察事实两条路径。",
+        "保留 fast pending-only cost discipline，以及 slow lane 按独立 cadence 发现外部订单；pending 来源改为 durable order projection/dispatch evidence，不再是 Git scan。",
+        "有意删除 legacy poll loop 作为 authority；仅保留 Git exporter 的可重建 audit output 和必要只读查询，不能让它成为 provider capability 的替代实现。"
+      ],
+      "replacementSteps": [
+        "先建立 journal/scheduler vertical slice 与 account/order scope conflict model，再把 main 的入口切到 provider capability composition + DurableScheduler。",
+        "把 UTA sync/observeExternalOrders 的 broker calls 拆到 typed observation workers，并让 application/query 读取 projections；每个 provider native field 由其 leaf schema 保留。",
+        "完成每个账户 authority cutover 后删除 startOrderSyncPoller 的 timer/closure；禁止以 legacy catch fallback 双写，公共 data readers 不被强行改成交易 wrapper。"
+      ],
+      "verificationCases": [
+        "无 fast-lane durable pending work：scheduler 不访问 order-status capability；Git projection 是否有旧 commits 不改变 fast-lane NoWork。",
+        "fast lane 无 pending 但 due 的 ObserveExternalOrdersJob 存在：只执行该 durable listing leaf，不能把空 pending 误当作没有外部 discovery work。",
+        "Prepared/Approved transaction job 在重启后从 SQLite 恢复；未跨 dispatch barrier requeue，跨 DispatchStarted 进入 ObserveUnknown；普通 observation job 只恢复其 cursor/checkpoint。",
+        "外部 listing 产生 observation 后重启：同一 provider native identity 不重复 observed，lifecycle job 仍可继续。",
+        "queue 满/冲突锁/单账户失败：每个 caller 收到对应 typed result，另一 partition 不受 silent drop 影响；公共 data stream 不借用订单补偿。"
+      ],
+      "openQuestions": []
+    },
+    {
+      "id": "MAP-E279FE276F",
+      "assessment": "designed",
+      "contractDisposition": "retained",
+      "contractRationale": "现有 target 的有限 duration、off、fixed-delay、无 jitter、缺证据则 Deferred/OperatorRequired 结论仍是安全的保守调度；本次只把它明确限定为 durable order-observation schedule，并让 provider descriptor/运行配置提供预算。K01/K03/K05/K06/K12 支持保留这些具体策略，同时禁止把它们冒充所有 capability 的全局参数。",
+      "contractAnchors": [
+        "K01",
+        "K03",
+        "K05",
+        "K06",
+        "K07",
+        "K12"
+      ],
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/order-sync-poller.ts:20-31: OrderSyncPollerOptions exposes raw optional number intervalMs/observeIntervalMs and an unstructured `(msg:string)=>void` logger; comments define defaults and 0/negative external-observation disable.",
+        "services/uta/src/domain/trading/order-sync-poller.ts:43-49: implementation defaults to 10s/15m, converts the ratio with Math.round/Math.max, and defaults logging to console.",
+        "services/uta/src/main.ts:116-128: main maps config `off` to numeric 0, parses a duration, warns/falls back on null, then starts the poller without a durable schedule id."
+      ],
+      "currentBehavior": "cadence 由可选 number 表达，fast 默认 10 秒，slow 默认 15 分钟；slow interval 被 round 成 fast tick 数，0/negative 关闭；日志只收一个 string，没有 scope/job/sequence context，下一次运行时间完全在 timer/tickCount 内存中。main 对无法解析的 external cadence 还会警告并回退 15m。",
+      "problem": "number 类型接受零、负数、fraction、NaN/Infinity 等不受约束输入；rounding 会让实际观察时间与配置偏离，进程重启丢失 phase。numeric 0 同时承担‘off’ sentinel 与 duration，无法区分配置无效和显式禁用；main 的 silent 15m fallback 掩盖坏配置；raw logger 不能承载 typed failure 或 redaction context。",
+      "targetModel": "定义 PositiveDuration（有限、正、统一毫秒编码）与 ObservationSchedule = Disabled | Fixed({ every: PositiveDuration })，以及仅适用于 durable order-observation 的 PollerSchedulePolicy = { fast, external, scheduleId, backoff/missedWindow, resourceBudgetRef }。实现层固定 ConservativePollingPolicy = { durationBound: FiniteSafeIntegerMillis, jitter: None, missedWindow: OneDueFixedDelay }：只接受有限安全整数毫秒的正 duration，不臆造 venue 最大时长；provider capability descriptor 或运行配置必须显式提供 rate/concurrency budget，缺失时该账户 job 返回 Deferred/OperatorRequired，不猜 native 上限。scheduler job 保存 notBefore/last sequence/scheduleId；外部订单观察是 durable work，不是可丢弃的 market-telemetry stream。",
+      "pureTransitions": [
+        "decodeScheduleConfig(raw config) -> Result<PollerSchedulePolicy, InvalidScheduleConfig]；off 只映射 Disabled，任何非正/非有限/非安全整数毫秒 duration 返回 typed failure。",
+        "nextObservationAt(previousDue, completedAt, policy) -> Instant：按 OneDueFixedDelay 从完成时间计算下一 due，错过窗口只执行一个 due，不 catch up，也不用 tick ratio 或 process-local counter。",
+        "admitSchedule(policy, capabilityBudget) -> Accepted | Deferred(AdapterRateBudgetUnknown) | Rejected(InvalidScheduleConfig)；缺少 provider budget 不降级为默认 rate。",
+        "emitScheduleEvent(context, schedulerOutcome) -> StructuredEvent；日志 sink 失败不修改 job/transaction decision，metric labels 仅使用低基数 state/provider/outcome；lossy market telemetry 不得改变 durable observation jobs。"
+      ],
+      "effectBoundary": "Config Layer 用现有 duration parser 解码后构造 refined policy；Clock/Schedule 只负责 wake due jobs，JournalWriter 持久化 notBefore、attempt/backoff 和 schedule identity，ObservabilitySink 接受已 redacted typed event。不要在 domain schedule function 中调用 Date.now、setInterval 或 console；provider rate budget 是 capability/config 输入，不由 scheduler 从 venue 名称推断。",
+      "durability": "每个 Observe job 的 notBefore、scheduleId、attempt、lease 和 outcome 在 EFFECT_JOBS/related journal rows 中可恢复；交易 Dispatch job 仍由交易 wrapper 的 durable protocol 管理，不让 schedule 配置改写已准备 plan。调度更新与 job completion/failure 在 writer transaction 中原子提交。显式 Disabled 不删除已有 Unknown/终态工作；配置改变只影响新 job，旧 prepared plan 的 digest/policy version 不被静默重解释。",
+      "errors": [
+        "InvalidScheduleConfig({ field, raw, reason })：启动阻断该 scheduler 配置，不把错误值转成默认 15m 而掩盖输入，除非外层协议另有明示 fallback policy。",
+        "AdapterRateBudgetUnknown({ scope, scheduleId })：没有 provider/运行配置提供 rate budget 时保持 Deferred/OperatorRequired，不猜 venue 上限或启动无界 polling。",
+        "ScheduleCapacityExceeded({ scheduleId, pending })：wake/admission 返回 typed backpressure；不静默丢 accepted durable work。",
+        "ClockFailure/InvalidInstant({ scheduleId })：停止相关 worker 并保留 durable due state。",
+        "ObservabilitySinkUnavailable({ eventId })：记录受控降级，不能吞掉 remote outcome。"
+      ],
+      "preservedBehavior": [
+        "保留 fast pending lane 与可关闭 external slow lane 的产品意图，以及首次外部扫描应尽快进行的语义；目标用 notBefore=now 明确表达。",
+        "保留主配置 15m/off 的用户含义，但把字符串和 numeric sentinel 在配置边界解析为 ADT；无效配置不再沿用 main 的隐式 15m fallback。",
+        "有意删除 ratio rounding、raw console callback 和隐式 10s timer 作为权威 schedule，并保持 durable order observation 不受 lossy market telemetry 的 drop/coalesce 影响。"
+      ],
+      "replacementSteps": [
+        "在 protocol/config boundary 定义 positive duration/off codec 与该 capability 的资源预算引用，main 只把解析结果装配进 scheduler Layer。",
+        "把 external/fast schedule id 和 next notBefore 加入观察 job schema、projection/status view 与 structured observability；不要求公共 data capability 接受同一 schedule。",
+        "迁移 tests 的 manual tick 为 Clock advance + runDueOnce/wake optimization，确保 config malformed/disabled/restart 情形有 durable assertions。"
+      ],
+      "verificationCases": [
+        "intervalMs 为 0、-1、NaN、Infinity 或小数：配置 decode 得到 InvalidScheduleConfig，绝不启动 fast worker 或生成负 delay。",
+        "无法解析的 external cadence：返回 InvalidScheduleConfig 而不是 main 当前的 15m fallback；external=Disabled 则不新建外部 listing job，但已存在 Unknown lifecycle job 仍按 recovery policy 处理。",
+        "scheduler 在 due pass 中被进程杀死并重启：从持久 notBefore/scheduleId 恢复一次 due observation，不依赖 tickCount phase。",
+        "worker 完成时间晚于 due 且使用 ConservativePollingPolicy：只安排一个 completedAt + every 的 fixed-delay due，无 jitter 或追赶 burst；缺少 provider rate budget 时结果为 Deferred/OperatorRequired。",
+        "慢 pass 执行时间超过 fast cadence：due job 只按明确 coalesce/backpressure policy 合并，所有 accepted job 状态可在 DB 查询；任何 market-telemetry 丢弃不得删除 durable observation work。"
+      ],
+      "openQuestions": []
+    },
+    {
+      "id": "MAP-EC918D5C43",
+      "assessment": "designed",
+      "contractDisposition": "reframed",
+      "contractRationale": "旧 interface 暴露的是不可观察的 timer singleton；目标应成为 polling capability scheduler 的 typed projection，而非完整 broker API。K01/K02/K06 让 caller 从声明树取得精确叶子和 availability，K08/K10 保留交易效果 receipt/recovery 但不把 stop 或 manual wake 变成 dispatch 权限。",
+      "contractAnchors": [
+        "K01",
+        "K02",
+        "K05",
+        "K06",
+        "K08",
+        "K12"
+      ],
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/order-sync-poller.ts:33-37: OrderSyncPoller exposes only tick(): Promise<void> and stop(): void, with no admission result, job/lease identity, failure, reconciliation, or shutdown completion.",
+        "services/uta/src/main.ts:116-128: main starts the poller as a process-wide side effect and discards the returned handle."
+      ],
+      "currentBehavior": "调用方只能触发一次 ephemeral tick 或清 interval；tick 的成功/跳过/失败/queued 状态都通过 void 和 logger 隐含表达，stop 不能 await in-flight broker work、writer drain、lease recovery 或 connection close。",
+      "problem": "这个 interface 不能让 application 知道 accepted work 是否 durable，也无法在重启/关闭时获得 reconciliation checkpoint；timer callback 的 `void tick()` 还把 Promise rejection 与 worker lifetime 脱离。它鼓励把 scheduler 看成一个可丢失的 singleton。",
+      "targetModel": "用具名服务替换旧 interface：DurableScheduler.submit/admit 返回 AcceptedJob | CoalescedExistingJob | DeferredJob | AdmissionRejected，runDueOnce/wake 仅是手动唤醒优化；WorkerSupervisor.status(scope) 返回 typed operational view；shutdown(policy) 返回 ShutdownReport 或 ShutdownFailure。Worker 消费 provider-declared observation capability leaves 与 durable jobs，不能接收 live UTA iterable；交易 dispatch 仍只通过 transaction-kernel 的受控 effect handle，公共 data capability 不被迫实现 order methods。",
+      "pureTransitions": [
+        "admission(command/jobIntent, capacity, conflicts, now) -> Accepted(jobId) | Coalesced(jobId) | Deferred(reason) | Rejected(reason)；coalesce 只对允许的同 scope Observe schedule，不能合并 distinct dispatch identities 或跨 scope public data semantics。",
+        "shutdownState(OpenAdmission, ActiveClaims, InFlightAttempts) -> StopAdmission -> Drain/Interrupt -> PersistUnknownOrReady -> CloseResources；交易 boundary 已跨 DispatchStarted 时输出 Unknown/RecoveryRequired，普通 observation 只输出 Ready/cursor checkpoint。",
+        "manualWake(durableDueRows) -> WakeReport(scanned, claimed, deferred)，不改变 durable state 除非经 writer claim/complete。"
+      ],
+      "effectBoundary": "SchedulerService 由 effect-runtime Layer 提供，内部管理 Clock、bounded wake Queue、JournalReader/Writer、provider connection/capability Layers、supervised Fibers 和 Scope。外部只消费 typed scheduling API；不把 raw SQL、broker SDK、timer handle 或 callback logger 暴露给 route/test。",
+      "durability": "submit 只有 writer commit 后才返回 Accepted/receipt；job claim 写 owner/epoch/deadline 与 JobClaimed event，provider observation outcome 写回同一 authority。shutdown 不以 clearInterval 释放 durable work：Ready observation jobs 保留，DispatchStarted transaction jobs 标 Unknown/Observe，leases 由 epoch/CAS 处理；数据流 cursor 不伪装成交易 recovery。",
+      "errors": [
+        "StorageFailure({ operation, phase })：writer commit 未完成时不返回 Accepted，且交易 broker mutation 不得发生。",
+        "AdmissionDeferred({ reason: QueueFull | CapabilityUnavailable })：caller 得到显式 deferred/backpressure 状态，accepted durable work 不丢；AdmissionRejected({ reason: Conflict | InvalidPlan }) 表示不会创建该 job，二者都不能误报成功。",
+        "ShutdownTimeout({ activeJobs, deadline })：报告仍 active 的 durable identities；不能强称 graceful completion。",
+        "LeaseFencingConflict({ jobId, epoch })：旧 worker write 被拒绝并转 recovery/cursor classification。",
+        "SchedulerDefect({ fiber, defectRef })：supervisor 终止受影响 worker，root policy 决定进程级处理并保留证据。"
+      ],
+      "preservedBehavior": [
+        "保留测试/运维可立即唤醒一轮工作的便利，但把它命名为 non-authoritative runDueOnce/wake，并返回可观察结果。",
+        "保留 stop 能阻止新周期进入的意图；目标进一步等待或受控中断在途 worker，避免 broker call 留在后台。",
+        "有意删除 Promise<void>/void tick/stop():void 作为唯一生命周期协议，不要求公共数据服务获得交易状态机。"
+      ],
+      "replacementSteps": [
+        "先由 scheduler composition 定义 service interfaces 和 typed report/failure ADTs，再由 effect-runtime 提供实现；provider leaf schemas 通过声明注册进入 capability tree。",
+        "迁移 main、Polling tests 和 snapshot/manager consumers 到 SchedulerService；任何旧 poller caller 都不能继续创建独立 timer，公共 snapshot schedule 保持独立 ownership。",
+        "在所有 caller 切换后删除 legacy interface/export，保留的 manual wake 只通过新 service method。"
+      ],
+      "verificationCases": [
+        "submit 在 writer commit 前数据库失败：返回 StorageFailure 且交易 broker dispatch 未发生；commit 后返回的 jobId 可查询。",
+        "调用 wake 两次且第一轮仍在执行：第二次返回 Coalesced/Deferred 结果而不是 silent drop；durable job 仍可重启。",
+        "shutdown 遇到 in-flight observation：停止新 claim，等待/中断按 policy 完成，job 进入 Ready/Unknown 可恢复状态，关闭后没有 detached write。",
+        "旧 worker late completion 使用旧 epoch：写入被 fencing；新的 recovery worker 的 observation evidence 不被覆盖，也不会取得新的交易 dispatch lease。"
+      ],
+      "openQuestions": []
+    },
+    {
+      "id": "MAP-E32A9F0696",
+      "assessment": "designed",
+      "contractDisposition": "reframed",
+      "contractRationale": "setup 问题是组合根把 live UTA iterable 与连接副作用当 authority，而不是缺一个更大的 SDK。K01/K02/K07 让 root 装载 provider capability declarations/layers；账户 scope 只用于私有订单/账户事实，公共数据 capability 独立解析；K08/K12 要求 recovery barrier 在交易 admission 前完成。",
+      "contractAnchors": [
+        "K01",
+        "K02",
+        "K05",
+        "K07",
+        "K08",
+        "K12"
+      ],
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/order-sync-poller.ts:39-51: startOrderSyncPoller accepts `() => Iterable<UnifiedTradingAccount>`, derives observeEveryTicks with Math.round, and stores running/tickCount in process-local closure state.",
+        "services/uta/src/main.ts:104-128: main creates snapshot scheduler first, then starts order-sync by resolving live UTA instances; no journal/scheduler Layer or returned poller handle is retained.",
+        "services/uta/src/domain/trading/UnifiedTradingAccount.ts:141-222: UTA constructor installs a broker connection listener, builds Git callbacks, and starts broker `_connect()` asynchronously."
+      ],
+      "currentBehavior": "setup 只捕获 live UTA iterable，默认 10s/15m 选项，closure 保存 running/tickCount；它没有恢复数据库、扫描非终态 transaction/expired lease、BrokerConnectionService Layer 或 admission acknowledgement。UTA 本身又在构造函数 fire-and-forget connect，两个生命周期未被同一个 Scope 统筹。",
+      "problem": "进程重启后 closure cadence、正在运行的 pass 和未持久化工作全部消失；main 还无法停止 poller。若 worker 在 UTA `_connect` 尚未完成时读取，会把 transient connecting/degraded 与 durable job admission 混淆。setup 顺序也没有在开放新命令前验证 journal/projections/recovery。",
+      "targetModel": "由 composition root 构造 StartupRecoveryCoordinator：Open SQLite/migrations → verify journal/schema → rebuild stale projections → classify non-terminal transaction/observation jobs and leases → acquire each declared provider connection/capability layer → construct SchedulerService with account-scoped observation ports and independent public-data ports → open admission/start supervised workers。根健康状态使用 typed lifecycle envelope（Initializing/Recovering/Ready/Stopping/Failed）并携带 boot/recovery evidence；provider capabilities、账户 reach/keyless/read-only 与公共数据 availability 是独立 facts。Account registry 提供 immutable AccountScope metadata only for account/order leaves，不以 UTA object iterable 作为 source of truth，也不为公共 Candle/News/Instrument 默认 subaccount。",
+      "pureTransitions": [
+        "startupClassification(dbState, leases, attempts, observations, now) -> QueueUnsent | ObserveUnknown | ResumeCompensation | OperatorRequired | NoWork；只有分类完成才输出 Ready 与交易 AdmissionOpen，普通数据流只恢复 cursor/lifecycle。",
+        "accountCapability(connectionHealth, keyless/readOnly, declaredObservationSupport) -> CapabilityFacts | CapabilityUnavailable；keyless 可使私有订单叶子结构性缺失，funded readOnly 仍可保留 declared private observation 但不可 mutation；scheduler 对每个 account scope 独立决定启动/defer，不阻塞全局公共 data leaves。",
+        "constructSchedule(config, recoveredJobs, now) -> durable JobIntents；首次 external observation 用 notBefore=now，而非 tickCount=1 特例。"
+      ],
+      "effectBoundary": "启动编排器拥有 SQLite Layer、JournalWriter/Reader、projection rebuild、provider connection/capability Layers、Clock、Scheduler workers 和 root Scope；adapter 可保留任意 native connection lifecycle，只在 UTA-facing boundary 提供版本化 schema/handler。连接 acquisition/reconnect/close 留在 provider layer，transaction state 不进入 connection object。",
+      "durability": "启动 scan 不以 getInstances 或 Git pending scan 补造 jobs；从 EFFECT_JOBS/DISPATCH_ATTEMPTS/TRANSACTION_EVENTS 与 observation checkpoints 恢复 owner/epoch/deadline、notBefore、schedule identity。所有交易 recovery classification 后续动作再经 writer CAS，admission 关闭期间不接受新的 broker mutation；公共 data cursor 不被清成交易 NoWork。",
+      "errors": [
+        "JournalCorrupt({ sequence, record })：阻断交易 admission，不能按空历史启动；公共只读能力也必须报告受影响 projection freshness。",
+        "MigrationFailure/StorageFailure({ phase })：停止 setup，未拿到 durable receipt 不可 dispatch。",
+        "AccountCapabilityUnavailable({ scope, reach, capability })：仅该 account worker degraded/deferred，未相关账户与公共 data leaves 仍可运行。",
+        "StartupRecoveryRequired({ identities })：把无法分类的 transaction/observation unknown 暴露 operator-owned，不悄悄清理。"
+      ],
+      "preservedBehavior": [
+        "保留服务启动后自动发现已配置账户、fast pending observation 与可选 external observation 的产品行为。",
+        "保留 UTA 连接慢启动时公共/读路径不被整段阻塞的意图，但将 connecting/recovery 显式映射到 capability/admission state。",
+        "有意删除 setup 对 live object iterable、closure cadence 和 fire-and-forget connect 的 authority 依赖；组合根必须保留 scheduler/root shutdown handle，不能重演 main 丢弃 poller handle。"
+      ],
+      "replacementSteps": [
+        "把 main 的 order-sync section 改为调用 StartupRecoveryCoordinator/Scheduler Layer，并保存其 Scope/lifecycle handle；公共 snapshot scheduler 仍保持自己的 service ownership。",
+        "在交易 admission 前完成 database migration、projection rebuild、expired lease/unknown scan；按 account acquire provider capability Layer 后再启动 workers。",
+        "切换所有 scheduler callers 后删除 startOrderSyncPoller closure implementation，并将 UTA constructor connect 迁入可监督 connection service；不要求所有 provider 实现不存在的 leaves。"
+      ],
+      "verificationCases": [
+        "启动时 journal 合法且有 Ready order job：migration/projection/recovery 完成后才 claim；health 快照按 Initializing→Recovering→Ready 携带 schema/recovery/admission evidence，不能由 public market-data read 单独变绿。",
+        "启动时存在 DispatchStarted 无 ack：分类为 ObserveUnknown，绝不先创建新 Dispatch。",
+        "一个 provider connection down、另一 account healthy：前者 capability degraded/Retry，后者 worker 启动且可处理 work；公共 data leaf 的 availability 独立可见。",
+        "在 startup recovery 尚未完成时提交 transaction command：返回 typed AdmissionNotReady，不产生 broker side effect；公共查询不被伪装成已恢复。",
+        "composition root 重启/关闭时仍持有并执行 Scheduler/RootScope handle；不存在无法停止的遗留 poller worker。"
+      ],
+      "openQuestions": []
+    },
+    {
+      "id": "MAP-BAF46FCF2F",
+      "assessment": "designed",
+      "contractDisposition": "retained",
+      "contractRationale": "现有 target 已正确删除 running/tickCount authority、只合并同一未 claim Observe wake，并要求显式 budget/heartbeat evidence；这些调度安全性继续保留。修订只明确其适用范围是账户私有订单观察，公共 pull/push telemetry 与交易 dispatch 各用自己的 policy，符合 K05/K07/K08/K09。",
+      "contractAnchors": [
+        "K03",
+        "K05",
+        "K07",
+        "K08",
+        "K09",
+        "K12"
+      ],
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/order-sync-poller.ts:53-61: tick returns immediately when running, increments in-memory tickCount, and selects the slow lane by tickCount modulo observeEveryTicks with a first-tick special expression.",
+        "services/uta/src/domain/trading/order-sync-poller.ts:98-104: a setInterval invokes `void tick()` and stop only clears that timer.",
+        "services/uta/src/domain/trading/snapshot/scheduler.ts:46-57: existing scheduler surface is a separate lifecycle precedent, so order polling must not invent an unowned timer authority."
+      ],
+      "currentBehavior": "并发 tick 在 `running=true` 时静默丢弃；实际运行次数用 tickCount 内存计数；observeEveryTicks 的第一次/每 N 次选择依赖 modulo。slow broker 超过 interval 时既没有排队也没有 durable lag/backpressure signal。",
+      "problem": "静默 return 使调用者无法知道 work 被 drop；restart 将 count 归零，slow lane phase 可能重复/延迟。对观察而言合并可能安全，但对 transaction dispatch/unknown 不可随意 coalesce；一个 boolean guard 没有表达不同 job kind、capacity、lease 和 stale work。",
+      "targetModel": "用 ScheduleIdentity + durable notBefore/lastEnqueuedSequence 替换 tickCount；scheduler admission 结果为 Accepted、Coalesced(existing Observe job)、Deferred(backpressure) 或 Rejected。Observe schedule 是账户私有 order-observation durable work，与可丢弃/合并的 market-telemetry stream 分离；它可按同一 scope/schedule key 合并未 claim 的重复 wake，ConservativePollingPolicy 不设隐式时间窗口。每个 provider connection 只有声明的 rate/concurrency budget 才可 claim；缺少 budget 或 lease-heartbeat evidence 时返回 Deferred(AdapterRateBudgetUnknown)/OperatorRequired。交易 Dispatch/Compensate/unknown identity 永不被 running guard 合并，公共 data stream 也不共享该 conflict key。",
+      "pureTransitions": [
+        "scheduleDue(policy, durableJob, now) -> Enqueue | Coalesce | DeferUntil(notBefore)；依据 job kind 和 state exhaustive match，不以 running boolean 隐藏 outcome。",
+        "claimWithCapacity(readyJobs, partitionKeys, connectionBudget) -> claimed leases + blocked jobs；blocked oldest multi-key job 保持 fairness barrier，不能无限跳过造成 starvation。",
+        "nextDue(previousDue, actualRunAt, policy) -> Instant：ConservativePollingPolicy 使用 fixed-delay/no-jitter/one-due，重启只使用 durable timestamp；market-telemetry coalescing 不得改变 order observation due state。",
+        "providerBudgetDecision(rateBudget, heartbeatEvidence) -> Claimable | Deferred(BudgetUnknown | HeartbeatEvidenceUnknown)；未取得 native/runtime 证据时不得把未知上限当作安全 claim。"
+      ],
+      "effectBoundary": "Clock/Effect Schedule 触发 wake，bounded Queue 仅作 wake/admission optimization；JournalWriter 负责 durable order-observation job insertion/claim/update，WorkerSupervisor 负责 fiber lifecycle。provider observation call 在已提交 lease claim 后执行，可能因远端延迟而越过 lease；所有 post-boundary outcome 必须经 writer 以 epoch/CAS fencing 回写，不把 timer callback 或 lossy market-telemetry queue 当交易 mutation boundary。",
+      "durability": "每个 accepted observation job 具有 dedup key、observation partition key、notBefore、ready sequence、lease owner/epoch/deadline；JobClaimed 先 commit 再执行。Expired lease 仅使 job eligible；若交易 attempt 已跨 DispatchStarted 则 recovery 分类为 ObserveUnknown，不得 QueueUnsent。公共 data stream 以自己的 cursor/背压记录恢复，不借用 order job identity。",
+      "errors": [
+        "AdmissionBackpressure({ capacity, jobKind, scope })：对 durable order-observation/dispatch 返回或持久化 explicit deferred state，不丢 accepted work；lossy market telemetry 使用独立 admission。",
+        "ScheduleConflict({ existingJobId, requestedIdentity })：对允许观察合并返回 Coalesced；对 transaction dispatch identity 返回 typed conflict。",
+        "AdapterBudgetUnknown({ scope, connectionId })：provider rate budget 或 lease-heartbeat evidence 不完整时保持 Deferred/OperatorRequired，不能用市场 telemetry policy 或 guessed heartbeat 继续 durable work。",
+        "LeaseExpiredDuringRun({ jobId, epoch })：旧 owner 失权，late outcome 仅经 observation ingestion；不得自动重派未知交易 mutation。",
+        "StarvationDetected({ conflictKey, oldestReadySequence })：记录 scheduler policy defect/operational event，不能靠无限跳过掩盖。"
+      ],
+      "preservedBehavior": [
+        "保留慢 provider 时同一 account 不并发执行重复 order observation 的 single-flight 目标，但从 silent drop 改为 durable coalescing/lease semantics。",
+        "保留 external lane 首次尽快运行、之后按配置 cadence 的语义，由 persisted notBefore 表达。",
+        "有意删除 tickCount modulo 和 if (running) return 作为 authority；它们不能参与 transaction correctness，也不能把 durable observation 降成 lossy telemetry。"
+      ],
+      "replacementSteps": [
+        "在 scheduler policy 中按 job kind 定义 dedup/coalescing、capacity、provider budget、fairness 和 missed-window 规则；公共 telemetry 使用独立 policy。",
+        "把 manual tick tests 改为投递/wake durable jobs 并读取 Accepted|Coalesced|Deferred，加入慢 worker/重启场景。",
+        "删除 interval timer closure，统一由 root Scope 启动/停止 scheduler fibers；未知交易 dispatch 走 recovery worker，不被 observation coalescing 吞掉。"
+      ],
+      "verificationCases": [
+        "两个 wake 在同一 Observe schedule 尚未 claim：得到一个 durable job 和一个 Coalesced(existing) 结果；没有 silent drop，且此 coalescing 不是 market-telemetry drop。",
+        "两个不同订单同 tick 到期：各自 order conflict key 允许并发至 provider connection budget，不能因一个 running flag 全部丢弃。",
+        "worker 慢于 cadence 且进程重启：notBefore/ready sequence 保留，重启后执行一次 due/coalesced observation，不按 tickCount 重新 phase；固定规则不引入 jitter 或 catch-up burst。",
+        "缺少 provider rate budget 或 lease-heartbeat evidence：job 返回 Deferred(AdapterBudgetUnknown)/OperatorRequired，不执行未知边界的 durable observation。",
+        "DispatchStarted worker lease expiry：新 worker 只 observe unknown attempt；原 transaction action 不重复发送，公共 data stream 不受影响。"
+      ],
+      "openQuestions": [
+        "Observe listing 的可合并窗口、connection rate limit 和 lease heartbeat 需由各 adapter/运行配置的实证确定；在证据未齐前只允许同一 scope/schedule 的未 claim wake 合并，采用保守 single-flight/固定 due 处理，绝不把 unknown mutation 或 durable trading work 交给 market-telemetry 的 lossy policy。"
+      ]
+    },
+    {
+      "id": "MAP-0F70BAA7CC",
+      "assessment": "designed",
+      "contractDisposition": "retained",
+      "contractRationale": "现有 target 的 ListingResult 完整性、空列表不得伪造 absence、partial namespace 保留证据和 unavailable operator path 已符合 K02/K03/K05；本次保留这些结论并明确 IBroker/global switch 只是当前 source evidence。目标改由 provider-declared listing leaf 投影，结构上没有该能力就省略，故不再要求 universal getOpenOrders。",
+      "contractAnchors": [
+        "K01",
+        "K02",
+        "K03",
+        "K05",
+        "K07",
+        "K12"
+      ],
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/order-sync-poller.ts:62-75: the loop iterates live accounts, skips keyless/unhealthy ones, invokes observeExternalOrders only on the slow pass, logs positive counts, and catches failures as strings.",
+        "services/uta/src/domain/trading/UnifiedTradingAccount.ts:964-980: external observation returns zero when getOpenOrders is absent, calls getOpenOrders otherwise, diffs Git-known IDs, stamps contracts, and records unknown orders in a single observed commit.",
+        "packages/uta-protocol/src/types/broker.ts:577-584: getOpenOrders is optional and its current contract says unsupported enumeration may return an empty array."
+      ],
+      "currentBehavior": "slow pass 对每个 healthy、非 keyless UTA 调用 broker listing；UTA 将 unknown open orders 写进 Git observed commit。异常被 catch 并只写 `[order-sync] ... failed — ${message}`，然后继续后续账户。没有 listing completeness、observation identity、remote outcome、durable schedule 或 checkpoint。",
+      "problem": "`getOpenOrders` 缺失和空数组都可能表现为 0 observed，无法区分‘无订单’与‘没有枚举能力’；CCXT strict adapter 还会对 partial namespace throw，而 permissive adapter 返回 []。外部 observation 与 Git 状态强耦合，失败文本不能驱动 typed retry/unknown recovery；keyless/health skip 丢失 capability 事实。",
+      "targetModel": "将外部发现建模为 provider-declared account listing capability，而非 universal getOpenOrders requirement。该 leaf 的 input、order snapshot、分页/namespace、领域错误和交付方式从声明 schema 推导；ObserveExternalOrders job 处理共享语义 envelope：Complete(scope, namespaceCoverage, cursorBoundary, observedAt, orders) | Partial(coveredNamespaces, missingEvidence) | Unavailable(reason)。Complete 中未知且带稳定 native identities 的订单产生 ExternalOrderObserved；Unavailable 表示声明的 discovery leaf 当前不可用并转 DiscoveryDisabled/OperatorRequired，不能用 per-order fallback 猜未知外部订单；Partial 保留 evidence/retry/degraded。每个已知 external order lifecycle 通过其 provider observation leaf 返回 Confirmed/Rejected/StillWorking/Unknown。",
+      "pureTransitions": [
+        "classifyListing(result, scope, knownExternalIds) -> NewExternalObservation intents | NoNewOrders | DiscoveryDisabled | RetryablePartial；只有 Complete 且覆盖范围明确才可产生 NoNewOrders。",
+        "mergeExternalObservation(previous, incoming) -> Unchanged | New | RevisionAdvance | StaleObservation；以 provider order/execution identity+revision 去重，不以数组位置或 Git hash。",
+        "observationFailure(failure, attempt, policy, now) -> Ready(next) | Failed | OperatorRequired；expected provider failure 不能压成 Error.message，数据 observation failure 也不触发交易 compensation。"
+      ],
+      "effectBoundary": "ObserveWorker 通过 provider connection Layer 获取 scope-scoped listing/observation leaf；writer 原子保存 redacted remote payload、observation event、dedup identity、next notBefore 和 projection event。Git audit exporter/structured observability 只读这些 facts；不直接调用 UTA observeExternalOrders 或 console。Unavailable discovery 不得通过另一个 lossy market-data stream 或未经 identity 的 per-order guess 补齐。",
+      "durability": "REMOTE_OBSERVATIONS 保存 observedAt、provider schema version/fingerprint、native identity/revision；External Observe job 保存 scheduleId/partition/lease/attempt/checkpoint。listing Complete 与 ExternalOrderObserved/job creation 在一个 writer commit 中完成，避免发现后 crash 丢 work；这不是订单 approval/dispatch WAL。Order projection checkpoint 依据 journal sequence，不依赖 list length。",
+      "errors": [
+        "ListingResult.Unavailable({ scope, reason })：声明的 listing leaf 暂时不可用时显式关闭 discovery lane/要求 operator；对已有 durable OrderRef 可单独保留 per-order jobs，但不报告零外部订单。",
+        "ListingResult.Partial({ scope, coveredNamespaces, missingEvidence })：partial list 不得用于 absence detection；按 retry policy 处理。",
+        "ObservationFailure({ scope, jobId, cause })：写 attempt/failureRef/next notBefore，并继续其它 account partitions。",
+        "ObservationUnknown({ orderRef, evidence })：保留 order/reconciliation state，不生成 terminal rejection 或交易 compensation。"
+      ],
+      "preservedBehavior": [
+        "保留外部订单发现后进入 lifecycle tracking，以及 slow lane 与 fast lane 分工的产品目标。",
+        "保留一次 listing 可覆盖 account 内多订单的成本优化，只在 provider 明确 Complete 且范围证据充分时享有该保证。",
+        "有意删除 keyless/unhealthy/unsupported 的 silent skip 和字符串 catch；它们转为 typed capability/availability/degraded state，并在 discovery 不可用时保留已知订单的安全观察路径。"
+      ],
+      "replacementSteps": [
+        "在 provider capability declaration/adapter boundary 先闭合 listing completeness/identity schema，并为 CCXT/IBKR/Mock 等 adapter 分别填 evidence；不要在 kernel 以 broker-name switch 猜测。",
+        "把 observeExternalOrders 的 listing/diff/recordObservedOrders 拆为 pure classifier + provider ObserveWorker/writer/projection pipeline。",
+        "将 MAP-855D4FE105 的 external test 和 MAP-B4499C0EF7 的 account capability fixtures 接到同一 job contract，删除 Git-known IDs 作为 authority。"
+      ],
+      "verificationCases": [
+        "Complete listing 返回 unknown A：写一条 ExternalOrderObserved 和 lifecycle job；再次同 revision listing 无新 event。",
+        "Complete listing 返回 empty：只有 Complete 的 scope/namespace/cursor evidence 下可记录 NoNewOrders；Partial/Unavailable 不可清空 pending 或 mark external absent。",
+        "Bybit spot namespace 成功但 swap namespace 失败：结果为 Partial/Retry，不能把 spot-only list 当 account 全景。",
+        "结构上没有 listing leaf 或 declared listing unavailable：不得声称发现了全部外部订单；只有独立提供的 durable OrderRef 才可继续 per-order observe，未知外部订单保持 DiscoveryDisabled/OperatorRequired。",
+        "observe timeout/restart：order job 留 Unknown/Retry，恢复后按 native identity observe；其它 account jobs 仍能完成。"
+      ],
+      "openQuestions": [
+        "IBroker 当前 optional getOpenOrders 的‘unsupported returns []’契约与严格 adapter 的 throw 语义不一致；需要 broker-spi owner 实证每个 adapter 的完整 namespace、分页、clientId 范围和 absence evidence，证据未齐前一律把 unsupported/不完整结果编码为 `Unavailable`/`Partial`，不得生成 NoNewOrders。"
+      ]
+    },
+    {
+      "id": "MAP-5D07510B31",
+      "assessment": "designed",
+      "contractDisposition": "reframed",
+      "contractRationale": "pending-order sync 是账户订单状态的数据观察，只有它追踪已接受交易效果时才与 K08 recovery 关联。K03/K04 保留 provider 精确 native lookup/schema 与 Decimal 事实，K05 禁止给每次观察套 approval/compensation；Git pending scan 仅是旧投影证据。",
+      "contractAnchors": [
+        "K03",
+        "K04",
+        "K05",
+        "K07",
+        "K08",
+        "K12"
+      ],
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/order-sync-poller.ts:77-91: the loop reads getPendingOrderIds from each live UTA, calls UTA.sync directly, logs only positive updates, and catches one account's failure before continuing.",
+        "services/uta/src/domain/trading/UnifiedTradingAccount.ts:844-915: sync reads Git pending rows, uses account listing or age-based per-order backoff, queries absent/due orders, and commits all updates through `git.sync` after a broker snapshot.",
+        "services/uta/src/domain/trading/git/TradingGit.ts:692-748: pending order ids are reconstructed from in-memory commit history, including bracket legs and persisted localSymbol/aliceId hints."
+      ],
+      "currentBehavior": "pending loop 先从 UTA Git projection 找 pending IDs；没有 pending 就不做 broker call；有 pending 则直接 sync。UTA listing mode 每轮一次 listing，listing 中仍存在的订单不再 getOrder；消失的订单才确认，没 listing 的 broker 按内存 age backoff 逐单查询。sync updates 最终形成单个 Git commit，异常只通过 log 传播。",
+      "problem": "direct sync 同时绕过 transaction-kernel、DispatchRecord/EffectJob、lease、dispatch identity 和 projection checkpoint；Git scan 不是 durable pending queue。listing empty/partial、getOrder null、timeout 与 terminal rejection 在现有路径缺少 typed distinction；in-memory `_pollState` restart 后重置，per-order backoff 也不 durable。",
+      "targetModel": "把 pending work 表达为 ObserveOrderJob（带 Alice dispatch 的 DispatchIdentity/OrderRef）或 ReconcileUnknownJob；OrderRef 只对私有订单事实携带 AccountScope、InstrumentId、provider native symbol/lookup hint、provider order identity 与 source step，并保留 bracket/child leg 关联和已解析的 localSymbol/aliceId lookup evidence；它不能替代 provider 的完整 input schema。Scheduler 按 account/order observation partition key claim，再调用 provider-declared observation capability；交易 conflict lock 只在关联的 transaction effect job 中存在。listing-capable account 用 Complete(scope, namespaceCoverage, cursorBoundary, observedAt, orders) 做 whole-account candidate reduction，非 listing account 按 durable nextPollAt per order。普通 data observation 不需要 approval、compensation 或交易 WAL；若证据不足使已发送交易进入 RecoveryRequired，冲突排他权才转交 durable RecoveryCase owner。",
+      "pureTransitions": [
+        "reduceListing(pendingOrderRefs, Complete(scope, namespaceCoverage, cursorBoundary, observedAt, orders)) -> present StillWorking refs + absent confirmation intents；present 不调用 per-order lookup，absent 仍须 provider evidence confirm，不能由 absence 单独 terminal。",
+        "observeOrder(providerSnapshot | None | Failure, policy, now) -> OrderStillWorking(nextAt) | OrderTerminal(status, fills) | ObservationUnknown | RetryableFailure；filled qty/price 使用 provider schema 的 Decimal string canonicalization，未声明字段不补默认值。",
+        "applyObservation(orderProjection, providerOutcome, associatedTransactionCriterion?) -> next order state + projection event, and only when an already-accepted transaction is linked, its fixed criterion state；重复/乱序 evidence 按 provider native identity/revision 幂等，不能把 observation outcome 当 dispatch ack 或给普通 data observation 套交易状态。"
+      ],
+      "effectBoundary": "DurableScheduler worker 读取 observation jobs/dispatch rows，调用 provider-declared observation handler（而不是 UnifiedTradingAccount.sync）；JournalWriter 原子写 RemoteObservation、order/execution event、job completion/next notBefore 和 checkpoint，并将当前 source 的 account/position/order snapshot 作为带 observed sequence/freshness 的 named projection 输入，不能把旧 Git state 当新 fact。Git audit projection 可以异步生成旧 sync 视图；account snapshot/query 读取 named projections。若 provider leaf 只支持公共数据，不能被强行包装成私有 order observation。",
+      "durability": "每个 source intent identity 的 observation job 去重，OrderRef/provider lookup fields 序列化；lease claim epoch 在所有回写中验证。listing observation 与 per-order confirmation 使用 observedAt/freshness evidence；remote outcome unknown 不转 Ready dispatch。当前 UTA sync 的 `_getState` 读取 account/positions/orders 后才写 Git sync，目标需在 journal/projection 中保留同等 snapshot sequence/freshness 关联；per-order backoff 状态迁入 notBefore/attempt fields，重启保留 provider policy 与 next due；公共 data cursor/stream durability 独立。",
+      "errors": [
+        "ObservationFailure({ orderRef, cause: ConnectionUnavailable | ProviderRejected | ProtocolViolation })：写 typed observation failure；不继续以 Error.message 处理。",
+        "OutcomeUnknown({ orderRef, dispatchId, evidence, recoveryCaseId })：进入 Reconciling/ObserveUnknown，禁止重新发送 mutation；由 durable RecoveryCase owner 保留交易 conflict exclusion。",
+        "OrderNotFoundWithoutAbsenceProof({ orderRef, lookupEvidence })：provider getOrder null 只能保持 working/unknown，不能写 Cancelled/Rejected。",
+        "ListingResult.Partial({ scope, source, missingEvidence })：停用 absence-based optimization，改 retry/per-order only。",
+        "ProjectionWriteFailure({ sequence })：remote fact 已 journaled，projection lag 可 rebuild，不回滚 provider outcome。"
+      ],
+      "preservedBehavior": [
+        "保留无 pending 时零私有订单 broker round-trip 的优化，但判定依据改为 durable jobs/projections。",
+        "保留 listing mode 的成本规则：全账户一次 listing，仍在列表的长挂单不逐单调用；也保留 no-listing provider 的 age-based backoff。",
+        "保留每账户失败不阻塞后续账户，以及 fill/cancel/filled qty/avg price 的可见结果；有意删除 Git sync commit 作为 execution authority。"
+      ],
+      "replacementSteps": [
+        "定义与 provider observation leaf 对齐的 OrderRef/ObserveJob/DispatchIdentity association 与 listing completeness envelope，并把 UTA sync 的 pure candidate reduction 迁出 application。",
+        "迁移 main scheduler 和 per-account tests，断言 durable job/lease/remote observation/projection；localSymbol 等 provider lookup hint 必须由 plan/order record 保存。",
+        "所有 caller（HTTP/manual sync、tool sync、snapshot read）改为 query/schedule API；切换完成后删除 getPendingOrderIds 驱动的 poll authority 与 in-memory _pollState，公共 data readers 不接收交易 job。"
+      ],
+      "verificationCases": [
+        "两个 pending orders 中一单仍在 Complete listing、一单已填并消失：只为消失者建立 confirmation observation，仍在者不产生 per-order call，最终 projection 只有一笔 fill。",
+        "无 listing provider：fresh order 按 declared policy 立即 observe，老 hanger 由 durable notBefore backoff；进程重启不重置为 fresh。",
+        "getOrder 返回 null 但 absence evidence 不足：order 保持 StillWorking/Unknown，不能从 projection 删除。",
+        "pending job worker 在 DispatchStarted/observe timeout 后重启：只 observe 原 identity，另一账户的 job 仍前进。",
+        "多 fills 的 cumulative qty/weighted avg price 重复观察：projection/fill ledger 只累计新的 provider execution identity，Decimal 字符串不被 number 截断；native retention/freshness 未证实前仍标 Unknown/OperatorRequired。"
+      ],
+      "openQuestions": [
+        "各 adapter 的 order-status retention、symbol-scoped lookup、listing freshness 和稳定 execution identity 尚未由统一 SPI 证明；无证据时必须落 Unknown/OperatorRequired，而不是由 MockBroker 的 getOrder null/递增 id 推断。"
+      ]
+    },
+    {
+      "id": "MAP-870F4383FA",
+      "assessment": "designed",
+      "contractDisposition": "retained",
+      "contractRationale": "现有 target 的 root-owned ordered shutdown、JobsPersisted acknowledgement、late-epoch fencing 和 DispatchStarted 后 Unknown 都是本源码缺陷的正确修复，按 K08/K10/K12 应保留。本次仅进一步区分普通 observation 的 Ready/cursor 收口与交易 effect 的 RecoveryCase，并允许 provider 保留 native close protocol，不把 ordered lifecycle误写成完整 broker SDK。",
+      "contractAnchors": [
+        "K05",
+        "K07",
+        "K08",
+        "K10",
+        "K11",
+        "K12"
+      ],
+      "sourceEvidence": [
+        "services/uta/src/domain/trading/order-sync-poller.ts:93-104: finally resets the process-local running flag; setInterval invokes `void tick()`, and stop only calls clearInterval without awaiting work.",
+        "services/uta/src/main.ts:179-189: shutdown clears catalog interval, stops snapshot scheduler, closes server/UTAs/event log, and exits, but has no order-sync poller shutdown step.",
+        "services/uta/src/domain/trading/UnifiedTradingAccount.ts:211-222: broker connection startup is intentionally fire-and-forget with a swallowed rejection, so poller stop cannot infer connection lifecycle completion."
+      ],
+      "currentBehavior": "tick finally 只释放 running guard；timer callback 丢弃 tick Promise；stop 清理未来 interval，但在途 observe/sync/broker call 可以继续。main shutdown 未持有 poller handle，可能在 UTA manager/event log/进程退出期间仍有 poller side effects。",
+      "problem": "clearInterval 不是 structured shutdown：它不能停止新 claim、等待 writer commit、标记 in-flight dispatch unknown、释放 leases 或关闭 broker connection。fire-and-forget tick 的 rejection/late Git callback 可与数据库关闭竞争；强杀虽会结束进程，但没有可验证的 controlled shutdown state。",
+      "targetModel": "polling 生命周期归 effect-runtime RootScope/DurableScheduler Supervisor：AdmissionOpen → AdmissionClosing → WorkersDraining → JobsPersisted → WriterDrained → CapabilityLayersClosed → SchedulerClosed。JobsPersisted 必须先 durable 写回每个中断 observation job 的 Ready/next notBefore/cursor 或 typed Unknown，并收到 writer acknowledgement；对在途交易 observation 可受控取消并回写 Ready/Unknown evidence；对已经跨 DispatchStarted 的交易 mutation 必须保留 Unknown/Reconciling，RecoveryRequired 的冲突排他权转交 durable RecoveryCase owner。shutdown(policy) 产生 serializable report，包含 stopped admission、drained/active identities、lease epochs、residual failures；provider layers 可保留任意 native close protocol，只需在固定边界报告结果。",
+      "pureTransitions": [
+        "shutdownJob(jobState, boundary, cancellation, now) -> Ready(retry) | Completed(outcome) | Unknown(evidence) | RecoveryRequired(recoveryCaseId)；若 boundary=DispatchStarted，不能返回 Ready/未发送假设；普通数据观察不得生成交易 compensation。",
+        "shutdownAll(admission, workers, writer, capabilityLayers) -> ordered next phase；只有上一步 durable acknowledgement 后进入下一 phase，任何 failure 返回 typed ShutdownFailure 并保留 recovery/cursor state。",
+        "lateWorkerResult(currentEpoch, result) -> Accepted(current owner) | Fenced(old epoch)；旧结果如有有效 provider observation evidence，可进入幂等 ingestion，但无调度权限。"
+      ],
+      "effectBoundary": "Root Scope 管理 scheduler fibers、bounded queues、JournalWriter 和 provider connection/capability Layers；shutdown 先停止 admission/new claims，再 signal/await 或 interrupt workers，持久化 JobsPersisted 状态并 drain writer，最后关闭 capability layers/DB。所有 timer/wake fibers 在 Scope release 时 join；process signal handler await shutdown report 后才 exit。数据流 close 只释放该流资源，不撤销已被交易 writer 接受的 intent。",
+      "durability": "Job lease state、DispatchStarted/outcome、transaction reconciliation checkpoint、observation cursor 和 shutdown marker 由 writer 写入；controlled cancellation 在交易远端边界不明时持久化 Unknown，未跨边界的 observation 保留 Ready。不能仅 delete lease；过期 lease 在下次启动通过 epoch recovery 处理。投影/audit flush 可滞后但 journal authority 必须 drain；数据缓存失败不触发 compensation。",
+      "errors": [
+        "ShutdownInProgress({ phase })：新 admission/claim 明确拒绝，不能 silently accept command。",
+        "WorkerInterrupted({ jobId, boundary, evidence })：交易 job 转 Ready 或 Unknown/RecoveryRequired；普通 observation job 转 Ready/cursor checkpoint；调用方获得对应 residual。",
+        "WriterDrainFailure({ pendingReceipts })：停止 capability close/退出的顺序按 recovery policy 处理，保留未决 durable state。",
+        "LeaseReleaseConflict({ jobId, epoch })：旧 owner 不得覆盖新 owner，交给 recovery classifier。",
+        "CapabilityLayerCloseFailure({ scope, cause })：报告关闭残余并在下一次 startup 继续 provider health recovery；不把 close failure 当交易 compensation。"
+      ],
+      "preservedBehavior": [
+        "保留停止后不启动新的 polling cycle，并允许 controlled stop 在测试中等待当前结果。",
+        "保留强杀场景由 journal recovery 处理，不承诺 JS finalizer 一定运行；目标只是让 graceful path 有明确顺序与 evidence。",
+        "有意把 stop():void 改为可 await 的 typed shutdown，不以 clearInterval 掩盖在途 provider calls；公共 data stream close 不被误报为订单恢复。"
+      ],
+      "replacementSteps": [
+        "让 main 保存 SchedulerService/RootScope handle，并在 closeAll、event log、DB/provider Layer 之前按统一 shutdown coordinator 停止 order workers；公共 snapshot scheduler 继续按自身 lifecycle 收口。",
+        "将 timer callback 改为 supervised fibers，实施 admission close、lease-aware drain/cancel、writer drain 和 capability close；provider native close errors 进入 typed report。",
+        "删除 legacy poller.stop/void tick；所有 caller 使用 shutdown report，并将 active unknown/recovery identities 与 observation cursors 暴露于 operational view。"
+      ],
+      "verificationCases": [
+        "signal 到来时 worker 尚未 claim：admission 关闭后无新交易或 observation job，writer drain 后干净关闭，composition root 持有的 shutdown handle 完成 report。",
+        "signal 到来时 observation 正在请求 provider：受控取消后 job 保持 Ready/Retry 或按证据为 Unknown；下次启动可继续且不触发 compensation。",
+        "signal 到来时交易 dispatch 已写 DispatchStarted：shutdown 不假设未发送，持久化 Unknown/Observe job，重启不 blind redispatch。",
+        "旧 worker 在 shutdown 后返回结果：旧 epoch 写入被 fencing；若 payload 是有效 provider observation，可幂等落库但不重新取得 lease 或 dispatch 权限。",
+        "writer/provider close 任一失败：shutdown report 明确 residual，下一次 startup recovery 仍看到 job/lease/unknown rows，不能通过 process exit 丢状态。"
+      ],
+      "openQuestions": []
+    }
+  ],
+  "crossGroupContracts": [
+    "依赖 [composition-contract.md](../composition-contract.md) K02 的 scope resolution：AccountScope 只贯穿私有账户/订单事实、DispatchIdentity、订单 projection/conflict key 与对应 observability context；公共 Candle/News/Instrument capability 不凭空造账户或 subaccount，除非其具体声明 schema 明确需要 scope。当前 poller 只暴露 uta.id，IBroker listing 也未表达 subaccount，这些是迁移风险而非默认值来源。",
+    "依赖 [composition-contract.md](../composition-contract.md) K02/K03/K07 的 CapabilityDescriptor 与 provider leaf subject：当前 IBroker/getOpenOrders optional、Ccxt permissive []/strict throw、Bybit 多 namespace 与 IBKR clientId-limited listing 继续作为 adapter source evidence；目标由 provider capability declaration 映射为 structural absence、Complete/Partial/Unavailable availability，不要求一个 universal SDK 或全局 ActionContractMap。",
+    "依赖 [composition-contract.md](../composition-contract.md) K03/K05/K07 的 schema/error/交付 subject：Listing/order observation 使用声明的输入、输出、error schema 与 identity/freshness evidence；只有 scope-complete Complete 才能支持 NoNewOrders。Ack/observation 与交易 criterion 分离，timeout/socket loss/worker crash 的交易未知一律进入 Unknown/reconciliation，不能由 scheduler retry 发送 mutation。",
+    "依赖 [composition-contract.md](../composition-contract.md) K05 的 pull/push data subject 与 K08 的 transaction-effect subject：durable order-observation schedule 使用 job notBefore、dedup identity、lease owner/epoch/deadline 与适用 partition keys；内存 Queue/Clock/Schedule/Fiber 只负责 wake/supervision/resource lifetime。普通 pull/push data delivery 不使用 order prepare/approve/compensate、订单锁或每帧交易 WAL，也不与 lossy market telemetry 共用 drop policy。",
+    "依赖 [composition-contract.md](../composition-contract.md) K08/K10 的 durable effect/review subject：Git observed/sync 文本保留为 journal-derived audit view，JournalWriter 才拥有交易 events、remote observations、orders/executions、jobs/checkpoints 的 mutation；Git hashes/pending scans 不得决定 recovery 或 dispatch。数据缓存/stream checkpoint 维持自己的 freshness/replay evidence。",
+    "Shutdown 依赖 [composition-contract.md](../composition-contract.md) K01/K07 的 root composition 与异构边界 subject；当前 main 丢弃 poller handle，且 main.ts:179-189 没有 stop order-sync。Graceful shutdown 先关 admission，再 drain/interruption 与 durable transaction unknown/observation ready state，再关 writer/provider layers/DB。"
+  ],
+  "additionalFindings": [
+    "services/uta/src/main.ts:116-128: order-sync poller 的返回值被直接丢弃；该 composition callsite 没有保存 stop/lifecycle handle，target 必须由 root Scheduler service 接管，而不是只在 order-sync-poller.ts 内修 stop。",
+    "services/uta/src/main.ts:179-189: shutdown 清理 catalog/snapshot/server/UTA/event log 后立即 process.exit(0)，没有等待 order-sync worker、journal writer 或 in-flight broker observation；这是 MAP-870F4383FA 的跨文件 cutover 依赖。",
+    "services/uta/src/domain/trading/UnifiedTradingAccount.ts:829-915: listing mode 的现有语义是一次 listing 覆盖所有 pending、列表仍有订单则不调用 getOrder、消失者才确认；no-listing mode 使用 _pollBackoffDue 的 fresh/1m/5m age policy。目标必须保留该成本/安全规则并把 due/backoff 移入 durable jobs。",
+    "services/uta/src/domain/trading/UnifiedTradingAccount.ts:913-914 and 964-978: sync 在 Git commit 前再次读取 account/positions/orders snapshot；external observation 也先 listing、stamp contract、再调用 _getState。目标 writer/projector 必须明确 snapshot freshness 与 remote observation sequence，不能直接把旧 Git state 当 projection fact。",
+    "services/uta/src/domain/trading/brokers/ibkr/IbkrBroker.ts:766-775: IBKR getOpenOrders 当前只返回该 clientId 的 reqOpenOrders，注释明确手工 TWS 订单需 reqAllOpenOrders+permId（deferred）。外部 listing discovery 不能未经证据宣称覆盖所有账户订单。",
+    "services/uta/src/domain/trading/brokers/others/leverup/LeverupBroker.ts:69-77,113-114,450-477: LeverUp order tracking 与 status cache 是进程内 Map，且该 adapter 没有 getOpenOrders listing；目标应把其 per-order observe/reconciliation 能力显式降级为 durable OrderRef + typed lookup failure，不把 cache 当远端持久状态。",
+    "packages/uta-protocol/src/types/broker.ts:475-584: 当前 IBroker 是真实的 monolithic source interface，包含 optional listing 与多项交易/查询方法；它必须作为历史 source evidence 保留，但新的 UTA-facing target 只投影 provider 实际声明的 capability leaves，不把该接口完整性当成目标要求。"
+  ]
+}

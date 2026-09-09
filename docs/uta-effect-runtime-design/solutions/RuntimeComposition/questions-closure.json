@@ -1,0 +1,369 @@
+{
+  "group": "RuntimeComposition",
+  "entries": [
+    {
+      "id": "MAP-EF93AB390A",
+      "question": "The source does not specify which BrokerError codes are permanent for every adapter; adapter capability declarations must supply this.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "MAP-EF93AB390A",
+        "K02",
+        "K07"
+      ],
+      "resolution": "Retain this as an adapter-specific classification prerequisite. Until each provider supplies a versioned permanent-code mapping, unclassified BrokerError remains transient Unavailable/RecoveryRequired and never becomes Disabled; no cross-provider guarantee is inferred."
+    },
+    {
+      "id": "MAP-A227BE1784",
+      "question": "Adapter health events must distinguish transport failure from private-read failure; absent that evidence, keep the affected capability Unavailable and do not broaden it to executable readiness.",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "MAP-A227BE1784",
+        "K02",
+        "K05"
+      ],
+      "resolution": "Adopt the fixed RuntimeHealth boundary and separate scoped capability health: transport loss is TransportUnavailable, private-read loss is capability Unavailable, and neither creates global Ready or executable permission."
+    },
+    {
+      "id": "MAP-3A811B60A0",
+      "question": "Whether legacy consumers still depend on runtime prototype behavior must be audited outside assigned files.",
+      "disposition": "source-resolved",
+      "evidence": [
+        "MAP-3A811B60A0",
+        "K02",
+        "K03"
+      ],
+      "resolution": "Source audit is complete: contract-ext.ts and protocol contract-ext.ts are declaration-only; legacy callers explicitly read/write aliceId. Migrate those callers to an explicit adapter identity binding and preserve native extension fields in the adapter schema; do not retain process-wide prototype mutation."
+    },
+    {
+      "id": "MAP-41FE208558",
+      "question": "Adapter-specific native idempotency, listing completeness and atomic protection guarantees are not established by this barrel; absent evidence, the corresponding ActionContract capability remains Unavailable or ReconcileBeforeRetry.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "MAP-41FE208558",
+        "K02",
+        "K03",
+        "K08"
+      ],
+      "resolution": "Retain the empirical obligation per provider leaf, not as a global ActionContract. Each provider declares only the exact capability leaves and schemas it implements; native idempotency, listing completeness, and atomic protection remain unproven until that provider supplies evidence, so an absent leaf is omitted and a declared but unproven effect stays unavailable or observe/reconcile-only."
+    },
+    {
+      "id": "MAP-C466C2AC10",
+      "question": "The shipped set of broker packs and their native idempotency guarantees is not proven by this export; absent a pack/capability declaration, keep the account unavailable and do not dispatch.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "MAP-C466C2AC10",
+        "K01",
+        "K02",
+        "K07"
+      ],
+      "resolution": "Retain pack-installation and native-conformance evidence per provider. The fixed outer capability descriptor does not imply a universal action set; an unverified pack or late-observation/idempotency horizon keeps only its affected scoped leaf unavailable and cannot dispatch it."
+    },
+    {
+      "id": "MAP-C2848F848F",
+      "question": "The persisted legacy file shape is not established in this source; import it only as read-only audit/history, never as executable plan or identity.",
+      "disposition": "source-resolved",
+      "evidence": [
+        "MAP-C2848F848F",
+        "K02",
+        "K08"
+      ],
+      "resolution": "Source audit establishes primary and legacy commit.json paths and GitExportState {commits,head}; decode/import projects to LegacyEvidence/GitAuditProjection only. Missing scope/dispatch identity remains operator-required, and no Git field supplies an executable identity."
+    },
+    {
+      "id": "MAP-6AE1898715",
+      "question": "Per-venue jurisdiction/session/public-endpoint facts are not in this source; until the adapter catalog supplies them, registration remains Unavailable rather than guessing metadata.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "MAP-6AE1898715",
+        "K02",
+        "K05",
+        "K07"
+      ],
+      "resolution": "Retain this adapter-catalog evidence. A public registration requires explicit PublicDataScope, venue, jurisdiction, session, endpoint, and data-capability facts; absent facts leave the affected data leaf unavailable rather than inventing account/subaccount or order capabilities."
+    },
+    {
+      "id": "MAP-018E718257",
+      "question": "This assigned unit has no remote public-venue run; without adapter evidence historical-data freshness remains an explicitly unverified capability rather than an implied runtime guarantee.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "MAP-018E718257",
+        "K05",
+        "K12"
+      ],
+      "resolution": "Retain the missing remote-run prerequisite. Pure construction and keyless composition prove no eager network side effect only; they do not prove public endpoint reach, pull/push freshness, or replay, so those public data leaves remain Unavailable/Unknown until scoped adapter evidence is observed."
+    },
+    {
+      "id": "MAP-38975A9375",
+      "question": "The source does not establish venue-specific public endpoint/freshness guarantees; until each adapter declares them, historical capability remains Unavailable or quality-annotated rather than being inferred from construction.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "MAP-38975A9375",
+        "K02",
+        "K05",
+        "K07"
+      ],
+      "resolution": "Retain the per-venue capability prerequisite. Historical data is available only when the venue adapter declares and observes endpoint, freshness, entitlement, and quality; construction cannot promote a data leaf or create undeclared private/effect leaves."
+    },
+    {
+      "id": "MAP-DCAD63E801",
+      "question": "The assigned source does not contain the shipped OKX instrument-rule evidence; until the adapter supplies it, conflicting FUT/STK-looking metadata remains ProtocolConflict/Unavailable rather than being force-labelled crypto.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "MAP-DCAD63E801",
+        "K02",
+        "K03"
+      ],
+      "resolution": "Retain the native instrument-rule gap. Conflicting FUT/STK-looking metadata remains ProtocolConflict/Unavailable; no heuristic or construction result force-labels an executable Crypto instrument without a shipped, versioned OKX rule."
+    },
+    {
+      "id": "MAP-81F5FC7879",
+      "question": "Legacy Git migration format and whether all accounts have scope metadata require storage migration work.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "MAP-81F5FC7879",
+        "K02",
+        "K08"
+      ],
+      "resolution": "The Git migration path and legacy shape are source- and design-resolved, but the presence of explicit AccountScope metadata for every persisted account remains a data-inventory prerequisite. Until verified, preserve the record as LegacyEvidence/OperatorRequired and never synthesize executable identity."
+    },
+    {
+      "id": "MAP-DC4CB2CF21",
+      "question": "Venue-specific namespace coverage and absence/idempotency evidence are not established by this manager source; Partial/Unavailable remains non-authoritative and cannot infer order rejection/cancellation.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "MAP-DC4CB2CF21",
+        "K02",
+        "K05",
+        "K08"
+      ],
+      "resolution": "Retain the concrete venue-evidence prerequisite. Manager search uses typed Partial/Unavailable results and non-authoritative absence; cancellation or rejection requires a separate controlled-effect observation, never an incomplete listing inference."
+    },
+    {
+      "id": "MAP-A52D6896E9",
+      "question": "The host supervisor chooses final process exit status/restart policy; the runtime must return typed ShutdownReport/Exit evidence and never classify Unknown as rejection.",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "MAP-A52D6896E9",
+        "K07",
+        "K08"
+      ],
+      "resolution": "Use the Supervisor typed ShutdownReport/host-owned RestartOutcome boundary: RuntimeComposition returns structured phase/outcome before termination, and Unknown is neither rejection nor clean success. Data projection shutdown remains separate from effect recovery."
+    },
+    {
+      "id": "MAP-80C471F58F",
+      "question": "Guardian’s exact restart handshake is not shown in this source; it must consume canonical RuntimeHealth and typed shutdown evidence rather than infer readiness from process liveness.",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "MAP-80C471F58F",
+        "K09",
+        "K10",
+        "K12"
+      ],
+      "resolution": "Use the existing Guardian control protocol extension runtime.restart-uta with requestId correlation; success requires changed bootId (or same-request completed/new-boot proof) and canonical RuntimeHealth.Ready, never process liveness alone. Optional provider/data layers do not alter that root criterion."
+    },
+    {
+      "id": "MAP-7D7ABA2368",
+      "question": "The existing Alice authentication adapter is not imported in this source; the composition must bind the established Principal/Auth contract and reject unauthenticated commands before application services.",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "MAP-7D7ABA2368",
+        "K02",
+        "K09"
+      ],
+      "resolution": "Bind the provisioned Alice Principal/AuthContext at transport before application ports; reject missing or invalid principal. Public data requests use their explicit PublicDataScope, while account commands require AccountScope; neither is inferred from loopback or a request body."
+    },
+    {
+      "id": "MAP-C9D53377C0",
+      "question": "Per-venue namespace coverage is not established by this composition source; until C07 coverage evidence is declared, listing remains Partial/Unavailable and absence is non-authoritative.",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "MAP-C9D53377C0",
+        "K05",
+        "K07",
+        "K12"
+      ],
+      "resolution": "Adopt C07 listing evidence for each declared data scope: refresh is complete only with provider-declared namespace, pagination, scope, and absence facts; otherwise Partial/Unavailable is explicit and cannot imply cancellation or rejection."
+    },
+    {
+      "id": "MAP-FC89E49A77",
+      "question": "The credential provider’s concrete sealed-store location is not in this source; use the existing sealed CredentialRef path and never request or log a token.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "MAP-FC89E49A77",
+        "K03",
+        "K07"
+      ],
+      "resolution": "Retain only the concrete sealed-credential provisioning prerequisite. Provider-native proxy settings are decoded behind CredentialRef; without a binding the affected layer is unavailable, and no token is requested, logged, or placed in config, plan, digest, or journal."
+    },
+    {
+      "id": "MAP-756E9DC555",
+      "question": "The shipped config decoder module is not shown in this source; if its schema cannot decode a field, fail closed with ConfigSchemaFailure rather than accepting an untyped value or fallback.",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "MAP-756E9DC555",
+        "K03",
+        "K07"
+      ],
+      "resolution": "Use per-provider typed config decoders and ConnectionIntent codecs. Unknown fields or invalid values fail closed with ConfigSchemaFailure/PackLoadFailure; no untyped fallback is allowed, and public-data declarations do not gain an account scope by default."
+    },
+    {
+      "id": "MAP-2C295F499B",
+      "question": "Whether historical EventLog contents are imported is not established here; if imported, classify them as read-only audit history with no transaction/dispatch identity or executable recovery semantics.",
+      "disposition": "design-decided",
+      "evidence": [
+        "MAP-2C295F499B",
+        "K08",
+        "K11"
+      ],
+      "resolution": "Choose JournalStore as runtime authority. A historical EventLog importer, if needed, runs only after journal commit as a read-only GitAuditProjection/LegacyEvidence projection and cannot supply transaction, dispatch, recovery, data-source identity, or executable plan state; no JSONL/in-memory fallback is used."
+    },
+    {
+      "id": "MAP-B0317A6228",
+      "question": "The provider catalog and sealed credential binding are not defined in this source; missing provider evidence yields FxUnavailable/Incompleteness rather than a default rate or user token prompt.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "MAP-B0317A6228",
+        "K03",
+        "K07"
+      ],
+      "resolution": "Retain the provider-binding prerequisite. FxObservation is accepted only from a declared provider with sealed CredentialRef binding; missing provider or binding yields FxUnavailable/Incompleteness, never a default rate or plaintext-token prompt."
+    },
+    {
+      "id": "MAP-DFDC1D0116",
+      "question": "Venue-specific idempotency/lookup guarantees are not established here; without them, a post-DispatchStarted timeout remains Unknown/ObserveRequired and is never blindly redispatched.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "MAP-DFDC1D0116",
+        "K05",
+        "K07",
+        "K08"
+      ],
+      "resolution": "Retain native venue evidence. The durable observe/reconcile path is fixed for a declared controlled-effect leaf, but a post-DispatchStarted timeout is Unknown/ObserveRequired and cannot be blindly retried until that adapter proves lookup identity and idempotency horizon."
+    },
+    {
+      "id": "MAP-C762FC3F5D",
+      "question": "Per-venue catalog namespace requirements are not established in this source; a refresh cannot claim ListingComplete until adapter coverage evidence is present.",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "MAP-C762FC3F5D",
+        "K05",
+        "K07",
+        "K12"
+      ],
+      "resolution": "Adopt C07 for catalog data: refresh work is a scoped supervised projection resource, and ListingComplete requires adapter-declared namespace, pagination, scope, and absence evidence. Missing coverage stays Partial/Unavailable and cannot imply a controlled-effect result."
+    },
+    {
+      "id": "MAP-1C9449F63F",
+      "question": "The concrete Alice auth middleware is not shown in this source; it must produce a typed Principal/AuthContext before any route reaches application services.",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "MAP-1C9449F63F",
+        "K02",
+        "K06",
+        "K08"
+      ],
+      "resolution": "Adopt the Alice auth contract: middleware constructs typed Principal/AuthContext before UTA application services; unauthenticated route commands are rejected at the boundary. Only routes whose declared capability is a controlled effect enter the transaction wrapper."
+    },
+    {
+      "id": "MAP-2810B2FE69",
+      "question": "The deployment mode source/admin principal is not shown here; absent an explicit Development/Test mode and authorization capability, simulator routes remain Disabled/NotFound.",
+      "disposition": "design-decided",
+      "evidence": [
+        "MAP-2810B2FE69",
+        "K02",
+        "K08"
+      ],
+      "resolution": "Choose explicit RuntimeMode Development/Test plus SimulatorAdmin capability gate; production/default composition omits simulator. Enabled simulator calls still use typed public/account scope and the same declared data/effect boundary, not direct MockBroker state."
+    },
+    {
+      "id": "MAP-F0D5CAEC8A",
+      "question": "Host supervisor exit/restart mapping is not shown in this source; it must consume typed shutdown outcome and must not convert Unknown to rejection or clean success.",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "MAP-F0D5CAEC8A",
+        "K07",
+        "K08"
+      ],
+      "resolution": "Use the Supervisor typed shutdown outcome: RuntimeComposition emits a structured report after admission closure, worker quiescence, evidence classification, and drain; the host maps exit/restart, and Unknown is never converted to rejection or clean success."
+    },
+    {
+      "id": "MAP-62BFB82A86",
+      "question": "The host supervisor’s restart/backoff policy is outside this module; runtime still returns structured Exit and preserves durable evidence before termination.",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "MAP-62BFB82A86",
+        "K07",
+        "K11"
+      ],
+      "resolution": "Retain the role-dispatch guard as an integration fact, but runMain returns structured startup phase/Exit evidence after safe persistence. Supervisor owns restart/backoff and no catch-all text or provider availability result becomes a universal failure category."
+    },
+    {
+      "id": "MAP-780C76C803",
+      "question": "The independent durable broker-ledger fixture is not present in this spec; until added, this harness cannot claim DispatchStarted/Unknown recovery proof and must report that evidence as unavailable.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "MAP-780C76C803",
+        "K08",
+        "K12"
+      ],
+      "resolution": "Retain the missing independent vertical-fixture evidence. Child launch, HTTP polling, and liveness diagnose process behavior only; without SQLite plus an independent provider ledger, controlled-effect DispatchStarted/Unknown recovery proof is unavailable."
+    },
+    {
+      "id": "MAP-14BB289E6A",
+      "question": "The independent broker-ledger fixture and exact crash-cut injection are not present in this source; without them, this helper cannot prove remote idempotency and must remain cleanup-only.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "MAP-14BB289E6A",
+        "K07",
+        "K08"
+      ],
+      "resolution": "Retain the crash-fixture prerequisite. stopChild only cleans up a child; it cannot prove provider idempotency or recovery. Until ledger and crash-cut artifacts exist, preserve them and classify any post-DispatchStarted result as Unknown."
+    },
+    {
+      "id": "MAP-42AE8CC4D2",
+      "question": "The assigned source does not define the IBKR event codec or native handshake guarantees; until IbkrBridge supplies them, the closure remains typed unavailable evidence and cannot authorize mutation/retry.",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "MAP-42AE8CC4D2",
+        "K02",
+        "K07"
+      ],
+      "resolution": "Adopt the typed IBKR adapter handshake boundary: missing or unproven codec/native handshake yields scoped ConnectionUnavailable/CapabilityUnavailable, with no mutation or retry inferred. Native effect guarantees remain empirical in MAP-4682CE1389."
+    },
+    {
+      "id": "MAP-609A59F711",
+      "question": "The sealed-config fixture and CredentialRef test helper are not present here; missing helpers must fail closed without plaintext credentials.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "MAP-609A59F711",
+        "K03",
+        "K07"
+      ],
+      "resolution": "Retain the missing sealed-config/CredentialRef fixture. The two-account isolation test can prove scoped health behavior, but absent a redaction/missing-ref run startup must fail closed or mark only the affected scope unavailable without plaintext."
+    },
+    {
+      "id": "MAP-FADF0D8D68",
+      "question": "The structured observability envelope is not defined in this source; until it exists, raw output may diagnose only and cannot satisfy secret-redaction or phase-evidence acceptance.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "MAP-FADF0D8D68",
+        "K03",
+        "K07",
+        "K12"
+      ],
+      "resolution": "The shared ViewEnvelope/ExecutionContext and named redaction boundary are design constraints, but runtime emission/redaction conformance remains an empirical fixture prerequisite. Raw child output is diagnostics only and cannot satisfy phase or secret-redaction acceptance."
+    },
+    {
+      "id": "MAP-4682CE1389",
+      "question": "Native IBKR idempotency/lookup guarantees are not shown in this source; absent adapter evidence, a post-DispatchStarted timeout remains Unknown and cannot be retried.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "MAP-4682CE1389",
+        "K07",
+        "K08"
+      ],
+      "resolution": "Retain this IBKR-native prerequisite. Liveness or reconnect does not prove idempotency; after DispatchStarted timeout, persist Unknown/RecoveryRequired and observe via native lookup without retry until the adapter supplies conformance evidence."
+    }
+  ],
+  "remainingCount": 17
+}

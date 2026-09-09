@@ -1,0 +1,153 @@
+{
+  "group": "Leverup",
+  "entries": [
+    {
+      "id": "MAP-2FF2A5B544",
+      "question": "The relayer duplicate-submit/idempotency scope and inputHash retention horizon are not documented in the source and require native evidence.",
+      "disposition": "empirical-retained",
+      "evidence": "LeverupBroker.spec.ts:269-301 supplies a mocked inputHash and checks Pyth bytes in the POST; relayer-client.ts:42-52 defines no deduplication, retention, or lookup contract. The source therefore cannot establish native retry guarantees.",
+      "resolution": "Retain the native prerequisite: a versioned relayer conformance observation must establish duplicate-submit scope, inputHash lookup behavior, and retention horizon. Until then, the controlled open effect uses local commandId+payloadDigest uniqueness to return the existing durable receipt for an identical command and IdempotencyConflict for a changed digest; after DispatchStarted or response loss the same dispatch remains Unknown/RecoveryRequired and only observe-before-retry is permitted, never blind resubmission."
+    },
+    {
+      "id": "MAP-2FF2A5B544",
+      "question": "The accepted EIP-712 schema, chain finality, and semantic meaning of a Pyth binary update are not established by the local fixtures; absent evidence, the plan stops at Ack/Unknown and does not claim execution.",
+      "disposition": "empirical-retained",
+      "evidence": "eip712.ts:4-10 documents conflicting nested/flat schemas and :52-117 defines distinct primary types; pyth.ts:31-72 returns binary bytes and a local parsed price but does not prove relayer or chain acceptance. LeverupBroker.spec.ts:269-301 cannot establish finality.",
+      "resolution": "Retain the native prerequisite for accepted primary type, protocol version, chain finality, and the binary update’s on-chain semantic effect. Before that evidence, the open signing leaf is unavailable, Pyth bytes remain bounded evidence attached to the frozen intent, and a valid submit is Ack/Submitted only; Ack, executed/success booleans, or binary presence cannot become Filled, Confirmed, or final."
+    },
+    {
+      "id": "MAP-A2A0451C27",
+      "question": "Whether LeverUp's native close endpoint supports partial quantity is not evidenced by this source and must remain unavailable until a documented/empirical capability is captured.",
+      "disposition": "empirical-retained",
+      "evidence": "LeverupBroker.ts:327-374 ignores _quantity and posts only positionHash; LeverupBroker.spec.ts:315-359 covers one immediate submitted response rather than a partial-close endpoint. No source evidence establishes Units semantics.",
+      "resolution": "Retain the native partial-close capability prerequisite. Until a typed endpoint record or controlled native observation proves Units semantics, no Units/partial-close leaf is published; the compatibility adapter maps an omitted legacy quantity to the explicit close-all leaf because the native endpoint has no amount field, while a supplied quantity is rejected before DispatchStarted with no relayer call. The close-all Ack remains pending until scoped status and residual-exposure evidence."
+    },
+    {
+      "id": "MAP-B9BAFEC82F",
+      "question": "The source does not document the units for open/execution/funding/holding fee strings beyond their decimal encoding; keep their currency/scale unavailable until observed.",
+      "disposition": "empirical-retained",
+      "evidence": "reader-client.ts:31-57 labels margin/qty/price scales but leaves openFee, executionFee, fundingFee, and holdingFee unqualified; LeverupBroker.ts:390-399 subtracts funding/holding text as if USDC. The source does not establish fee units.",
+      "resolution": "Retain the fee-unit observation prerequisite per field. Until currency, scale, token identity, and as-of are decoded, preserve each raw value as FeeEvidence with FeeUnitUnknown, exclude it from balance/equity/PnL aggregation, and do not replace it with numeric zero; a valid six-decimal USDC balance remains independently queryable as account-bound data."
+    },
+    {
+      "id": "MAP-A3B8CD6164",
+      "question": "The relayer API's exact semantics for executed/success, status retention, and transaction finality are not evidenced by source; native conformance evidence is required.",
+      "disposition": "empirical-retained",
+      "evidence": "LeverupBroker.spec.ts:433-471 toggles mocked executed/success booleans and optional transaction text; relayer-client.ts:47-52 exposes no fill, confirmation, or terminality fields and :74-93 fabricates a timeout status. Native status/finality remains unproven.",
+      "resolution": "Retain the native status/finality prerequisite. Until a versioned policy supplies terminal meaning plus execution/fill identity and retention behavior, classify only evidence-supported Acked/StillWorking/Unknown, keep failed GET or unproven absence as Unknown, and never project Filled, Rejected, Committed, or finality from executed/success alone."
+    },
+    {
+      "id": "MAP-B100B9C54C",
+      "question": "The source does not identify which primary type the live relayer accepts; schema capability remains unavailable until native protocol evidence is recorded.",
+      "disposition": "empirical-retained",
+      "evidence": "eip712.ts:4-10 says the documentation conflicts and :54-97 defines different open primary types; LeverupBroker.spec.ts:488-552 proves local signature differences but never sends an accepted native vector.",
+      "resolution": "Retain the accepted-primary-type prerequisite for the relevant signing leaf. Until a relayer/contract known-vector or equivalent native evidence binds one SchemaCapability and domain fingerprint before preparation, that leaf is SchemaCapabilityUnavailable; the selected intent is immutable and a post-DispatchStarted or ambiguous result cannot trigger nested-to-flat retry."
+    },
+    {
+      "id": "MAP-50F0F7A825",
+      "question": "The source proves only bytes32 formatting; any relayer deduplication or salt-retention guarantee remains unavailable and cannot be inferred from local uniqueness.",
+      "disposition": "empirical-retained",
+      "evidence": "LeverupBroker.spec.ts:569-575 checks bytes32-like formatting and immediate inequality; eip712.ts:121-124 derives salt from Date.now and Math.random. Neither proves relayer deduplication or retention.",
+      "resolution": "Retain only the external relayer guarantee as empirical. The controlled open effect binds OpenNonce/salt to scope, command, plan digest, and deployment, replays the same durable identity, and sends post-dispatch ambiguity to observation without allocating a new salt; no native deduplication or retention claim is made."
+    },
+    {
+      "id": "MAP-D1A1D77A33",
+      "question": "The source comment does not provide a protocol version, accepted EIP-712 primary type, relayer idempotency/retention guarantee, status terminal semantics, chain finality rule, complete reader coverage, or fee units; all such manifest features must remain Unavailable/Unknown until independent native evidence is recorded.",
+      "disposition": "empirical-retained",
+      "evidence": "LeverupBroker.ts:1-9 is a role comment without a protocol manifest or evidence fields; reader-client.ts:59-90 and relayer-client.ts:42-93 expose incomplete pagination/status shapes. The source does not define fixed metadata beyond the legacy facade.",
+      "resolution": "Record the manifest conformance prerequisite as fixed outer metadata plus provider-declared leaf fields. Until independently versioned evidence fills each field, public data leaves may remain available with explicit coverage while account/trading leaves report named availability; observations remain Unknown unless evidence supports StillWorking/Rejected, fee fields stay unaggregated, and no finality or retry guarantee is asserted."
+    },
+    {
+      "id": "MAP-5E91CFA930",
+      "question": "The source only proves an RPC chainId probe; reader/relayer health probes, scope-directory semantics, accepted schema, and address-set checks require separate evidence. Until then initialization can expose read-only/degraded capability but must not advertise write readiness.",
+      "disposition": "empirical-retained",
+      "evidence": "LeverupBroker.ts:132-150 derives signer, constructs clients, calls only publicClient.getChainId, and sets initialized; it does not probe reader/relayer health, scope, verifying contract, or token/address agreement.",
+      "resolution": "Retain the separate runtime-evidence prerequisite. Initialization may expose public/read-only or degraded capability while reader/relayer health, account scope for account-bound leaves, accepted schema, and address-set evidence are missing; it emits ScopeDiscoveryPending, EndpointIdentityUnavailable, or SchemaCapabilityUnavailable where applicable and never opens a trading leaf from a healthy RPC or wallet address alone."
+    },
+    {
+      "id": "MAP-5EDC8088C6",
+      "question": "Source does not establish the live collateral/token mapping, leverage semantics, or zero TP/SL protocol meaning for every listed pair; keep unavailable until native evidence.",
+      "disposition": "empirical-retained",
+      "evidence": "LeverupBroker.ts:229-256 hardcodes USDC/LVUSD, assumes USD and leverage 1, and encodes absent TP/SL as zero; decimals.ts:15-20 proves field scales only, not per-pair deployment semantics.",
+      "resolution": "Retain the per-instrument native mapping prerequisite. Until collateral/token, leverage, zero-protection, and pairBase/deployment semantics are evidenced for the exact deployment and pair, the open leaf returns CollateralTokenUnknown, QuoteConversionUnavailable, ProtectionEncodingUnavailable, or NativeIdentityUnverified as applicable; it does not send hardcoded USDC/LVUSD, infer 1x, or interpret zero TP/SL as None without a named provider capability. Placeholder pairBase rows such as 500BTC/500ETH remain catalog-only. The controlled plan also keeps commit criterion/precondition/compensation evidence explicit and records native no-undo as None(reason) rather than claiming reversibility."
+    },
+    {
+      "id": "MAP-6786905A37",
+      "question": "The live accepted schema variant and protocol version are not documented; this remains unavailable until external/native evidence.",
+      "disposition": "empirical-retained",
+      "evidence": "LeverupBroker.ts:258-274 signs using mutable schemaVariant; eip712.ts:4-10 records the unresolved schema conflict. Local vectors do not establish relayer acceptance or protocol version.",
+      "resolution": "Retain the accepted schema/protocol-version prerequisite for the signing leaves. Until SchemaCapability is bound to ChainDeployment before signing, the affected leaf is unavailable with SchemaUnavailable; open deadline and OpenNonce, or close positionHash/deadline without an OpenNonce, remain frozen, and any post-start ambiguity is observed/recovered rather than sent under another schema."
+    },
+    {
+      "id": "MAP-AFEC8DA518",
+      "question": "Relayer duplicate-submit behavior, inputHash retention, and lookup guarantees are absent from the source; native evidence is required before retry/idempotency claims.",
+      "disposition": "empirical-retained",
+      "evidence": "LeverupBroker.ts:276-317 posts the signed request, stores only a Map entry, and maps thrown errors to success=false; relayer-client.ts:42-71 defines only opaque inputHash and an unverified status GET. The source lacks duplicate/retention guarantees.",
+      "resolution": "Retain the external retry/idempotency prerequisite for the controlled relayer effect. Before evidence, the JournalWriter owns one stable DispatchStarted/ObserveJob identity and post-boundary timeout, 503, or response loss is Unknown/RecoveryRequired; no second POST, salt, schema, or lookup assumption is allowed. A future native guarantee may narrow this policy only through a versioned adapter evidence record."
+    },
+    {
+      "id": "MAP-B53E29D3CC",
+      "question": "Native partial-close support and close status/finality semantics are not present in this source; remain unavailable pending native evidence.",
+      "disposition": "empirical-retained",
+      "evidence": "LeverupBroker.ts:327-374 ignores requested quantity, picks the first matching OPEN row, and treats inputHash as immediate submitted result; no native partial or terminal close fields are present.",
+      "resolution": "Retain both native prerequisites. Until proven, Units/partial close has no provider leaf and a supplied legacy quantity is rejected before DispatchStarted, while an omitted quantity is mapped to explicit close-all because the native endpoint has no amount field. Close-all can submit only from a complete scope-bound positionHash before-image; its Ack is pending and cannot become Closed until status plus residual-exposure evidence establishes outcome/finality."
+    },
+    {
+      "id": "MAP-123F8DBC3D",
+      "question": "Fee currency/scale and a reliable net-liquidation source are not documented in this file; native observation is required.",
+      "disposition": "empirical-retained",
+      "evidence": "LeverupBroker.ts:378-414 combines concurrent balance and page-0 positions, assumes USDC/USD, subtracts unqualified fees, and sets realizedPnL to 0; reader-client.ts:38-49 does not define fee currency/scale.",
+      "resolution": "Retain the native fee and net-liquidation observation prerequisite. Until it exists, preserve independently scoped balance/position/fee facts and report Valuation Partial/Unavailable; do not use approximate net liquidation, unqualified fee subtraction, or default zero realized PnL as a risk or execution precondition."
+    },
+    {
+      "id": "MAP-0233341AE8",
+      "question": "REST pagination consistency and exact fee/PnL units are not evidenced; retain raw fields and require native evidence before valuation claims.",
+      "disposition": "empirical-retained",
+      "evidence": "reader-client.ts:31-65 exposes raw fee/PnL-like strings and page counters without a runtime schema/consistency contract; :80-90 fetches page=0/OPEN. LeverupBroker.ts:416-448 silently skips unknown pairs and fabricates valuation fields.",
+      "resolution": "Retain the reader conformance prerequisite. Until page totals/cursors are validated across the declared account-bound listing and fee/PnL units are decoded, ReaderPort returns Partial/Unavailable rather than absence, retains every raw/unknown row and unit evidence, and valuation remains unavailable; no entry, margin, zero, or inferred multiplier may fill the gap."
+    },
+    {
+      "id": "MAP-5D7C69A184",
+      "question": "Relayer status retention, namespace listing, and terminal/finality semantics are unavailable from source and need native evidence.",
+      "disposition": "empirical-retained",
+      "evidence": "LeverupBroker.ts:450-492 enumerates only process-local orderTracking, converts executed/success to Filled/Inactive, swallows GET errors, and returns null for untracked IDs; relayer-client.ts:65-93 has no retention/namespace/finality contract.",
+      "resolution": "Retain the native listing/status prerequisite. Until native conformance supplies retention, covered namespaces, and terminal/finality meaning, durable controlled-effect refs observe by inputHash, missing or failed status is Unknown, incomplete enumeration is Partial, and booleans cannot yield Filled, Cancelled, Rejected, or absence."
+    },
+    {
+      "id": "MAP-481A2438E0",
+      "question": "The source contains no bid/ask/volume feed and no verified freshness, session, or finality policy; those fields stay unavailable and stale observations cannot authorize writes.",
+      "disposition": "empirical-retained",
+      "evidence": "LeverupBroker.ts:494-514 copies one Pyth mark into bid/ask and reports volume 0; pyth.ts:54-72 supplies only one parsed price and publish time, with no bid/ask/volume or freshness policy.",
+      "resolution": "Retain the missing external observation/policy prerequisite while closing the source-level fabrication question: expose exact mark through QuoteShape=MarkOnly with VolumeUnavailable until corresponding feeds exist; stale/future/malformed observations are typed data failures and cannot authorize a trading leaf, and no session/finality fact is inferred from a quote."
+    },
+    {
+      "id": "MAP-47A0790F1B",
+      "question": "No LeverUp venue calendar/session source is present; MarketSession remains Unknown and write admission is blocked until a versioned calendar/evidence source exists.",
+      "disposition": "empirical-retained",
+      "evidence": "LeverupBroker.ts:516-518 returns isOpen=true with a local Date and performs no calendar/venue query. No LeverUp session source is present in the adapter.",
+      "resolution": "Retain the versioned calendar/session evidence prerequisite. Until configured or observed venue-session evidence exists, return MarketSession.Unknown/SessionUnknown and a session-dependent trading leaf cannot be admitted; never use the legacy always-open response as an execution precondition. A future calendar must carry source, version, scope where applicable, and freshness."
+    },
+    {
+      "id": "MAP-4AD307691B",
+      "question": "Per-instrument deployment support and accepted schema evidence are absent; static CRYPTO_PERP/MKT labels cannot become usable capability without context.",
+      "disposition": "empirical-retained",
+      "evidence": "LeverupBroker.ts:522-527 returns static CRYPTO_PERP/MKT lists without account/instrument/deployment/schema/revision evidence; no per-instrument accepted-schema proof exists.",
+      "resolution": "Retain the per-instrument/deployment/schema evidence prerequisite. Until a capability snapshot binds the relevant scope (only for account-bound leaves), InstrumentId, ChainDeployment, SchemaCapability, and revision, CRYPTO_PERP/MKT remain compatibility metadata and the affected write leaf is Unavailable with an explicit reason; no DispatchStarted may be created from static lists."
+    },
+    {
+      "id": "MAP-96C363D9C7",
+      "question": "The live relayer's accepted primary schema is undocumented; variant selection remains unavailable until evidence is collected.",
+      "disposition": "empirical-retained",
+      "evidence": "LeverupBroker.ts:557-560 exposes _setSchemaVariant, and eip712.ts:4-10 says the nested/flat loser awaits a real testnet round-trip; LeverupBroker.spec.ts:488-552 only compares local hashes.",
+      "resolution": "Retain the live accepted-primary-type prerequisite for the signing leaf. Until one immutable SchemaCapability is evidenced before prepare, signing is blocked with SchemaUnavailable; changing a prepared variant is forbidden and any post-start ambiguity creates observation/recovery work rather than a second schema submission."
+    },
+    {
+      "id": "MAP-BC7663242A",
+      "question": "The reader API's pagination consistency, total-page guarantees, and fee-unit semantics are not established by this source; keep completeness/valuation conservative until native evidence.",
+      "disposition": "empirical-retained",
+      "evidence": "LeverupBroker.ts:562-566 exposes raw reader records; reader-client.ts:59-65 has page counters without a runtime consistency contract, and :80-90 requests only page=0/OPEN. Pagination and fee-unit conformance remain unproven.",
+      "resolution": "Retain the reader conformance prerequisite. ReaderPort is Complete only after every declared page/cursor boundary and account scope/namespace condition validates; otherwise it is Partial/Unavailable, raw fee values remain retained as FeeUnitUnknown, and neither no-position nor valuation/finality claims may be made."
+    }
+  ],
+  "remainingCount": 21
+}

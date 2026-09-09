@@ -1,0 +1,269 @@
+{
+  "group": "Accounting",
+  "designBasis": "capability-composition-v1",
+  "analysesSha256": "8a71bfa969f3ac05083078dbef626927ee6e85c6c187306e487b673528afc8ad",
+  "designSha256": "76615cb6d9fa8526a9a0f14dfa6164112012304af5401b1bf90a2ab35a2658d4",
+  "contractSha256": "73f5235ae86d3f1c9038dfd214e7207cdfb1833be7bc369f628d7d3f9017dd4f",
+  "entries": [
+    {
+      "id": "MAP-CA5605FEB6",
+      "verdict": "accepted",
+      "reason": "Accepted: cost-basis.spec.ts:1-88 constructs IBKR fixtures, composite aliceId values, and raw Git records; the target keeps those as fixture evidence and requires schema-decoded AccountScope with explicit subAccountId rather than parsing aliceId. Journal authority and the empirical historical-scope obligation are preserved under MAP-CA5605FEB6 and K03/K07/K08/K11/K12."
+    },
+    {
+      "id": "MAP-977FF0C895",
+      "verdict": "accepted",
+      "reason": "Accepted: cost-basis.spec.ts:89-265 demonstrates Decimal spot WAC buys, partial/full/oversell behavior, and mark reconciliation, but not FIFO, lots, shorts, splits, or migrations. The target correctly keeps SpotWac as a versioned policy only for the source-backed declared spot leaf and makes other policies explicit Unsupported/Unavailable outcomes (MAP-977FF0C895; K04/K08/K11/K12)."
+    },
+    {
+      "id": "MAP-7BEE7FDB8C",
+      "verdict": "accepted",
+      "reason": "Accepted: cost-basis.spec.ts:266-301 supplies one positional sync result with optional filled quantity/price, so it cannot establish venue fill semantics. The target replaces positional attribution with independently keyed observations and retains cumulative-cursor versus execution-stream as a local FillMeasure only when the adapter evidences it; the empirical question remains open (MAP-7BEE7FDB8C; K02/K07/K08/K11/K12)."
+    },
+    {
+      "id": "MAP-68C7EFD89F",
+      "verdict": "accepted",
+      "reason": "Accepted: cost-basis.spec.ts:302-374 supports delayed execution-price attribution, origin/sync dedupe, external observations, and sell quantity reduction, but not native correction identity. The target uses source-specific controlled versus external FillIdentity, durable digest conflict handling, and explicit UnsupportedCorrection/RecoveryRequired without imposing a provider taxonomy; correction evidence remains empirical (MAP-68C7EFD89F; K02/K04/K07/K08/K11)."
+    },
+    {
+      "id": "MAP-D807137749",
+      "verdict": "accepted",
+      "reason": "Accepted: cost-basis.ts:1-24 explicitly calls Git replay authoritative for CCXT spot WAC and documents mark bootstrap plus omitted accounting policies. The target moves authority to typed journal projections, retains a local versioned AccountingPolicy algebra with source-backed SpotWac, and keeps Git audit-only; the per-record migration-manifest question remains retained (MAP-D807137749; K03/K08/K11/K12)."
+    },
+    {
+      "id": "MAP-FE12115ED5",
+      "verdict": "accepted",
+      "reason": "Accepted: cost-basis.ts:26-36 exposes unqualified avgCost/qty/fillCount tied to Git types. The target replaces that bag with a scoped CostBasisProjection state variant and counts confirmed FillEvents only, while binding policyVersion to scope/instrument rather than a global scalar (MAP-FE12115ED5; K02/K03/K08/K11)."
+    },
+    {
+      "id": "MAP-EBE3DF37DD",
+      "verdict": "accepted",
+      "reason": "Accepted: cost-basis.ts:38-134 folds Git arrays, sync results, WAC buys/sells, dedupe, oversell clamping, and null-on-no-fill behavior. The target makes FillEvent/ReconciliationEvent/FillCorrection an exhaustive local accounting event algebra, preserves typed unavailable/corrupt outcomes, and places event-plus-projection CAS/transaction durability at the writer; import ordering/timestamps remain manifest-gated (MAP-EBE3DF37DD; K03/K08/K11/K12)."
+    },
+    {
+      "id": "MAP-FE7C71CD03",
+      "verdict": "accepted",
+      "reason": "Accepted: cost-basis.ts:136-148 proves the legacy matcher is an unbranded aliceId string comparison with false-by-default unrelated operations. The target makes scope/instrument ownership a decoded schema invariant and distinguishes Owned, Unrelated, and Invalid without deriving SubAccountId; historical mapping remains empirical (MAP-FE7C71CD03; K02/K03/K07/K11)."
+    },
+    {
+      "id": "MAP-EB2F40AA83",
+      "verdict": "accepted",
+      "reason": "Accepted: cost-basis.ts:150-167 confirms unknown/non-SELL actions become BUY and closePosition always becomes SELL. The repaired target removes those unsafe defaults, requires validated Side/ReconciliationDirection plus a selected policy and scoped exposure before long close-as-sell, and leaves unsupported short close explicit (MAP-EB2F40AA83; K04/K08/K11)."
+    },
+    {
+      "id": "MAP-556EBB388B",
+      "verdict": "accepted",
+      "reason": "Accepted: cost-basis.ts:169-173 omits observeExternalOrder from relevance despite replay handling it, and cannot represent pending or malformed observations. The target exhaustively classifies Applicable, Pending, Invalid, Unsupported, and Unrelated events, includes valid external observations, and persists no-op classifications; callback completion identity remains empirical (MAP-556EBB388B; K02/K05/K07/K08/K11)."
+    },
+    {
+      "id": "MAP-082EF635D6",
+      "verdict": "accepted",
+      "reason": "Accepted: fx-service.spec.ts:1-11 uses duck-typed raw snapshots and empty client methods, which do not prove a vendor contract. The target confines raw decoding to a provider adapter, returns Confirmed/Unavailable/Malformed/Stale, persists observedAt separately from local receivedAt, and keeps the provider schema/timestamp question empirically retained (MAP-082EF635D6; K02/K03/K05/K07/K12)."
+    },
+    {
+      "id": "MAP-592DD5394C",
+      "verdict": "accepted",
+      "reason": "Accepted: fx-service.spec.ts:13-28 fabricates a fresh timestamp for a USD identity request without provider access. The target generalizes the source-supported same-currency behavior into explicit IdentityConversion with unchanged Money and no provider observation or timestamp, while requiring typed observations for cross-currency conversion (MAP-592DD5394C; K03/K05/K12)."
+    },
+    {
+      "id": "MAP-612CCE1A5D",
+      "verdict": "accepted",
+      "reason": "Accepted: fx-service.spec.ts:30-43 checks only a positive numeric yfinance result and labels it live without pair/time evidence. The target requires directional pair semantics, positive DecimalRate, provider/observation identity, observedAt and receivedAt, rejecting missing provider time; exact yfinance payload semantics remain empirical (MAP-612CCE1A5D; K02/K03/K05/K07/K12)."
+    },
+    {
+      "id": "MAP-A6935CF652",
+      "verdict": "accepted",
+      "reason": "Accepted: fx-service.spec.ts:45-62 relies on real sleep and mutable in-memory cache TTL behavior. The target uses injected Clock, immutable full-observation cache entries, explicit freshness policy, and non-authoritative cache semantics, so no hidden TTL or stale-admission default becomes accounting authority (MAP-A6935CF652; K03/K05/K11/K12)."
+    },
+    {
+      "id": "MAP-F57EB058EB",
+      "verdict": "accepted",
+      "reason": "Accepted: fx-service.spec.ts:64-80 returns stale cached numbers after vendor failure with only a boolean flag. The target retains stale evidence, age, outage reason, and explicit admission policy; authoritative equity/risk/reservation stays Confirmed/Identity-only by default while display/query may opt into estimates (MAP-F57EB058EB; K05/K11/K12)."
+    },
+    {
+      "id": "MAP-1B24CAB86B",
+      "verdict": "accepted",
+      "reason": "Accepted: fx-service.spec.ts:82-102 treats dated hardcoded rates as ordinary fallback success. The target models DefaultFxObservation as versioned estimate evidence and requires a persisted non-trading admission policy, preventing data lookup from becoming implicit order approval or confirmed account authority (MAP-1B24CAB86B; K02/K03/K05/K11/K12)."
+    },
+    {
+      "id": "MAP-5159E38E38",
+      "verdict": "accepted",
+      "reason": "Accepted: fx-service.spec.ts:104-120 demonstrates the unsafe unknown-currency 1:1/epoch path. The target separates registry-validated known offline estimates from UnknownCurrency/UnknownFx and never emits synthetic rate-one or epoch provenance; registry coverage remains an empirical market-data obligation (MAP-5159E38E38; K02/K03/K05/K07/K11)."
+    },
+    {
+      "id": "MAP-1CA6BEB099",
+      "verdict": "accepted",
+      "reason": "Accepted: fx-service.spec.ts:122-133 proves only a process-local warning Set and console output. The target persists typed valuation uncertainty, scopes standalone FX observations as Public and account-consumer context as AccountScope, and makes notification dedupe independent of accounting; uncertainty remains durable even when notifications are suppressed (MAP-1CA6BEB099; K02/K05/K11/K12)."
+    },
+    {
+      "id": "MAP-1955CFFDB9",
+      "verdict": "accepted",
+      "reason": "Accepted: fx-service.spec.ts:135-166 exposes bare USD strings, warning-only provenance, and a zero early return that skips validation/lookup. The target parses Money before zero handling and returns exhaustive Identity/Confirmed/Estimated/Stale/Unavailable/Invalid variants, letting risk and reservation policy reject unresolved evidence without losing exact zero arithmetic (MAP-1955CFFDB9; K03/K05/K08/K11/K12)."
+    },
+    {
+      "id": "MAP-0A93815E49",
+      "verdict": "accepted",
+      "reason": "Accepted: fx-service.spec.ts:168-175 proves uppercase normalization only; it does not establish supported codes or aliases. The target canonicalizes through a registry-validated CurrencyCode and CurrencyPair, so uppercase alone cannot authorize a pair; registry and alias policy remain empirical (MAP-0A93815E49; K02/K03/K05/K07)."
+    },
+    {
+      "id": "MAP-946AA65B76",
+      "verdict": "accepted",
+      "reason": "Accepted: fx-service.spec.ts:177-228 stubs global fetch, whole-table caching, vendor fallback, and positive-rate checks without a live Hub contract. The target injects HTTP/Clock, decodes table identity/timestamps/per-pair Decimal rates, preserves stale/outage metadata, and retains Hub schema/SLA as empirical evidence (MAP-946AA65B76; K02/K03/K05/K07/K12)."
+    },
+    {
+      "id": "MAP-C3F063DA6A",
+      "verdict": "accepted",
+      "reason": "Accepted: fx-service.ts:1-10 promises live, stale-cache, dated-default, and final 1:1 fallback operation without connectivity. The target replaces that implicit numeric ladder with explicit lookup variants and required estimate policy, removing unknown numeric conversion while retaining supported offline behavior as estimate evidence (MAP-C3F063DA6A; K03/K05/K08/K11)."
+    },
+    {
+      "id": "MAP-3FBA652916",
+      "verdict": "accepted",
+      "reason": "Accepted: fx-service.ts:12-40 uses raw string-keyed numeric records and a USD string result with optional warning. The target carries branded pair/rate/time/provider evidence and explicit Identity, Confirmed, Estimated, Stale, Unavailable, and Invalid valuation variants, leaving wire naming/precision to the shared protocol boundary (MAP-3FBA652916; K02/K03/K05/K07/K11)."
+    },
+    {
+      "id": "MAP-A46E156A09",
+      "verdict": "accepted",
+      "reason": "Accepted: fx-service.ts:42-71 contains a developer-maintained dated numeric default table with no release/version contract. The target keeps offline data as an immutable versioned estimate with releasedAt and supported pairs, while deliberately leaving refresh cadence and operational approval outside the accounting kernel (MAP-A46E156A09; K03/K05/K11)."
+    },
+    {
+      "id": "MAP-A66387BED8",
+      "verdict": "accepted",
+      "reason": "Accepted: fx-service.ts:73-79 conflates provider timestamp with Date.now fetchedAt for TTL. The target stores the full observation plus receivedAt/expiresAt under injected FreshnessPolicy, classifies age without mutating provider evidence, and keeps cache eviction/restart from changing journaled valuation (MAP-A66387BED8; K03/K05/K11/K12)."
+    },
+    {
+      "id": "MAP-20D6995F44",
+      "verdict": "accepted",
+      "reason": "Accepted: fx-service.ts:81-103 places mutable cache/warning/backoff state in a class with optional client/config and fallback behavior when absent. The target composes explicit MarketDataPort layers and reports CapabilityUnavailable rather than treating an absent provider as valid data; which provider covers each broker/account remains empirical (MAP-20D6995F44; K01/K02/K05/K07/K11)."
+    },
+    {
+      "id": "MAP-7B53178995",
+      "verdict": "accepted",
+      "reason": "Accepted: fx-service.ts:105-138 uses global fetch, unchecked JSON casting, fabricated current timestamps, and stale tables during backoff. The target's HubFxAdapter validates an exact response, preserves provider time and stale/outage state, and injects HTTP/Clock; live endpoint schema and freshness SLA remain empirically retained (MAP-7B53178995; K02/K03/K05/K07/K12)."
+    },
+    {
+      "id": "MAP-B7DBA0C5CB",
+      "verdict": "accepted",
+      "reason": "Accepted: fx-service.ts:140-205 returns a number for every input through a silent cache/Hub/vendor/stale/default/1:1 ladder and can relabel stale data. The target makes precedence a scoped policy over exhaustive lookup variants, preserves actual source/time/failure context, and removes implicit 1:1 and relabeling (MAP-B7DBA0C5CB; K02/K03/K05/K07/K11/K12)."
+    },
+    {
+      "id": "MAP-2683B949E2",
+      "verdict": "accepted",
+      "reason": "Accepted: fx-service.ts:207-220 parses raw amounts, returns zero before lookup, multiplies an unqualified number, and emits only warnings for defaults. The target's pure Decimal Money conversion validates units first and returns explicit evidence/status variants, leaving aggregation to enforce confirmed-versus-estimate policy (MAP-2683B949E2; K03/K05/K08/K11/K12)."
+    },
+    {
+      "id": "MAP-7DA6DF620B",
+      "verdict": "accepted",
+      "reason": "Accepted: order-history.spec.ts:8-41 couples projection fixtures to zeroed GitState and IBKR Contract/Order objects. The target tests durable JournalEvent/RemoteObservation/OrderSpec values and keeps Git compatibility in an audit fixture, with checkpoint/restart behavior; legacy field mapping remains evidence-gated (MAP-7DA6DF620B; K02/K03/K07/K08/K11)."
+    },
+    {
+      "id": "MAP-51B32EF77E",
+      "verdict": "accepted",
+      "reason": "Accepted: order-history.spec.ts:43-120 demonstrates one-row place/sync collapse, cancel, option fields, external provenance, and pre-submit rejected rows. The target preserves those observations through provider-declared order leaves and a local lifecycle projection, keeps native extensions open, gates cancellation on complete evidence, and sorts newest-first by descending journal sequence plus deterministic event identity after reduction (MAP-51B32EF77E; K02/K03/K04/K07/K08/K11/K12)."
+    },
+    {
+      "id": "MAP-CD50878370",
+      "verdict": "accepted",
+      "reason": "Accepted: order-history.spec.ts:122-168 proves origin/sync joining, reconcile labeling, and legacy dedupe but not venue execution/correction identity. The target uses source-specific controlled/external FillIdentity, keeps ReconciliationEvent in an adjustment projection rather than treating it as a fill, separates FeeEvent, and limits writer atomicity to local persistence; adapter identity evidence remains empirical (MAP-CD50878370; K03/K04/K07/K08/K11)."
+    },
+    {
+      "id": "MAP-2A6F3FE722",
+      "verdict": "accepted",
+      "reason": "Accepted: order-history.ts:24-44 directly copies IBKR Contract fields and filters SDK sentinels. The target moves native decoding to adapters, persists canonical InstrumentDescriptor/AccountScope, and projects optional or unsupported fields explicitly without using display symbol as a key (MAP-2A6F3FE722; K02/K03/K04/K07/K11)."
+    },
+    {
+      "id": "MAP-66445C2610",
+      "verdict": "accepted",
+      "reason": "Accepted: order-history.ts:46-51 unchecked Decimal construction suppresses sentinels and loses boundary failure detail. The target decodes branded decimal/unit values at the broker/protocol boundary, uses explicit Absent for optional terms, rejects malformed/out-of-scale data, and leaves no silent quantization path (MAP-66445C2610; K03/K07/K11/K12)."
+    },
+    {
+      "id": "MAP-0BC39A0EFF",
+      "verdict": "accepted",
+      "reason": "Accepted: order-history.ts:53-68 defaults missing/non-SELL action to BUY while handling optional prices/sentinels. The target composes only the provider-declared OrderSpec/HOF fragments, rejects missing or malformed required action, separates structural absence from availability, and preserves arbitrary native extensions without a Cartesian order product (MAP-0BC39A0EFF; K02/K03/K04/K07/K11)."
+    },
+    {
+      "id": "MAP-B34D1F5166",
+      "verdict": "accepted",
+      "reason": "Accepted: order-history.ts:71-131 folds Git operations and positional results, preserves anonymous rejection, then sorts/limits. The target uses scoped journal/native identity, explicit pre-dispatch versus observed lifecycle, complete-listing gates, durable Unknown, and limit only after full reduction with newest-first descending journal sequence and event-identity tie-breaker (MAP-B34D1F5166; K02/K03/K07/K08/K11/K12)."
+    },
+    {
+      "id": "MAP-0C54B9142F",
+      "verdict": "accepted",
+      "reason": "Accepted: order-history.ts:134-251 joins raw order IDs, multiplies unqualified Decimals, scans Git for externality, and mixes trade/accounting concerns. The target separates FillsProjection and AccountingProjection, uses source-specific FillIdentity and currency-qualified notional, exposes reconciliation adjustments separately, and keeps local writer atomicity distinct from remote data/order transactions (MAP-0C54B9142F; K03/K04/K05/K08/K11)."
+    },
+    {
+      "id": "MAP-9B65095C78",
+      "verdict": "accepted",
+      "reason": "Accepted: order-history.ts:254-263 infers external provenance by scanning Git operation/result pairs. The target persists OriginDispatch/SynchronizedObservation/ExternalObservation from durable native/listing evidence, treats incomplete coverage as ExternalityUnknown/Unavailable, and never defaults missing provenance to origin (MAP-9B65095C78; K02/K07/K08/K11)."
+    },
+    {
+      "id": "MAP-B9E75F067C",
+      "verdict": "accepted",
+      "reason": "Accepted: position-math.spec.ts:1-4 imports raw Decimal helpers directly from the legacy trading module. The target points tests at typed PositionObservation and AccountValuation boundaries, preserves incomplete broker components as an ADT, and removes raw helpers as authority while keeping protocol mappers separate (MAP-B9E75F067C; K01/K03/K04/K05/K11/K12)."
+    },
+    {
+      "id": "MAP-022335DA27",
+      "verdict": "accepted",
+      "reason": "Accepted: position-math.spec.ts:5-60 demonstrates stock, option, and future multiplier formulas, long/short sign, Decimal precision, and the unsafe zero-to-one fallback. The target retains valid arithmetic, adds the explicit future invariant, requires positive unit evidence, and keeps BrokerReported/Incomplete/Derived valuation states distinct; multiplier authority remains empirical (MAP-022335DA27; K03/K04/K05/K12)."
+    },
+    {
+      "id": "MAP-45921BE3BA",
+      "verdict": "accepted",
+      "reason": "Accepted: position-math.spec.ts:62-75 proves pnlOf duplicates derivePositionMath and preserves zero PnL at mark equal to average cost. The target consolidates computation behind typed valuePosition, retains BrokerReported and Derived separately, and leaves consumer authority policy explicit rather than creating a universal PnL authority (MAP-45921BE3BA; K03/K04/K12)."
+    },
+    {
+      "id": "MAP-1DD062830E",
+      "verdict": "accepted",
+      "reason": "Accepted: position-math.spec.ts:77-89 demonstrates that missing, empty, and zero multipliers become one. The target requires positive ContractMultiplier evidence and permits unit one only when instrument metadata proves it, preserving an explicit capability-unavailable result; intrinsic class coverage remains empirical (MAP-1DD062830E; K02/K03/K04/K11)."
+    },
+    {
+      "id": "MAP-70D15B704F",
+      "verdict": "accepted",
+      "reason": "Accepted: position-math.spec.ts:91-138 covers cash-only, long/short, mixed exposure, and Decimal aggregation under one positive-notional convention. The target keeps valid signed arithmetic but models scoped currency buckets and broker/account policy for short proceeds, margin, collateral, and fees, returning Complete/Partial/Rejected; broker semantics remain empirical (MAP-70D15B704F; K03/K04/K05/K08/K11)."
+    },
+    {
+      "id": "MAP-D53569BA15",
+      "verdict": "accepted",
+      "reason": "Accepted: position-math.ts:1-18 claims IBroker.Position-derived values as a broker/UTA/UI single source. The target demotes that shape to historical evidence, assigns native decoding to adapters/Identity, and gives pure Accounting typed PositionObservation valuation and projections without reintroducing an SDK contract (MAP-D53569BA15; K02/K03/K04/K07/K11)."
+    },
+    {
+      "id": "MAP-A901893CDA",
+      "verdict": "accepted",
+      "reason": "Accepted: position-math.ts:20-33 accepts raw Decimal/string/number inputs and emits unqualified decimal strings. The target carries scoped branded units, explicit single-component Incomplete states, BrokerReported versus fresh Derived evidence, and currency-qualified ValuationResult through the boundary (MAP-A901893CDA; K03/K04/K05/K07/K11)."
+    },
+    {
+      "id": "MAP-948A6A2A73",
+      "verdict": "accepted",
+      "reason": "Accepted: position-math.ts:35-39 converts missing/empty input to zero and performs no finite validation. The target distinguishes Present zero from Missing/Invalid at the boundary, makes optional versus required fields explicit, and persists unavailable/invalid observations rather than inventing zero; per-adapter requiredness remains empirical (MAP-948A6A2A73; K02/K03/K04/K07/K11)."
+    },
+    {
+      "id": "MAP-147386F739",
+      "verdict": "accepted",
+      "reason": "Accepted: position-math.ts:41-46 maps missing/empty/zero multiplier to one and leaves malformed/negative values weakly constrained. The target requires ContractMultiplier > 0, accepts intrinsic one only on explicit capability evidence, and returns Missing/Invalid/CapabilityUnavailable without fallback (MAP-147386F739; K02/K03/K04/K11)."
+    },
+    {
+      "id": "MAP-6033F222D1",
+      "verdict": "accepted",
+      "reason": "Accepted: position-math.ts:48-65 computes valid Decimal market value/PnL but treats every non-long side as short and loses evidence. The target preserves the formula for validated Side/units, exhaustively rejects unknown side, and keeps complete BrokerReported values beside Derived values with explicit consumer authority (MAP-6033F222D1; K03/K04/K05/K08/K11/K12)."
+    },
+    {
+      "id": "MAP-C33457A353",
+      "verdict": "accepted",
+      "reason": "Accepted: position-math.ts:67-79 repeats PnL independently in pnlOf with raw fallback semantics. The target removes raw duplicate computation in favor of one typed valuePosition result, and the cited source inventory names all current callers observed in UnifiedTradingAccount, contract-builder, IbkrBroker, MockBroker, the spec, and protocol documentation before export removal (MAP-C33457A353; K03/K04/K08/K11/K12)."
+    },
+    {
+      "id": "MAP-B5B21108F4",
+      "verdict": "accepted",
+      "reason": "Accepted: position-math.ts:81-93 exposes raw side/marketValue aggregation with no scope, currency, cash, margin, or source. The target introduces scoped typed buckets and AccountValuation statuses, while allowing a complete derived total only when the declared account policy and all required scoped/unit/FX evidence are present; native totals and broker rules remain per-leaf evidence (MAP-B5B21108F4; K03/K04/K05/K08/K11)."
+    },
+    {
+      "id": "MAP-A318FB662B",
+      "verdict": "accepted",
+      "reason": "Accepted: position-math.ts:95-106 documents subtracting positive short notional because proceeds are assumed in cash. The target preserves that financial invariant as a versioned broker/account ExposureAccountingPolicy and requires native cash/margin/collateral evidence before applying it, avoiding a global convention (MAP-A318FB662B; K03/K04/K05/K08/K11)."
+    },
+    {
+      "id": "MAP-A50E762BBD",
+      "verdict": "accepted",
+      "reason": "Accepted: position-math.ts:107-118 treats every non-exact-short side as long and returns an in-memory sum. The target validates side, scope, units, FX and account facts, preserves signed zero/negative observations, permits complete derivation only with explicit policy/evidence, and otherwise returns durable Partial/Rejected rather than zero/long fallback; native equity/margin reconciliation remains empirical (MAP-A50E762BBD; K03/K04/K05/K08/K11/K12)."
+    }
+  ]
+}

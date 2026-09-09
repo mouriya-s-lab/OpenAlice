@@ -1,0 +1,139 @@
+{
+  "group": "TargetGaps",
+  "designBasis": "capability-composition-v1",
+  "analysesSha256": "82788f19b92ec844d180237377d15924fdf5e6f18cfa01c1fe5636051e37605a",
+  "designSha256": "6638ea9815b0ed592d14cf3402a0ee7dc773f46e5e87f6e69b4a7d70bf6d9552",
+  "contractSha256": "73f5235ae86d3f1c9038dfd214e7207cdfb1833be7bc369f628d7d3f9017dd4f",
+  "entries": [
+    {
+      "id": "NOTE-2-1",
+      "verdict": "accepted",
+      "reason": "Source re-check: trading-proxy.ts:1-12 documents loopback trust without Alice-to-UTA authentication; trading-config.ts:216-249,272-331 writes configuration and can erase ephemeral state; trading.ts:783-807 lets allowAiTrading=true call uta.push; connector review still pushes or rejects by pendingHash. The final target correctly treats those as migration facts, separates authenticated principal/scope/revision/digest from the product policy input, and routes both manual and configured-auto execution through the controlled-effect writer rather than exposing broker access. Account lifecycle is a separate capability, and no claim is made that the target boundary is already implemented."
+    },
+    {
+      "id": "NOTE-2-2",
+      "verdict": "accepted",
+      "reason": "Source re-check: order-sync-poller.ts:53-95 has only an in-process running guard and serial account loop, while TradingGit.ts:141-155 catches each operation and records a rejected result without a durable compensation phase. The final target keeps pull/push observation cursor and lifecycle data outside order transactions, while only applied controlled effects enter serializable compensation records with evidence, dependencies, dispatch identity and RecoveryRequired/Unknown handling. A reconnect or data cursor cannot silently become an inverse order."
+    },
+    {
+      "id": "NOTE-4-1",
+      "verdict": "accepted",
+      "reason": "Source re-check: TradingGit.ts:171-179 mutates in-memory commits/head before the optional persistence callback, and the historical writer obligation requires bounded drain, sequential staged decisions and post-commit replies. The final target narrows WriterEnvelope/EffectWriteCommand to local effect authority, uses one writer for user and progress ingress, rolls back on storage failure, and gives provider data its own finite-result/stream backpressure resources. The repaired target explicitly keeps provider data checkpoints with their resource owner instead of treating them as order WAL or transaction commands."
+    },
+    {
+      "id": "NOTE-4-2",
+      "verdict": "accepted",
+      "reason": "Source re-check: TradingGit.ts:61-116 keeps stagingArea, pendingMessage and pendingHash in mutable process memory; the current transaction contract limits STM/TRef-like views to proposals. The final target makes CapabilityDraftView a cache/presentation distinction, requires writer-owned DraftRecord and PrepareStarted revisions for controlled effects, and keeps pull pages/push cursors out of approval state. Cache eviction or restart therefore cannot rewrite a saved effect revision, while unsaved edits remain explicitly unsaved."
+    },
+    {
+      "id": "NOTE-5-1",
+      "verdict": "accepted",
+      "reason": "Source re-check: TradingGit.ts:141-184 returns per-operation submitted/rejected results after direct execution and does not provide replayable lifecycle evolution. The final target retains the local finite lifecycle only for controlled effects, preserves PlanRef/ProgressRef and exhaustive replay, and gives provider results and data frames their own exact schemas, cursor/finality and delivery errors. Duplicate commands return the original receipt; a duplicate data identity cannot manufacture an effect event."
+    },
+    {
+      "id": "NOTE-5-2",
+      "verdict": "accepted",
+      "reason": "Source re-check: UnifiedTradingAccount.ts:180-196 uses a process-local dispatcher and TradingGit.ts:119-125 only clears inflightWrite in finally; no durable owner can fence a remote sender. The final target distinguishes PlanOwner and RecoveryOwner from ephemeral JobRunPermits and risk reservations, releases effect exclusion only after no-send retirement or settled/recovery transfer, and gives data streams an independent resource lease that cannot release an Unknown effect lock."
+    },
+    {
+      "id": "NOTE-5-3",
+      "verdict": "accepted",
+      "reason": "Source re-check: TradingGit.ts:181-184 reports submitted/rejected while order-sync-poller.ts:77-85 discovers later fills, so transport or submission success cannot satisfy every completion goal. The final target freezes a provider-declared criterion and evidence requirements, distinguishes acceptance/working/fill/cancel/terms/exposure evidence, binds a logical group identity to native evidence only after dispatch, and explicitly excludes a data page or push frame from effect settlement."
+    },
+    {
+      "id": "NOTE-5-4",
+      "verdict": "accepted",
+      "reason": "Source re-check: UnifiedTradingAccount.ts:180-196 directly invokes broker mutations with no applied-state undo contract, and the Alpaca, CcxtCore, CcxtVenues, Ibkr and Longbridge provider designs retain identity, lookup, absence, fencing and restoration gaps. The final target stores only serializable CompensationAssessment/Intent and requires NativeConformanceRecord per provider capability/effect variant; missing evidence leaves NativeGuaranteeUnproven and post-DispatchStarted loss Unknown/ObserveBeforeRetry/RecoveryRequired. The entry and closure retain the original empirical question; this review accepts source consistency, not the unexecuted guarantee."
+    },
+    {
+      "id": "NOTE-5-5",
+      "verdict": "accepted",
+      "reason": "Source re-check: TradingGit.ts:141-155 demonstrably continues after caught operation failures, and transaction-contract §8 preserves ContinueOnKnownRejection for the legacy translation. The final target freezes IndependentBatch stop/continue, requires evidence and risk bounds for AllOrCompensate or provider-native atomicity, suspends remaining work on Unknown, and gives pull/push data its own end/gap/overflow policy. Catch behavior cannot silently select transaction semantics."
+    },
+    {
+      "id": "NOTE-7-1",
+      "verdict": "accepted",
+      "reason": "Source re-check: services/uta/package.json:14-34 has no selected Effect/SQL/SQLite runtime, and git-persistence.ts:27-47 is JSON read/fallback/write authority. The final target gates only controlled-effect authority on native stack lockfile/ABI/open/migrate/pragma evidence, forbids silent JSON or alternate-driver fallback, and allows non-trading Alice and separately scoped data availability to report independently. The repaired preservation text makes embedded SQLite an implementation option rather than a capability-composition requirement; the exact semver/ABI/open evidence remains empirical-retained in both analysis and closure."
+    },
+    {
+      "id": "NOTE-7-2",
+      "verdict": "accepted",
+      "reason": "Source re-check: git-persistence.ts:28-47 parses untyped JSON and has no relational identity, revision, lease or compensation-source constraints. The final target adds named versioned effect codecs and composite relationships for receipts, jobs, attempts, locks and recovery, while typed pull/push cursor/frame targets remain non-step data records. Provider schemas stay provider-owned and boundary-validated; SQL constraints supplement rather than replace scope/unit/schema checks."
+    },
+    {
+      "id": "NOTE-8-1",
+      "verdict": "accepted",
+      "reason": "Source re-check: UnifiedTradingAccount.ts:665-688 requires a selector only after cached sub-account discovery, and :784-790 stores it solely in a commit message; the fallback at :642-648 can even synthesize a default sub-account. The final target makes AccountScope and provider-required subAccountId explicit for account effects, compiles only declared hierarchical effect conflict keys, acquires them atomically, and separates DataResourceKey quota/backpressure from economic locks. Public data cannot obtain an invented wallet."
+    },
+    {
+      "id": "NOTE-8-2",
+      "verdict": "accepted",
+      "reason": "Source re-check: TradingGit.ts:119-125 has no durable distinction between a claimed unsent operation and a possible-send operation, and the poller has no persisted lease epoch. The final target commits a controlled-effect DispatchStarted boundary before provider mutation, classifies started lease expiry as Unknown/observe, fences stale workers, and keeps stream Opening/Live/Paused/Ended/Failed lifecycle independent. A stream acknowledgement or empty listing cannot authorize mutation retry."
+    },
+    {
+      "id": "NOTE-8-3",
+      "verdict": "accepted",
+      "reason": "Source re-check: order-sync-poller.ts:53-98 serializes account work behind one timer pass and exposes no durable eligibility, fairness or capacity model. The final target adds effect-only budgets, aging, barriers and durable outstanding limits, while PullFinite and PushStream have provider-declared pagination, cursor, finality, replay, overflow and cancellation policies. Data coalescing cannot evict an accepted effect or enter the compensation queue."
+    },
+    {
+      "id": "NOTE-8-4",
+      "verdict": "accepted",
+      "reason": "Source re-check: UnifiedTradingAccount.ts:572-595 rereads a position immediately before dispatch and checks quantity, but records no source revision/freshness or remote serialization guarantee. The final target composes declaration-specific Transaction/Order/Exposure/BuyingPower/session preconditions, retains scoped observation evidence, uses durable reservations and requires reprepare on invalidation. It preserves the positive bounded close check without claiming native reduce-only or cross-venue serializability, and public data finality must be explicitly selected before an effect consumes it."
+    },
+    {
+      "id": "NOTE-9-1",
+      "verdict": "accepted",
+      "reason": "Source re-check: UnifiedTradingAccount.ts:180-205 returns Promise<unknown> from a generic switch and brokers/types.ts:1-7 is a compatibility re-export; sibling provider designs leave native identity, lookup coverage, retention, absence and fencing adapter-specific. The final target replaces that as a target requirement with declaration-derived exact leaves, fixed descriptor metadata, adapter-native decoding and optional withTransaction composition; unsupported leaves are absent and availability is separate. The original idempotency/absence question remains empirical-retained, with ReconcileBeforeRetry and Unknown instead of blind retry."
+    },
+    {
+      "id": "NOTE-12-1",
+      "verdict": "accepted",
+      "reason": "Source re-check: main.ts:63-87,104-128,145-176 initializes managers, purges ephemeral UTAs, starts timers and exposes ok:true health at :147-152 without a journal recovery scan; uta-manager.ts:63-71 restores file state through a callback. The final target closes controlled-effect admission behind journal verification, projection rebuild and per-aggregate recovery classification, while scoped capability reach and data-stream lifecycle can degrade independently. Prepared/AwaitingApproval gets only review/expiry work, started work is observed, and keyless public data is never promoted to execution authority."
+    },
+    {
+      "id": "NOTE-12-2",
+      "verdict": "accepted",
+      "reason": "Source re-check: git-persistence.ts:27-39 collapses parse, permission and I/O failures into fallback/undefined; TradingGit.ts:147-153 converts thrown execution errors into rejected results; main.ts:179-189 swallows shutdown failures. The final target distinguishes expected provider/data failures from persisted/replay/relational/interpreter defects, preserves bytes and possible-send Unknown, isolates only the affected data leaf where safe, and never returns empty state or known rejection through a blanket catch."
+    },
+    {
+      "id": "NOTE-13-1",
+      "verdict": "accepted",
+      "reason": "Source re-check: main.ts:147-152 exposes only ok/startedAt/account count and order-sync-poller.ts:80-90 emits human strings without durable dispatch context. The final target supplies schema-bound effect age/unknown/recovery/queue/lease/writer/projection views plus separately scoped capability and data freshness/gap views, keeps high-cardinality identity in redacted traces/logs, and does not let observability authorize or schedule an effect."
+    },
+    {
+      "id": "NOTE-14-1",
+      "verdict": "accepted",
+      "reason": "Source re-check: routes-trading.ts:20-77,198-224 uses loose stringly schemas, account-manager access and one-shot stage/commit/push; :427-496 still exposes pending-hash commit/reject/push. The final target keeps authenticated discovery/describe and descriptor-derived provider trees, uses command/receipt codecs and expected-version/digest checks only for composed controlled effects, and gives pull/push their own finite/stream schemas. Legacy quantity, TP/SL, trailing, TIF, parent/OCA semantics remain explicit or fail as structural capability absence rather than being hidden in a universal route table."
+    },
+    {
+      "id": "NOTE-15-1",
+      "verdict": "accepted",
+      "reason": "Source re-check: routes-simulator.ts:116-220 mutates MockBroker state directly, and routes-trading.ts:198-224 constructs an ephemeral broker through transport for test-connection. The final target exposes only typed application/data/capability ports, places simulator stimulus behind a separately authorized independent MockVenue ledger, labels it ExternalVenueStimulus, and binds recovery to actor/scope/version/evidence. No SQL, raw rows, SDK object or arbitrary state tag crosses transport."
+    },
+    {
+      "id": "NOTE-16-1",
+      "verdict": "accepted",
+      "reason": "Source re-check: main.ts:42-54 and :127-152 plus the poller own inline console logging and health projection, while the design requires a canonical observability destination. The final target gives observability typed effect and data contexts, redaction and sinks, leaves operational checkpoints to projection-store and authority facts to the journal, and makes sink failure unable to settle/retry a mutation or turn an incomplete frame final."
+    },
+    {
+      "id": "NOTE-17-1",
+      "verdict": "accepted",
+      "reason": "Source re-check: routes-simulator.ts:151-175 can model fills/cancels but mutates in-process MockBroker state; no independent crash-surviving venue ledger or full compensation slice exists. The final target requires real API/CLI execution against an independent MockVenue, separate effect and data oracles, deterministic crash cuts, stale-worker fencing and explicit Exact/StateRestoring/Economic/None fixture behavior. Mock success remains fixture evidence only and cannot establish a real provider guarantee."
+    },
+    {
+      "id": "NOTE-18-1",
+      "verdict": "accepted",
+      "reason": "Source re-check: e2e/setup.ts:25-29,97-105 filters paper/sandbox/demo presets and credentials but does not prove a live account, session or entitlement; uta-live-testing.md:15-32 requires the alice-uta surface and :268-273 explicitly makes S7 a direct external stimulus. The final target records capability fingerprints, complete namespaces/baselines, effect dispatch/observation and cleanup as Passed/NotApplicable/Blocked/Failed, keeps S7 provenance separate, and refuses to infer native retry/absence from markers or SDK methods. The original environment/session/entitlement question remains empirical-retained."
+    },
+    {
+      "id": "NOTE-18-2",
+      "verdict": "accepted",
+      "reason": "Source re-check: services/uta/package.json:14-34 has no SQLite dependency, tsup.config.ts:11-19 externalizes node_modules/native modules, and Dockerfile:51-65,107-159 creates a separate UTA closure with /data. The final target requires per-distribution/OS/architecture/runtime/bridge evidence for native open/migrate, durable kill/recover, backup/restore, relocation, corruption, read-only and double-owner cases; restore enters RestoreQuarantine and ObservationOnly before cutover. Manifest metadata, checksum, UUID or mock success cannot prove freshness, fencing or exactly-once, and the packaging matrix remains empirical-retained."
+    },
+    {
+      "id": "NOTE-19-1",
+      "verdict": "accepted",
+      "reason": "Source re-check: main.ts:63-168 shows the co-located UTA process owns manager, FX, snapshots, poller and HTTP, and Dockerfile:107-159 persists its complete /data home. The final target keeps effect journal, approvals, jobs, locks, receipts and recovery ownership local, treats provider effects/data and telemetry/backup as scoped external roles, and rejects mandatory Redis/Postgres/workflow authority. The repaired DurableIntent wording is provider-declaration-derived with only local lifecycle tags, so this local-authority rule does not create a closed global capability taxonomy."
+    }
+  ]
+}

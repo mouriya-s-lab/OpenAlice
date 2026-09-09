@@ -1,0 +1,503 @@
+{
+  "group": "TradingJournal",
+  "entries": [
+    {
+      "id": "MAP-26E3CBF3C8",
+      "question": "已发布 commit.json 的实际版本集合和迁移入口仍需在实施 slice 中盘点；设计不把其缺失字段补造为已确认远端事实。",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/git-persistence.ts:1-10,27-40: the old file boundary has no runtime schema/version decoder and treats parse/IO failures as fallback state.",
+        "services/uta/src/domain/trading/git/TradingGit.spec.ts:651-754: visible tests exercise only legacy numeric commit shapes, not shipped-data inventory.",
+        "K08/K11/K12: migration/replay must complete before admission; a guessed fallback cannot authorize execution."
+      ],
+      "resolution": "版本集合、迁移入口和实际缺失字段仍是 empirical-retained；盘点完成前保留原始 digest/provenance，拒绝执行状态重建并转 OperatorRequired/MigrationRequired。"
+    },
+    {
+      "id": "MAP-BE3B808F2D",
+      "question": "现有配置中哪些 broker 的 SingleSubAccount 标识由 adapter 提供仍需在各 adapter capability slice 定义；不能用空字符串充当显式值。",
+      "disposition": "source-resolved",
+      "evidence": [
+        "services/uta/src/domain/trading/brokers/ccxt/CcxtBroker.ts:56-58,730-748: unified venues use explicit default and contract routing; separate-wallet overrides provide explicit IDs.",
+        "services/uta/src/domain/trading/brokers/ccxt/overrides.ts:217-231 and exchanges/bitget.ts:32-42: Binance/Bitget declare spot/derivatives namespaces.",
+        "services/uta/src/domain/trading/brokers/longbridge/LongbridgeBroker.ts:1-6 plus K02/K08: a single relationship/wallet is a domain scope fact, not an empty native selector.",
+        "K02/K08: unresolved directory discovery is ScopeDiscoveryPending.",
+        "services/uta/src/domain/trading/brokers/others/leverup/LeverupBroker.ts:1-6: Leverup funds remain in the user main wallet, so its domain scope is single-wallet rather than a native sub-account string."
+      ],
+      "resolution": "现有 adapter 已能给出 CCXT 的 default/spot/derivatives；Alpaca、Longbridge、Leverup 等单钱包 broker 以显式 SingleSubAccount 表示、IBKR 以 managed account 表示，其他未完成目录发现统一返回 ScopeDiscoveryPending。该 scope 规则只约束账户、订单、持仓和交易效果；公共 Candle/Instrument/News 不凭空附加账户选择器，也不能用空字符串充当显式值。"
+    },
+    {
+      "id": "MAP-0D11241FE8",
+      "question": "历史文件是否包含多个 account 的混合 commits 需实施前实际盘点；在证据不足时统一按 OperatorRequired，不猜归属。",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/git-persistence.ts:14-23: legacy paths are accountId-based and do not prove per-record scope.",
+        "services/uta/src/domain/trading/git/TradingGit.spec.ts:651-754: current fixtures do not inventory mixed-account files.",
+        "K02/K08: missing or ambiguous scope is typed, not a default wallet."
+      ],
+      "resolution": "混合 account 归属是实际历史数据的 empirical-retained；在盘点完成前保留原始记录并转 OperatorRequired/LegacyAuthorityAmbiguous，绝不猜归属或写入执行 authority。"
+    },
+    {
+      "id": "MAP-9E51B81D73",
+      "question": "SQLite native adapter 的具体 migration API 和损坏诊断格式由第一 executable slice 锁定；本设计不假设现有 fs 错误分类可以直接复用。",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/git-persistence.ts:27-40: current fallback conflates missing, parse and IO failures.",
+        "K08/K11/K12: exact native stack and open+migrate result are unverified and must not fall back.",
+        "K08/K11: startup has a migration/replay barrier before Ready."
+      ],
+      "resolution": "具体 SQLite native API/诊断格式仍是 empirical-retained；未实测前进入 Blocked(StorageFailure|CorruptJournal|MigrationRequired)，保留原始诊断且不创建空 authority。"
+    },
+    {
+      "id": "MAP-D1C7BFF02C",
+      "question": "Git audit 是否继续写物理文件还是只提供 projection query，需要由产品读取契约决定；两者都不能成为执行恢复 authority。",
+      "disposition": "design-decided",
+      "evidence": [
+        "services/uta/src/domain/trading/git-persistence.ts:42-49: the old callback writes physical commit.json after a broker callback.",
+        "K11: GitState/GitAudit and export are rebuildable projections with sequence/checkpoint.",
+        "K08/K11: audit consumers read committed transaction facts, not execution handles."
+      ],
+      "resolution": "读取契约采用 GitAuditReader projection query；物理文件仅作为可重建、commit 后的可选导出，因此产品不再需要在两种 authority 之间摇摆。"
+    },
+    {
+      "id": "MAP-F54308897B",
+      "question": "MockBroker ledger 的持久介质由主集成 slice 决定；必须独立于 SQLite UTA authority，具体实现未在本源文件中给出。",
+      "disposition": "design-decided",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.spec.ts:1-59: current fixtures use callback-backed executeOperation rather than an independent durable ledger.",
+        "K05/K08/K12: the mock venue is an independent durable ledger with its own facts, while data observations stay outside the transaction writer.",
+        "K05/K08/K12: integration fixtures require an independent broker ledger; data capability storage is not UTA transaction authority."
+      ],
+      "resolution": "独立 file-backed SQLite ledger 是受控效果集成 fixture 的决定，必须独立于 UTA authority；它不是公共 data capability 的存储或全 provider contract。pull/push/formatter 场景仍按各自声明的资源、cursor、结束和错误语义验证。"
+    },
+    {
+      "id": "MAP-EEB474FAFB",
+      "question": "项目现有测试 runner 的 SQLite fixture 生命周期未从本文件可见；实现时需确定 runner 支持的真实 adapter，不可把内存假 DB 当集成证据。",
+      "disposition": "source-resolved",
+      "evidence": [
+        "services/uta/src/domain/trading/__test__/e2e/setup.ts:1-8: current runner is a singleton broker setup and requires fileParallelism:false.",
+        "services/uta/src/domain/trading/git/TradingGit.spec.ts:61-68: current tests construct a callback-backed TradingGit, not SQLite.",
+        "K08/K11/K12: target tests require SQLite migration/rebuild and independent broker-ledger artifacts."
+      ],
+      "resolution": "现有 runner 的事实已由源码闭合：它没有 SQLite fixture；未来集成只接受明确 file-backed fixture protocol，runner 不支持时标为 FixtureUnavailable，不能以 memory fake 冒充证据。"
+    },
+    {
+      "id": "MAP-83170A39D2",
+      "question": "approval actor 与 policy version 的最终 public schema 由 ProtocolModels 组闭合；本设计要求它们进入 binding，但不猜 wire 字段名。",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.spec.ts:72-107: old tests guard a pending hash but do not persist actor/policy binding.",
+        "K03/K08/K11: prepared plan and approval are revision/digest-scoped; provider fields remain leaf-specific.",
+        "K08/K09/K10: approval binding carries scope plus actor, policy version, transaction/revision, digest, expiry and command identity."
+      ],
+      "resolution": "按共享 K03/K08/K09/K10 裁决，binding 采用 AccountScope 加 transactionId、revision、planDigest、actor、policyVersion、expiry、commandId 七项；wire encoder 按 canonical names 输出，actor/policyVersion 不再是未定 schema。"
+    },
+    {
+      "id": "MAP-F746052C23",
+      "question": "不同 adapter 的 NativePlanRecord 版本和可重建证据尚需各 adapter 提供；无证据的 action 必须在 prepare 时拒绝。",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.spec.ts:111-131: current preparation is represented by an eight-character hash.",
+        "K03/K07/K08/K11: NativeConformanceRecord/PreparedPlanRecord require adapter evidence and no silent recompilation.",
+        "K03/K08: PreparedPlanView is serializable and digest-bound; exact provider leaf schemas remain authoritative."
+      ],
+      "resolution": "NativePlanRecord 的具体版本、字段和重建性仍依赖每个 provider leaf 的 empirical evidence；订单字段可由 provider 声明的 schema/HOF 精确组合保留。无证据时安全结果固定为 Prepare 拒绝/不可审批，不用全局订单组合或其他 provider 的默认规则补齐。"
+    },
+    {
+      "id": "MAP-2CCB3134A8",
+      "question": "每个 venue 的 native idempotency/absence evidence horizon 仍待 adapter 证据；未证明时只能 ObserveUnknown/RecoveryRequired。",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.spec.ts:135-173: legacy push invokes callbacks but does not establish native idempotency.",
+        "K07/K08/K12: Started attempts require observation unless idempotency, absence and fencing evidence exists.",
+        "K05/K07/K08: per-adapter conformance and unknown outcomes remain explicit; ordinary data observations never imply retry authority."
+      ],
+      "resolution": "每 provider leaf 的 horizon/idempotency 仍 empirical-retained；证据出现前受控 effect 统一 ObserveUnknown/RecoveryRequired，保留 reservation 和 recovery owner，不自动 retry/cancel。普通 observation、cache 或 projection 不进入该 retry/compensation路径。"
+    },
+    {
+      "id": "MAP-25866E7F22",
+      "question": "最终 public Reject 是否携带 expectedVersion 仍由 shared protocol 决策闭合；不能偷偷复用 Approve schema。",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.spec.ts:175-208: legacy rejection is coupled to pending hash.",
+        "K08/K10/K11: reject is a typed no-effects/retirement result and short hash is display-only.",
+        "K06/K08: request metadata and the canonical Reject body are separate."
+      ],
+      "resolution": "共享 K06/K08/K10/K11 决策已闭合：Reject body 只有 transactionId/reason，expectedVersion 归 transport CAS metadata；不再等待或复制 Approve schema。"
+    },
+    {
+      "id": "MAP-5923C9DD53",
+      "question": "Account-level 与 Instrument-level ConflictKey 的 conflictsWith 层级需要结合所有 action 实际范围在 kernel slice 固化。",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.spec.ts:210-247: old sequential operations have no durable cross-step conflict hierarchy.",
+        "K08/K11/K12: canonical key kinds, parent-child conflicts and all-or-none acquisition are explicit.",
+        "K03/K08: scope is required on actions, orders and observation identity; data resources do not acquire transaction ConflictKeys."
+      ],
+      "resolution": "共享 K08/K11/K12 已闭合 ConflictKey hierarchy；TradingJournal 只在声明受控交易效果且确实需要锁的 leaf 上采用 all-or-none acquisition。公共数据读取、订阅和 cache 不获取订单 ConflictKey，provider data resource 可有自己的 scope/backpressure。"
+    },
+    {
+      "id": "MAP-1E81D2713F",
+      "question": "是否需要保留兼容通知 webhook 由 application caller 决定，但通知只能订阅 receipt，不能返回执行授权。",
+      "disposition": "design-decided",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.spec.ts:249-261: onCommit is a callback side effect without an authority boundary.",
+        "K08/K11: receipts/projections are downstream of committed journal events.",
+        "K05/K08/K11: audit/export views are read-only projections and notifications never return execution authority."
+      ],
+      "resolution": "产品调用方是否保留 webhook 不影响 core authority；默认提供 receipt subscriber，caller 自行选择通知形式，通知永远没有执行能力，因此 open policy 已闭合。"
+    },
+    {
+      "id": "MAP-D6856F9117",
+      "question": "各 adapter 的 transport error 是否带可验证 native identity需实际 SPI 证据；无 identity 时只能 operator-owned reconciliation。",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.spec.ts:263-289: old callback errors expose only a string error.",
+        "K07/K08/K12: timeout and native identity are separate evidence; loss of identity remains unknown.",
+        "K03/K07/K08: redacted native evidence is preserved and unclassified failure becomes durable Unknown/RecoveryRequired."
+      ],
+      "resolution": "transport identity 的真实性和稳定性仍 empirical-retained；无 identity 时安全路径已固定为 OutcomeUnknown/RecoveryRequired + operator reconciliation，不能由文案补齐。"
+    },
+    {
+      "id": "MAP-1A49DD8DEE",
+      "question": "每个 action 的 commit criterion 默认值需由 application policy 明确；不能从旧 status 字符串推断。",
+      "disposition": "design-decided",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.spec.ts:291-387: legacy push derives submitted/rejected arrays from callback result and has no criterion ADT.",
+        "K08/K09/K12: criteria distinguish acceptance, working, fill, exposure and native atomic evidence.",
+        "K08/K09: policy is plan-bound and known rejection/unknown handling is distinct."
+      ],
+      "resolution": "不新增全局或 per-action hardcoded settlement defaults：只有 provider 声明的受控 effect leaf 才在 PreparedPlan/PolicyProfile 中显式携带 criterion；LegacyRequestAcceptance 仅保留旧 ack 方向，且不宣称 cancel/amend 已观察完成。"
+    },
+    {
+      "id": "MAP-FE5C1D68F9",
+      "question": "venue 的 order absence 分页/最终一致性证据需要 adapter 明确；在 absence 不充分时 NotFound 必须是 Ambiguous。",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.spec.ts:389-406: legacy cancel maps a string Order not found to rejected.",
+        "K03/K05/K08: ByIds is distinct from EnumerateOpen and ListingResult completeness.",
+        "K05/K07/K08: Complete/Partial/Unavailable and evidence boundaries are typed."
+      ],
+      "resolution": "各 venue 的 absence/finality 仍 empirical-retained；证据不足时安全结果为 NotFoundAmbiguous/ObserveUnknown/RecoveryRequired，不能据空列表取消或拒绝。"
+    },
+    {
+      "id": "MAP-F5950919AF",
+      "question": "现有 public log API 是否允许新增 cursor/asOf 字段需由 ProtocolModels 确定；兼容适配不能丢 sequence。",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.spec.ts:410-488: legacy log returns reverse-chronological arrays with symbol/limit filters only.",
+        "K06/K08/K11: log uses event range, cursor/limit, canonical identity and sequence.",
+        "K06/K11: query routes use typed cursor and projection mapping."
+      ],
+      "resolution": "共享 K06/K08/K11 已确定 log 的 cursor/asOf/sequence/freshness 语义；兼容层只能补默认查询值，不能删除 source sequence，因此无需保留为 open question。"
+    },
+    {
+      "id": "MAP-F1A04A6551",
+      "question": "Reject public request 是否要求 expectedVersion 由 shared protocol 最终收敛；不能为了测试便利向 canonical Reject ADT 偷加字段。",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.spec.ts:490-516: legacy reject compares pending hash directly.",
+        "K08/K10/K11: reject CAS/authorization and post-start unknown semantics are explicit.",
+        "K06/K08: request metadata and canonical Reject body are distinct."
+      ],
+      "resolution": "Reject 的 payload、CAS metadata 和 no-effects 时序已由共享 K08/K10/K11 闭合；保留 NoEffectsApplied 仅作为零 started 的 atomic retirement，不再等待字段命名。"
+    },
+    {
+      "id": "MAP-2E86D75B27",
+      "question": "短 hash 与迁移后的 auditId 是否一一对应需检查历史 collision；若不能证明，兼容 show 必须返回 ambiguous。",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.spec.ts:520-537: show uses a short hash as the lookup identity.",
+        "K11/K12: short hash is only a legacy alias and collision is IdentityCollision.",
+        "K03/K08/K11: AuditCommitId, TransactionId, CommandId, DispatchId and EventSequence are separate identities."
+      ],
+      "resolution": "历史 collision 是否存在仍 empirical-retained；在唯一性未证明前，短 hash 仅展示，兼容 show 返回 AuditIdentityAmbiguous 并禁止 authority 选择。"
+    },
+    {
+      "id": "MAP-C2D03D14BB",
+      "question": "UI 兼容 status response 的字段淘汰顺序需由 routes/ProtocolModels 集成决定；不能继续把 pendingHash 作为唯一字段。",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.spec.ts:541-559: legacy status exposes pendingHash as a central field.",
+        "K06/K08/K11: TransactionStatusView is separate from audit status and ActionSummaryView is typed.",
+        "K06/K11: HTTP routes map typed status/query views."
+      ],
+      "resolution": "兼容顺序已定为 canonical typed status 优先、pendingHash 仅 route-level projection、caller 全迁移后移除；因此 pendingHash 不再是 schema authority。"
+    },
+    {
+      "id": "MAP-FA38762FE7",
+      "question": "各 broker sentinel 集合并非只 IBKR；每 adapter 的 native boundary schema 需分别列明。",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.spec.ts:563-647: legacy tests use IBKR sentinel values and raw status shape.",
+        "K03/K07/K08/K11: IBKR native status/error enumeration is adapter-local evidence; other adapters have separate native schemas.",
+        "K03/K07: a provider's sentinel set and boundary schema are not inferred from IBKR."
+      ],
+      "resolution": "各 broker sentinel 集合和边界 schema 仍 empirical-retained；未列出的值统一 ProtocolViolation/Unavailable/Unknown，禁止借 IBKR 默认或 raw fallback 宣称全局覆盖。"
+    },
+    {
+      "id": "MAP-6897B55067",
+      "question": "当前 shipped commit.json 的 schema version 是否可枚举需做迁移前数据盘点；不能假定只有测试中两种 numeric 形状。",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.spec.ts:651-754: visible tests cover only known numeric test shapes.",
+        "K08/K11: startup replay requires versioned records and blocks corruption.",
+        "K08/K11/K12: migration schema/ABI are not runtime-verified."
+      ],
+      "resolution": "真实 shipped schema versions仍 empirical-retained；decoder 在盘点前只保留 LegacyEvidence/MigrationRequired，绝不把两种测试 numeric 形状当全量事实。"
+    },
+    {
+      "id": "MAP-E7902EB737",
+      "question": "round 的产品语义是否等价 strategy run 尚未由调用方契约确认；默认只作为可选 read grouping，不把它升级为交易字段。",
+      "disposition": "design-decided",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.spec.ts:758-768: setCurrentRound tags a commit and exposes it in show.",
+        "services/uta/src/domain/trading/git/interfaces.ts:67-75: round is a serialization/projection concern alongside export and simulation.",
+        "K05/K11: currentRound is a read grouping candidate."
+      ],
+      "resolution": "产品语义未要求 round 等价 strategy run；采用最小可逆规则：只读 grouping，默认 None，不能升级为交易字段或 authority。"
+    },
+    {
+      "id": "MAP-D4E27E6A2A",
+      "question": "各 broker listing completeness 和 order-version 语义需要 adapter 逐个声明，不能由旧 sync API 的 updates shape 推断。",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.spec.ts:772-798: legacy sync consumes an updates array without listing completeness.",
+        "K03/K05/K08: listing completeness and polling evidence are typed.",
+        "K03/K05/K08: ByIds and EnumerateOpen have distinct contracts."
+      ],
+      "resolution": "各 broker listing completeness 和 order-version 语义需要 adapter 逐个声明；旧 updates shape 只能成为 data observation evidence，不能进入订单 approval/compensation，也不能推断完整 absence。"
+    },
+    {
+      "id": "MAP-9CD95A7E38",
+      "question": "Alpaca held stop leg 是否能被 listing 观察及各 broker parent/leg native identity 需 adapter evidence；设计不假设 listing 完整。",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.spec.ts:802-941: legacy pending order IDs do not model parent/leg identity or held visibility.",
+        "K03/K07/K08/K12: held-child mapping and native conformance remain unproven.",
+        "K03/K04/K08: parent/child legs require scoped identity and explicit group evidence."
+      ],
+      "resolution": "Alpaca held child visibility、parent/leg native identity 是实际 adapter evidence，仍 empirical-retained；未证明前 durable refs 不删，observe unknown/capability unavailable，不清理。"
+    },
+    {
+      "id": "MAP-3A7B50FFCA",
+      "question": "instrument kind/multiplier 的 canonical metadata owner 需由 market/accounting 组及各 broker adapter 共同提供。",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.spec.ts:969-1020: legacy operations use native Contract fields directly.",
+        "K03/K04: Catalog/adapter ownership is split.",
+        "K04/K05/K08: multiplier/currency and valuation evidence belong to accounting facts."
+      ],
+      "resolution": "Catalog 与 adapter/accounting 的 owner 分工保持；canonical Instrument/valuation data 不因是公共数据就伪造 AccountScope，实际 currency/multiplier evidence 继续由各 provider/valuation slice 提供。"
+    },
+    {
+      "id": "MAP-DB23AFEBB2",
+      "question": "market facts 的 currency/multiplier provenance 仍需由 valuation service 提供；relative lower bound、absolute positivity 与 finite-result policy 已在本组固定，不再把普通解析选择留作 open question。",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.spec.ts:1022-1132: legacy simulation rehydrates Decimal/multiplier and can fall back to guessed fields.",
+        "K04/K05/K08: PositionObservation carries multiplier/currency provenance and incomplete valuation.",
+        "K03/K05/K08: parser/range/finite-result policy is fixed and missing market facts are typed failures."
+      ],
+      "resolution": "实际 market currency/multiplier provenance 仍 empirical-retained；simulation 维持 read-only query，安全行为为保留 position core + Incomplete/ValuationUnavailable，解析边界和 finite/positive 规则不再作为 open。"
+    },
+    {
+      "id": "MAP-0043603515",
+      "question": "canonical instrument registry 与 broker native contract lookup 的事实来源需由 Catalog/adapter 组闭合。",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.ts:1-36: legacy code imports native Contract/contract extension at the authority boundary.",
+        "K03/K04/K07/K11: canonical identity and adapter lookup are separate and collisions are explicit.",
+        "K03/K04: InstrumentId is canonical and native identity is adapter-local."
+      ],
+      "resolution": "Catalog 与 adapter 的 lookup owner 已闭合，且 collision/unavailable 安全分支明确；不再把 canonical registry 与 native contract lookup 混为同一来源。"
+    },
+    {
+      "id": "MAP-515C919214",
+      "question": "采用的 digest algorithm/output length 和 canonical encoding version 需由 shared schema slice 固化；设计不承诺当前 8 hex 长度。",
+      "disposition": "design-decided",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.ts:38-43: legacy commit hashing uses a short display hash.",
+        "K03/K04/K08/K11: canonical encoding must be stable and short hash is a legacy alias.",
+        "K03/K08/K11: prepared plans require canonical encoding/schema/digest validation."
+      ],
+      "resolution": "采用共享裁决 RFC 8785 JCS-v1 + SHA-256，完整 64 位 lowercase hex；plan、command、orderTerms、capability 各自使用独立 domain/schema-version 与 exact projection，确定性 Decimal/time codec 与跨语言字节向量保留为实现 gate。8 hex 只保留展示兼容，不再等待模糊长度或保留第二种独立 encoding alias。"
+    },
+    {
+      "id": "MAP-56BCFFC93E",
+      "question": "ProposalSnapshot 是否需要跨 client 保存由 product contract 决定；若需要，仍应作为 Draft event/record，而非假设 process memory 足够。",
+      "disposition": "design-decided",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.ts:61-73: current add/commit proposal exists only on the TradingGit object until export.",
+        "K08/K11: Draft/Decision/version semantics require durable revisions.",
+        "K08/K10/K11: DraftRevision/PreparedPlanView are journal-backed and distinct from approval."
+      ],
+      "resolution": "为满足跨 client 的 approval/review 一致性，选择 durable DraftRecord 而非 process memory；这是一项普通设计选择，且不授予 DraftReview 执行能力。"
+    },
+    {
+      "id": "MAP-B9BBBF4697",
+      "question": "跨 broker 的 order-spec capability evidence 需由各 broker group 提供；本设计不把所有 legacy IBKR fields 假定为通用能力。",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.ts:77-117: legacy operation fields derive from IBKR Order objects.",
+        "K03/K04/K08: full OrderSpec/protection semantics and per-adapter capability decisions remain leaf-specific.",
+        "K03/K08/K11: unsupported combinations refuse the full action."
+      ],
+      "resolution": "各 provider 的 field/capability 支持仍 empirical-retained；目标编译器以 provider-declared schema/HOF 组合保留原生字段，未证明能力时返回 typed failure 而不是删字段、套全局 notional 规则或降级为 naked entry。"
+    },
+    {
+      "id": "MAP-2DD4753D43",
+      "question": "criterion 是 AcceptedByVenue/Working/FullyFilled 哪一个必须由具体 application policy 选择，不能从 push result 的 submitted 数组推断。",
+      "disposition": "design-decided",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.ts:119-185: push builds submitted/rejected arrays from callback results.",
+        "K08/K12: criterion evidence is explicit and is not inferred from push result arrays.",
+        "K08/K09/K12: policy is plan-bound and known rejection/unknown handling is distinct."
+      ],
+      "resolution": "criterion 不再由 push result 猜测，也不新增全局 per-action defaults；每个受控 effect leaf 的 PreparedPlan/PolicyProfile 必须显式选择 criterion。legacy ack 仅保留 request acceptance，effect-confirmed cancel/amend 与 Close target 都要求绑定 evidence；数据读取不套此路径。"
+    },
+    {
+      "id": "MAP-951F07F5BA",
+      "question": "NoEffectsApplied 在 public TransactionResult 中与 Compensated 的具体编码由 transaction-kernel 组最终命名；不能称为远端 compensation。",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.ts:187-239: legacy result arrays do not distinguish local no-effects from remote compensation.",
+        "K08/K10/K11: PlanRetired(NoEffectsApplied) is distinct from post-start recovery.",
+        "K08/K10/K12: Compensated(Restored) requires actual observed restoration."
+      ],
+      "resolution": "public 编码采用 transaction-kernel 的明确命名：NoEffectsApplied 是 zero-start retirement 的 Compensated(NoEffectsApplied)，不声称远端 compensation；Restored 保留证据门槛。"
+    },
+    {
+      "id": "MAP-9540E06E03",
+      "question": "不同 broker 对 avgCost/transfer source 的 evidence 强度需由 adapter 声明；markPrice-only adjustment 必须带 residual uncertainty。",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.ts:260-328: legacy reconcile synthesizes virtual adjustment from quantity/mark price.",
+        "K04/K05/K08: cost-basis and valuation provenance are typed.",
+        "K03/K04/K05: Balance/Position facts retain source and uncertainty."
+      ],
+      "resolution": "avgCost/transfer source 的实际强度仍 empirical-retained；markPrice-only 路径的安全编码已固定为 ResidualUncertainty adjustment，不冒充 execution/cost evidence。"
+    },
+    {
+      "id": "MAP-595E9F79F1",
+      "question": "external order 是否允许参与某些 transaction compensation 需 policy 明确；默认只读 observation，不能自动 cancel。",
+      "disposition": "design-decided",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.ts:330-378: legacy recordObservedOrders squashes observed orders into a commit.",
+        "K05/K07/K08: external order observations are distinct from owned mutations.",
+        "K05/K07/K08/K12: pending/external observation lanes are read-only unless recovery is explicitly authorized."
+      ],
+      "resolution": "默认采用 ObserveOnly，解决 external order 是否自动参加 compensation 的 policy 分叉；任何 mutation 都需新的明确授权和 bounded recovery command。"
+    },
+    {
+      "id": "MAP-6A0302D45C",
+      "question": "各 action public wording 由现有 UI 兼容契约决定；语义必须保持 typed state，不以旧字符串作为状态解析来源。",
+      "disposition": "design-decided",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.ts:455-524: legacy UI-facing status/action strings are produced alongside domain results.",
+        "K06/K08/K11: ActionSummaryView retains typed action/subject/outcome and display text is derived.",
+        "K06/K11: compatibility fields are presentation-only, not authority."
+      ],
+      "resolution": "各 action 的 wire wording 由现有 typed UI contract 派生，旧字符串保留的唯一位置是 presentation compatibility；状态机和 recovery 完全不读它。"
+    },
+    {
+      "id": "MAP-9D6D33CC94",
+      "question": "各 broker 对 attached order/native OCA semantics 的 capability evidence 需分别收集；不支持时明确 Unavailable。",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.ts:606-630: legacy protection fields are passed through broker operations.",
+        "K03/K04/K08: ProtectionSpec and native/runtime-managed distinction are explicit.",
+        "K03/K04/K07/K08: native protection evidence is adapter-specific."
+      ],
+      "resolution": "attached/OCA 的 native semantics 仍 empirical-retained；无证据时整条 action Unavailable/CapabilityUnavailable，禁止 drop child 后继续 entry。"
+    },
+    {
+      "id": "MAP-49CD3DC4C6",
+      "question": "历史 Position.multiplier 缺失记录的真实 instrument type 需要数据盘点；无法确认时只读 LegacyEvidence。",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.ts:632-645: legacy rehydration defaults multiplier-like fields while rebuilding positions.",
+        "K04/K05/K08/K11: multiplier/type and valuation provenance are required facts.",
+        "K03/K04/K08: missing identity/multiplier remains LegacyEvidence/read-only."
+      ],
+      "resolution": "历史数据的 instrument type/multiplier 是 empirical-retained；缺失时保持 LegacyEvidence/read-only 与不完整估值，不用当前 catalog 或 1 猜补。"
+    },
+    {
+      "id": "MAP-31E8F89464",
+      "question": "各 broker observation batch completeness/ordering evidence 必须由 adapter contract 明确。",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.ts:654-690: legacy sync/update processing lacks a completeness/ordering contract.",
+        "K03/K05/K08: observation/listing completeness is typed.",
+        "K03/K05/K07: observations carry identity, completeness and source sequence."
+      ],
+      "resolution": "observation batch completeness/order evidence 仍 empirical-retained；无证据时 Partial/Unknown，保留可去重事实但不把缺失转为 absence/terminal outcome。"
+    },
+    {
+      "id": "MAP-9EF5070764",
+      "question": "canonical selector resolution and currency facts still belong to the market/accounting service; parser range and finite-result policy are fixed above and are not open design choices。",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.ts:899-925: legacy simulation resolves native contract/price fields at the Git boundary.",
+        "K03/K04/K08: canonical selector/catalog ownership is separate from market facts.",
+        "K03/K05/K08: parser range and finite-result policy are fixed; missing facts remain typed failures."
+      ],
+      "resolution": "owner 分工已由 Catalog 与 Accounting/market design 闭合；本组只保留 strict parser 与 typed missing-fact 行为，不再把 selector/currency ownership 作为 open。"
+    },
+    {
+      "id": "MAP-973EB4700E",
+      "question": "每 adapter native statuses/fill identity 的完整枚举由各 broker group 提供；不得用 IBKR status set 作为全局 default。",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/git/TradingGit.ts:929-977: legacy status/fill mapping is centralized around IBKR-shaped values.",
+        "K03/K07/K08/K11: venue status/native facts are adapter-local.",
+        "K03/K07/K08: each broker has separate native status evidence."
+      ],
+      "resolution": "各 provider status/fill identity 的完整枚举仍 empirical-retained；未知值安全进入该 leaf 的 Unknown/ProtocolViolation，绝不从 IBKR 集合推导全局 Filled/submitted，也不要求不存在的 cancel/modify handler。"
+    },
+    {
+      "id": "MAP-C65E9CB2ED",
+      "question": "各 target service 的最终 Effect error union 由 Main/shared contracts 合并；本项只固定不再使用 unknown callback。",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "services/uta/src/domain/trading/git/interfaces.ts:1-81: current ports expose SDK types and executeOperation(): Promise<unknown>.",
+        "K03/K07/K08: protocol failures are named ADTs and map to route-specific FailureEnvelope.",
+        "K01/K02/K07/K08: service boundaries are UTA-facing composition; data services do not need transaction operations."
+      ],
+      "resolution": "服务边界与 FailureEnvelope 只固定 UTA-facing composition；provider 以精确 leaf schema/handle 提供所需能力，数据服务不必实现 transaction operations。unknown callback 继续移除，但不以一个完整 BrokerActionInterpreter 替代它。"
+    },
+    {
+      "id": "MAP-E5FDCD5D01",
+      "question": "poll cadence/backoff policy is operational and broker-specific; it must become durable job notBefore/lease policy rather than be copied as process timer。",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "services/uta/src/domain/trading/git/interfaces.ts:52-65: legacy sync/poll surface is not a durable job contract.",
+        "K05/K08/K11: PollerSchedulePolicy, notBefore, attempt and lease are durable for follow-up work.",
+        "K05/K08: scheduler lifecycle belongs to effect runtime, not data-frame timers."
+      ],
+      "resolution": "poll cadence/backoff 的具体数值继续由 provider policy 配置；架构决定为 durable notBefore/lease job 只用于 observation follow-up 或 controlled effects，data push 自己声明生命周期/背压，不把进程 timer 当 job store。"
+    },
+    {
+      "id": "MAP-F70A1BBFEE",
+      "question": "Effect service tag names and exact requirement sets are shared integration concerns; this design fixes ownership/typed surface, not final module naming.",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "services/uta/src/domain/trading/git/interfaces.ts:77-81: TradingGitConfig currently hides unknown callback and file/broker dependencies.",
+        "K01/K02/K07/K08: service names and requirements are UTA-facing composition boundaries.",
+        "K05/K08/K11: composition root loads only resources required by selected provider leaves."
+      ],
+      "resolution": "服务 tag/requirements 采用共享 K01/K02/K05/K08/K11 的 UTA-facing 边界；composition root 只装载实际 provider leaf 所需 resources。withTransaction 是可选的受控效果包装，reader/stream/cache 不被要求提供 compile/dispatch/compensation。"
+    },
+    {
+      "id": "MAP-110B9E5ED3",
+      "question": "最终 public GitAuditView 字段集合由 ProtocolModels/HTTP integration 收敛；shim 不应继续隐藏这个决策。",
+      "disposition": "integration-resolved",
+      "evidence": [
+        "services/uta/src/domain/trading/git/types.ts:1-6: current Git barrel reexports protocol/native types without a dedicated view.",
+        "K02/K03/K05/K06/K11: GitAuditView/projection, event range, cursor/limit and canonical identities are explicit.",
+        "K06/K11: HTTP integration maps typed Git/query projections."
+      ],
+      "resolution": "共享 K02/K03/K05/K06/K11 需要收敛 GitAuditView 与 query filters；TradingJournal 只固定 projection ownership 和显式 schema export，不通过 shim 隐藏 wire 决策，也不把 semantic data/effect 类型收敛成一个 global legacy union。"
+    }
+  ],
+  "remainingCount": 19
+}

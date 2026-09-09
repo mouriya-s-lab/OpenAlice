@@ -1,0 +1,13 @@
+{
+  "group": "Snapshots",
+  "entries": [
+    {
+      "id": "MAP-F64B549F14",
+      "question": "生产历史 journal 是否已有可作为 source sequence 的单调 revision，以及迁移时的 cursor 起点，需在运行数据盘点中确认。",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/snapshot/scheduler.ts:1-18 only defines an in-process Pump and direct takeAllSnapshots('scheduled'); it contains no durable data-request cursor or source-sequence evidence. The pinned historical source baseline git:a5f23756531cc552b7e12b6d655ae1ffbcd28b64:services/uta/src/domain/trading/snapshot/scheduler.ts likewise has 57 lines with no cursor or source-sequence mechanism. Composition contract K11/C10 requires this runtime/native fact to remain unverified until the production data inventory runs.",
+      "resolution": "Retain the empirical prerequisite for snapshot data capture. Before an implementation inventory proves the legacy schema/version, explicit AccountScope mapping, record identity, monotonic provider/local revision semantics, gap handling, and a persisted migration or source-event cursor, the affected scope remains MigrationRequired/OperatorRequired and its view is Unavailable. Preserve the source digest and legacy evidence; never derive a local received sequence or cursor start from timestamps, array positions, chunk names, or an unverified revision, and do not open affected historical replay/admission. If the inventory verifies a safe mapping, record it in the migration ledger and let the selected snapshot data writer continue or assign local sequence/cursor state idempotently. This question concerns data provenance and delivery only: it does not establish native provider guarantees or order approval, dispatch, compensation, or recovery semantics, and the production fact remains unknown until that inventory runs."
+    }
+  ],
+  "remainingCount": 1
+}

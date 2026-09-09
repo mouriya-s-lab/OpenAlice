@@ -1,0 +1,62 @@
+{
+  "group": "AliceClients",
+  "entries": [
+    {
+      "id": "MAP-139EBB287C",
+      "question": "Exact authentication header/credential reference and correlation header names are not present in this source; Main must choose them at the protocol boundary.",
+      "disposition": "design-decided",
+      "evidence": "docs/uta-effect-runtime-design/solutions/integration-decisions.md:C09 plus packages/uta-protocol/src/client/UTAClient.ts:1-11: the current helper has no auth/correlation context, while C09 fixes Authorization: Bearer <resolved credential>, X-Request-ID, local opaque CredentialRef, and no wire TransportPrincipal.",
+      "resolution": "C09 resolves the Alice HTTP naming and authority shape: use Authorization: Bearer <resolved credential> and X-Request-ID with response echo; CredentialRef is local opaque and resolved through UTA-owned ServiceCredentialBinding, never sent as a wire field. No wire TransportPrincipal, actor claim, loopback assertion, or secret enters capability input/diagnostics. Credential provisioning, revocation, and verifier behavior remain implementation-gate evidence, not unresolved header or credential naming."
+    },
+    {
+      "id": "MAP-A4FE5AF865",
+      "question": "The wire representation of TransportPrincipal and the auth mechanism is not specified in the current files.",
+      "disposition": "design-decided",
+      "evidence": "docs/uta-effect-runtime-design/solutions/integration-decisions.md:C09 plus packages/uta-protocol/src/client/UTAClient.ts:13-20: C09 fixes service-credential binding and rejects a wire TransportPrincipal; the source options only contain baseUrl/fetch/timeout.",
+      "resolution": "C09 resolves the wire question: Alice uses the fixed service-credential profile and UTA constructs/checks authenticated service identity from ServiceCredentialBinding; TransportPrincipal is not a caller or wire record. Actor, policy, scope, and capability authority remain separate. Provisioning, rotation/revocation, and deployment verifier behavior are runtime acceptance gates, not alternate auth-shape choices."
+    },
+    {
+      "id": "MAP-A458F81B6D",
+      "question": "Exact final route list is a shared Main/protocol decision; current architecture lists ten transaction routes but not every query projection name.",
+      "disposition": "design-decided",
+      "evidence": "Audit commit a5f23756531cc552b7e12b6d655ae1ffbcd28b64 records the previous ten-route proposal; current UTAClient.ts:22-29 exposes arbitrary verbs and paths. Composition-contract.md K01/K02/K06 instead fixes descriptor metadata and generated interpretation, leaving provider capability trees and leaf schemas open.",
+      "resolution": "The old ten-route list is retained only as historical source evidence, not as the target route contract. The target exposes capability discovery and descriptor-bound invocation: each provider declares its own query, stream, admin, or controlled-effect tree, and generated named methods/help come from those declarations. There is no public raw dispatch method and no global ActionContractMap. Implementers must still prove identity/fingerprint binding and structural absence for a provider tree."
+    },
+    {
+      "id": "MAP-06118417F5",
+      "question": "Whether cancellation is represented as TransportCancelled or a shared interruption variant is not established in the current protocol.",
+      "disposition": "design-decided",
+      "evidence": "docs/uta-effect-runtime-design/solutions/integration-decisions.md:C11 plus packages/uta-protocol/src/client/UTAClient.ts:31-35: the source exposes only AbortSignal, while C11 fixes the public Promise/AbortSignal shape, AsyncIterable push, and local cancellation/deadline variants.",
+      "resolution": "C11 resolves cancellation representation: public Alice HTTP is Promise<Result<Output, Failure>> plus AbortSignal; local cancellation/deadline failures are Cancelled and DeadlineExceeded, transport loss is TransportUnavailable, and malformed envelopes are ProtocolViolation. Push cancellation is a resource-scoped AsyncIterable control/close, not a universal provider error. A controlled effect interrupted after its durable send boundary remains Unknown/recovery and is reconciled by UTA observation. Runtime cancellation/deadline and stream-close conformance remains an implementation acceptance gate."
+    },
+    {
+      "id": "MAP-7E1806AFC4",
+      "question": "The exact failure tag names in the shared package are not yet implemented; they must align with Main’s transaction/query failure ADTs.",
+      "disposition": "design-decided",
+      "evidence": "docs/uta-effect-runtime-design/solutions/integration-decisions.md:C11 plus packages/uta-protocol/src/client/UTAClient.ts:37-46: the source only stores status/body/message, while C11 fixes local boundary variants and remote error wrappers.",
+      "resolution": "C11 resolves the shared failure tags without imposing a provider taxonomy: local transport failures are Cancelled, DeadlineExceeded, TransportUnavailable, and ProtocolViolation; verified remote boundary failures use RemoteBoundaryFailure with named code; verified leaf domain failures use RemoteDomainFailure<LeafError>. Leaf error schemas remain provider-declared, and possible-send outcome remains UTA dispatch/recovery evidence rather than an HTTP rejection tag. Runtime envelope decoding and native outcome evidence remain implementation acceptance gates."
+    },
+    {
+      "id": "MAP-22C9C06082",
+      "question": "Auth/correlation header names remain a shared protocol decision.",
+      "disposition": "design-decided",
+      "evidence": "docs/uta-effect-runtime-design/solutions/integration-decisions.md:C09 plus packages/uta-protocol/src/client/UTAClient.ts:48-61: the source accepts arbitrary paths and String-converted queries and emits no auth/correlation headers; C09 fixes the private header profile.",
+      "resolution": "C09 resolves the header names: descriptor-bound Alice HTTP emits Authorization: Bearer <resolved credential> and X-Request-ID, with response correlation echo. CredentialRef, secret bytes, and TransportPrincipal stay out of URL/query/body and logs; descriptor schemas encode path/query values and reject malformed input before fetch. Native provider paths remain open behind descriptor identity, not a fixed historical route list. Header emission/echo, redaction, and prefetch validation remain runtime acceptance checks."
+    },
+    {
+      "id": "MAP-8C22894ED4",
+      "question": "Whether the HTTP client should return Effect directly or a Promise wrapper interpreted by transport/http is a Main-owned module-shape decision.",
+      "disposition": "design-decided",
+      "evidence": "docs/uta-effect-runtime-design/solutions/integration-decisions.md:C11 plus packages/uta-protocol/src/client/UTAClient.ts:63-88: the source is Promise-based with unchecked JSON and replacement of its deadline signal by caller AbortSignal; C11 fixes the public shape and composition rule.",
+      "resolution": "C11 resolves the module shape: public Alice HTTP returns Promise<Result<Output, Failure>> and accepts AbortSignal; push uses AsyncIterable frames. Effect may be used internally but is not an SDK or foreign-provider dependency. Caller cancellation and internal deadline are composed, schemas decode before application use, and response loss after a durable effect boundary remains Unknown/recovery rather than wrapper-driven retry or rejection. Runtime conformance is an implementation acceptance gate, not an unresolved architecture choice."
+    },
+    {
+      "id": "MAP-E56045946F",
+      "question": "Redaction limits and exact evidence fields require coordination with observability design.",
+      "disposition": "design-decided",
+      "evidence": "docs/uta-effect-runtime-design/solutions/integration-decisions.md:C11 plus packages/uta-protocol/src/client/UTAClient.ts:101-103: the source returns raw text after JSON parse failure, while C11 fixes bounded metadata-only ProtocolViolation evidence and forbids raw-body digest.",
+      "resolution": "C11 resolves the evidence shape and limits: retain only request/capability/schema identity, phase, HTTP status, content type, received byte count, and at most 16 named issue codes/schema paths (path <=128 characters; whole UTF-8 JSON <=4096 bytes; truncation marked). Never retain response body, parameters, headers, native message, or raw-body digest; malformed output is ProtocolViolation and cannot become a domain value. Schema validation and actual sink enforcement remain implementation-gate checks, not unresolved field/limit design."
+    }
+  ],
+  "remainingCount": 0
+}

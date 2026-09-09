@@ -1,0 +1,349 @@
+{
+  "group": "TradingJournal",
+  "designBasis": "capability-composition-v1",
+  "analysesSha256": "31b173f93356067bbd93bd5ed42e5bc5d4c7fe0e2dcbc599b551bdaa152ca9d3",
+  "designSha256": "3a8cb763613907136694feef25fc1209d5d612ff875a7a11e8d5b838a1c31a14",
+  "contractSha256": "73f5235ae86d3f1c9038dfd214e7207cdfb1833be7bc369f628d7d3f9017dd4f",
+  "entries": [
+    {
+      "id": "MAP-26E3CBF3C8",
+      "verdict": "accepted",
+      "reason": "git-persistence.ts:1-10 makes filesystem JSON and TradingGit state look authoritative through an unchecked shape; the repaired entry now makes JournalStore/schema-decoded events authoritative and limits Git output to rebuildable projection, with Prepare locks separated from execution jobs. Closure resolution: actual shipped commit.json versions and migration entry points remain empirical; safe handling is MigrationRequired/OperatorRequired with raw provenance, never synthesized execution state."
+    },
+    {
+      "id": "MAP-BE3B808F2D",
+      "verdict": "accepted",
+      "reason": "gitFilePath:14-16 selects per-account commit.json, which cannot coordinate cross-step locks or jobs; the final design binds every row and identity to explicit AccountScope and treats any file as checkpointed audit export only. Closure resolution: source-backed CCXT IDs and explicit Alpaca/Longbridge/Leverup single-wallet plus IBKR managed-account variants now define the scope rule; discovery failures are typed rather than represented by an empty selector."
+    },
+    {
+      "id": "MAP-0D11241FE8",
+      "verdict": "accepted",
+      "reason": "LEGACY_GIT_PATHS:18-23 creates competing primary/legacy authorities; the repaired importer uses source digest plus record identity (not discovery path), retains provenance, and maps missing scope/remote evidence to LegacyEvidence or OperatorRequired. Closure resolution: mixed-account membership remains empirical; unproven scope is retained as LegacyAuthorityAmbiguous/OperatorRequired and cannot enter execution."
+    },
+    {
+      "id": "MAP-9E51B81D73",
+      "verdict": "accepted",
+      "reason": "loadGitState:27-40 catches parse and IO corruption as undefined and silently falls back; the final analysis distinguishes explicit bootstrap from Blocked corruption/storage and fixes public RuntimeHealth to the single C06 union without synthesizing executable state. Closure resolution: native SQLite migration and diagnostic behavior remains empirical; absence of proof blocks startup rather than selecting a fallback."
+    },
+    {
+      "id": "MAP-D1C7BFF02C",
+      "verdict": "accepted",
+      "reason": "createGitPersister:42-49 writes commit.json after a legacy callback, so export failure can occur after mutation; the repaired boundary commits receipt/events first, lets the projector lag safely, and explicitly separates dispatch Ack from later observation. Closure resolution: GitAuditReader is canonical for reads; any file is a post-commit export artifact and never execution authority."
+    },
+    {
+      "id": "MAP-F54308897B",
+      "verdict": "accepted",
+      "reason": "TradingGit.spec.ts:1-59 builds SDK Orders and unknown executeOperation callbacks; the final fixture contract uses domain actions, action-tagged Ack/observation variants, and an independent durable MockBroker ledger, with keyless fixtures barred before funded execution. Closure resolution: the fixture ledger is a separate file-backed SQLite resource, not a second writer or projection of UTA."
+    },
+    {
+      "id": "MAP-EEB474FAFB",
+      "verdict": "accepted",
+      "reason": "TradingGit.spec.ts:61-68 constructs a fresh callback-backed object per test; the final setup specifies isolated journal/ledger namespaces, replay after restart, and DraftReview/PreparationPreview only for keyless or read-only scenarios. Closure resolution: the current runner has no SQLite fixture; the prescribed file-backed lifecycle and FixtureUnavailable fallback close the design choice without claiming runtime proof."
+    },
+    {
+      "id": "MAP-83170A39D2",
+      "verdict": "accepted",
+      "reason": "TradingGit.spec.ts:72-107 only guards a pending hash and never persists actor/policy binding; the final Draft/Prepare path carries scope, revision and digest, and the canonical ApprovalBinding explicitly includes AccountScope plus transactionId, actor, policyVersion, expiry and commandId. Stale approval cannot reach execution. Closure resolution: the field set is fixed by the shared protocol, while no native approval runtime is claimed."
+    },
+    {
+      "id": "MAP-F746052C23",
+      "verdict": "accepted",
+      "reason": "The commit tests at TradingGit.spec.ts:111-131 treat an eight-character hash as preparation; the final Prepare contract writes a serializable plan and PreparedConflictLocks only, while ExecutionReservation/EffectJob are created only by approval. Closure resolution: adapter-specific NativePlanRecord schemas remain empirical; unproven reconstructibility safely blocks Prepare and approval."
+    },
+    {
+      "id": "MAP-2CCB3134A8",
+      "verdict": "accepted",
+      "reason": "TradingGit.spec.ts:135-173 proves only successful in-process push/callback sequencing; the repaired design puts DispatchStarted before broker IO, persists action-associated outcomes, and binds ContinueOnKnownRejection versus Unknown suspension to FailurePolicy. Closure resolution: native idempotency and absence horizons remain empirical; dispatch retry is denied without adapter evidence."
+    },
+    {
+      "id": "MAP-25866E7F22",
+      "verdict": "accepted",
+      "reason": "The push guard tests at TradingGit.spec.ts:175-208 compare process-local pending hashes; the final ApprovalRequest binds scope, transaction/revision, digest, actor, expiry and command id and denies keyless queueing before any reservation or job. Closure resolution: Reject has a stable canonical body; expectedVersion remains transport metadata for CAS only."
+    },
+    {
+      "id": "MAP-5923C9DD53",
+      "verdict": "accepted",
+      "reason": "TradingGit.spec.ts:210-247 uses one in-flight Promise to reject all concurrent writes; the repaired target has scoped prepared locks, accepted-execution reservations, fenced durable leases, and RecoveryCase ownership so restart and independent-key concurrency are represented. Closure resolution: canonical ConflictKey parent/child relationships and atomic acquisition are fixed by the shared integration decision."
+    },
+    {
+      "id": "MAP-1E81D2713F",
+      "verdict": "accepted",
+      "reason": "The onCommit test at TradingGit.spec.ts:249-261 treats an in-memory export callback as the commit acknowledgement; the final entry uses a post-commit JournalWriter receipt plus checkpointed idempotent projection and never lets projection failure re-dispatch. Closure resolution: caller notifications are optional post-commit subscribers only; they cannot return execution authorization."
+    },
+    {
+      "id": "MAP-D6856F9117",
+      "verdict": "accepted",
+      "reason": "TradingGit.spec.ts:263-289 converts thrown network Error into rejected results; the final decoder distinguishes dispatch Ack/BrokerRejected/OutcomeUnknown from observation outcomes and sends uncertainty to Reconciling rather than auto-Continue. RemoteObservation is explicitly scope-bound, and ordinary data delivery failures remain stream/query errors. Closure resolution: native transport identity evidence remains empirical; missing identity is durably unknown and operator-owned."
+    },
+    {
+      "id": "MAP-1A49DD8DEE",
+      "verdict": "accepted",
+      "reason": "TradingGit.spec.ts:291-387 conflates callback success, Inactive status and fill labels; the final model has ActionAck, RemoteObservation and criterion settlement, explicitly preventing Ack from satisfying FullyFilled and retaining keyless views as read-only. Closure resolution: criterion is explicit in PreparedPlan/PolicyProfile; only LegacyRequestAcceptance preserves legacy request acknowledgement, while cancellation/amendment completion and Close target require evidence-bound criteria."
+    },
+    {
+      "id": "MAP-FE5C1D68F9",
+      "verdict": "accepted",
+      "reason": "The failed-cancel case at TradingGit.spec.ts:389-406 only exposes an error string; the repaired cancel algebra preserves order/version identity and distinguishes Cancelled, FilledLate, StillWorking, NotFoundAmbiguous and Unknown without blind resend. Closure resolution: absence evidence remains adapter-specific; incomplete reads are ambiguous and retain recovery rather than terminal NotFound."
+    },
+    {
+      "id": "MAP-F5950919AF",
+      "verdict": "accepted",
+      "reason": "TradingGit.spec.ts:410-488 establishes reverse log/filter/limit behavior over an array; the final query preserves those views through sequence-cursor projection rows, canonical identity filtering and explicit stale/unavailable failures. Closure resolution: the typed log page and sequence-preserving compatibility rule are fixed by ProtocolModels/HTTP integration."
+    },
+    {
+      "id": "MAP-F1A04A6551",
+      "verdict": "accepted",
+      "reason": "The reject guard at TradingGit.spec.ts:490-516 relies on pending hash and callback completion; the repaired transition writes TransactionRejected followed by TransactionCompensated(NoEffectsApplied) atomically pre-dispatch, with no execution or compensation job and no keyless mutation. Closure resolution: Reject CAS, payload, and post-DispatchStarted safety are fixed; no compatibility field is added to the canonical ADT."
+    },
+    {
+      "id": "MAP-2E86D75B27",
+      "verdict": "accepted",
+      "reason": "TradingGit.spec.ts:520-537 returns null for an unknown short hash; the final reader separates TransactionNotFound, ambiguous legacy identity and ProjectionUnavailable while retaining redacted compatibility views that cannot authorize execution. Closure resolution: historical short-hash uniqueness remains empirical; ambiguous aliases are read-only and cannot drive recovery."
+    },
+    {
+      "id": "MAP-C2D03D14BB",
+      "verdict": "accepted",
+      "reason": "TradingGit.spec.ts:541-559 reports head and commitCount instead of in-flight state; the repaired status contract enumerates all 12 transaction states, revision/progress/recovery/freshness, and keeps read-only/keyless callers outside Prepared/Approved execution. Closure resolution: canonical status and bounded compatibility projection are fixed by ProtocolModels/HTTP; pendingHash cannot be an identity."
+    },
+    {
+      "id": "MAP-FA38762FE7",
+      "verdict": "accepted",
+      "reason": "The sentinel tests at TradingGit.spec.ts:563-647 require UNSET_DECIMAL omission and exact Decimal output; the final boundary normalizes sentinels in the adapter and emits immutable schema-validated redacted views without SDK casts. Closure resolution: native sentinel/status enumerations remain empirical per adapter; unknown boundary values are safely redacted/unknown."
+    },
+    {
+      "id": "MAP-6897B55067",
+      "verdict": "accepted",
+      "reason": "TradingGit.spec.ts:651-754 relies on JSON round-trip and silently repaired legacy fields; the final migration contract version-decodes events/projections, checks checkpoint hashes, and keeps unknown versions as read-only migration evidence rather than assuming numeric shapes. Closure resolution: shipped schema/version inventory remains empirical; no default multiplier or executable state is synthesized without migration evidence."
+    },
+    {
+      "id": "MAP-E7902EB737",
+      "verdict": "accepted",
+      "reason": "The current-round tests at TradingGit.spec.ts:758-768 persist an arbitrary number on a commit; the final entry replaces it with transaction revision/journal sequence and optional session grouping that cannot alter digest or dispatch identity. Closure resolution: round is explicitly a read-only grouping; it does not become execution identity or strategy semantics."
+    },
+    {
+      "id": "MAP-D4E27E6A2A",
+      "verdict": "accepted",
+      "reason": "TradingGit.spec.ts:772-798 turns order updates into a synthetic sync commit and treats empty updates as a head no-op; the final observation batch preserves no-change reporting while adding scoped completeness/identity and a resource-scoped ObservationJob, with effect-only outcomes used only when a dispatch is linked. Closure resolution: per-adapter listing/version evidence remains empirical; incomplete data cannot prove absence or enter transaction WAL/approval/compensation."
+    },
+    {
+      "id": "MAP-9CD95A7E38",
+      "verdict": "accepted",
+      "reason": "TradingGit.spec.ts:802-941 scans commits for parent/bracket pending IDs; the repaired model persists parent/leg identities and typed Dispatch/Observe/Compensate jobs, treats incomplete listings as evidence gaps, and never blind-resends an unknown dispatch. Closure resolution: Alpaca/venue parent-leg visibility remains empirical and cannot authorize cleanup without evidence."
+    },
+    {
+      "id": "MAP-3D5359223F",
+      "verdict": "accepted",
+      "reason": "TradingGit.spec.ts:943-965 exposes the old multi-update attribution failure; the final AuditProjectionEventRow is one row per observation/fill with explicit AccountScope, event/observation identity, optional effect-linked transaction/step/dispatch IDs and canonical instrument attribution instead of operation-array indexing. Provider event shape remains open at the adapter boundary, not a global operation/result pairing."
+    },
+    {
+      "id": "MAP-3A7B50FFCA",
+      "verdict": "accepted",
+      "reason": "TradingGit.spec.ts:969-1020 requires derivative exclusion for symbol changes and multiplier-aware long/short PnL; the repaired pure valuation uses canonical instrument identity, explicit multiplier/currency facts and reasoned exclusions. Closure resolution: ownership is integrated and explicit; value provenance remains subject to the separate empirical questions."
+    },
+    {
+      "id": "MAP-DB23AFEBB2",
+      "verdict": "accepted",
+      "reason": "TradingGit.spec.ts:1022-1132 covers empty, relative and absolute simulation paths but the parser accepts permissive input; the final PriceChange policy closes ranges, resolves selector/currency explicitly, uses Decimal-only arithmetic and rejects nonfinite/nonpositive results. Closure resolution: market fact provenance remains empirical; missing facts preserve position core and produce explicit incomplete valuation."
+    },
+    {
+      "id": "MAP-0043603515",
+      "verdict": "accepted",
+      "reason": "TradingGit.ts:1-36 imports IBKR Contract/Order/sentinels and hard-codes DERIVATIVE_SECTYPES inside TradingGit; the final cutover confines SDK decoding to broker adapters and moves instrument/valuation facts into named domain services. Closure resolution: Catalog is canonical for selectors; adapters provide only native binding evidence and cannot mint ambiguous IDs."
+    },
+    {
+      "id": "MAP-515C919214",
+      "verdict": "accepted",
+      "reason": "generateCommitHash:38-43 hashes mutable SDK-shaped data and truncates to eight hex characters; the final design separates TransactionId/revision/sequence from a full RFC 8785 JCS-v1 plus SHA-256 64-hex PlanDigest, with separate domain/schema versions and exact projection. Short hashes remain display aliases only; cross-language byte and Decimal/time codec vectors are implementation gates."
+    },
+    {
+      "id": "MAP-CA6C7E648F",
+      "verdict": "accepted",
+      "reason": "PendingHashConflictError:45-52 encodes expected concurrency failure as a JS Error with string code/name; the final TransactionFailure ADT carries expected/actual versions and is exhaustively mapped as a normal rejection."
+    },
+    {
+      "id": "MAP-0CBE2FB0D9",
+      "verdict": "accepted",
+      "reason": "isPendingHashConflict:54-59 accepts instanceof or arbitrary code/name objects, so unrelated errors can become conflicts; the repaired decoder requires a runtime schema and classifies undecodable external values as ProtocolFailure/Defect, never VersionConflict."
+    },
+    {
+      "id": "MAP-56BCFFC93E",
+      "verdict": "accepted",
+      "reason": "TradingGit.ts:61-73 keeps staging, pending hash, commits, mutex and callbacks in process memory; the final model confines STM/TRef to pre-prepare DraftReview and journals transaction state, phase locks, reservations, jobs and RecoveryCase durably. Closure resolution: ProposalSnapshot persistence is decided as a journal-backed DraftRecord with monotonic revision."
+    },
+    {
+      "id": "MAP-B9BBBF4697",
+      "verdict": "accepted",
+      "reason": "add/commit:77-117 turns staged Operations into a timestamped hash without before-images or compensation evidence; the repaired Prepare compiler builds explicit scoped steps, C02 OrderTerms, FailurePolicy and digest, with jobs deferred until approval. Closure resolution: cross-broker capability evidence remains empirical; missing evidence refuses the complete action rather than silently degrading it."
+    },
+    {
+      "id": "MAP-2DD4753D43",
+      "verdict": "accepted",
+      "reason": "push/executePush:119-185 mutates the broker before durable intent and retries after onCommit failure; the repaired sequence is approval/reservation/job, fenced DispatchStarted, typed dispatch/observation, and evolving-state group decisions with no projection-driven resend. Closure resolution: criterion selection is explicit in PreparedPlan/PolicyProfile; submitted-array shape has no authority, and legacy acknowledgement never claims cancel/amend completion."
+    },
+    {
+      "id": "MAP-951F07F5BA",
+      "verdict": "accepted",
+      "reason": "reject/executeReject:187-239 depends on state snapshot and onCommit, so a callback failure can append another rejection; the final pre-dispatch command is a durable no-effects terminal transition and does not query broker state or create jobs. Closure resolution: public no-effects encoding is explicit and cannot be used after possible remote mutation."
+    },
+    {
+      "id": "MAP-C3E41E2B51",
+      "verdict": "accepted",
+      "reason": "beginWrite/assertPrepared:241-258 only checks a local in-flight flag and pending hash; the repaired writer carries scope/version/revision/digest identity through SQL CAS and scheduler writes use owner/epoch fencing."
+    },
+    {
+      "id": "MAP-9540E06E03",
+      "verdict": "accepted",
+      "reason": "recordReconcile:260-328 synthesizes success/filled reconcileBalance from quantity and mark; the final path records scope/provenance-bearing observations, classifies pending versus external drift, and folds accounting adjustments without inventing a TradeAction fill. Closure resolution: broker accounting evidence remains empirical; mark-only adjustments retain residual uncertainty and cannot become fills or exact cost basis."
+    },
+    {
+      "id": "MAP-595E9F79F1",
+      "verdict": "accepted",
+      "reason": "recordObservedOrders:330-378 converts external open orders into submitted commits and later polling identities; the final boundary stores an exact scoped ExternalOrderObservation with provider-declared redacted fields and an independent resource-scoped ObservationJob, never raw SDK contracts, TradeAction or DispatchAttempt. Closure resolution: external orders are observation-only by default and cannot trigger implicit compensation or cancellation."
+    },
+    {
+      "id": "MAP-2F871AAB45",
+      "verdict": "accepted",
+      "reason": "getKnownOrderIds:379-389 scans the in-memory commit result array; the final OrderIdentityIndex is rebuilt from dispatch attempts and observations with broker/scope/native-id keys and Ambiguous handling."
+    },
+    {
+      "id": "MAP-BD4401DF5F",
+      "verdict": "accepted",
+      "reason": "log:393-414 reads process-local commits and filters display symbols; the repaired reader uses checkpointed audit rows, sequence cursors and canonical InstrumentId filters while preserving a named compatibility view."
+    },
+    {
+      "id": "MAP-E516D05AD7",
+      "verdict": "accepted",
+      "reason": "buildOperationSummaries:416-453 uses max(array lengths) and operation[0] fallback for sync results; the final one-event-per-row typed projection derives structured terms and text from the same payload and rejects mismatched evidence."
+    },
+    {
+      "id": "MAP-6A0302D45C",
+      "verdict": "accepted",
+      "reason": "formatOperationChange:455-524 formats legacy tags and SDK Order fields including synthetic reconcile/sync rows; the repaired formatter consumes exhaustive AuditEventView variants and validated financial values only. Closure resolution: wording is a projection concern; typed state remains the only parser and execution input."
+    },
+    {
+      "id": "MAP-63DDC83FC9",
+      "verdict": "accepted",
+      "reason": "formatOptionalDecimal:526-529 knows IBKR UNSET_DECIMAL inside the formatter; the final decoder maps sentinels to Option at the adapter boundary, leaving formatter inputs as refined Decimal/Price/Quantity/Money."
+    },
+    {
+      "id": "MAP-3CAB2FACBC",
+      "verdict": "accepted",
+      "reason": "show:531-534 looks up a short hash in the in-memory commits array and returns null; the final split readers distinguish authoritative transaction lookup from audit projection lookup and report not-found/ambiguous/stale states explicitly."
+    },
+    {
+      "id": "MAP-D89349A0F1",
+      "verdict": "accepted",
+      "reason": "status:536-544 exposes staging, pending hash, head and array count; the repaired status combines ProposalSnapshot, 12-state TransactionView and projection freshness, retaining RecoveryRequired ownership instead of reporting clean."
+    },
+    {
+      "id": "MAP-F6932D3C99",
+      "verdict": "accepted",
+      "reason": "projectOperation/projectCommit:546-561 cast sentinel-stripped values back to Partial<Order>/Order; the final ActionProjection and NativeRedactedView encoders are separate closed schemas that cannot reconstruct SDK requests."
+    },
+    {
+      "id": "MAP-D8B8506C6C",
+      "verdict": "accepted",
+      "reason": "exportState/restore:563-577 restores only completed commits and head, leaving in-flight execution unrecoverable; the repaired startup replays SQLite authority and uses versioned audit export only as a rebuildable artifact."
+    },
+    {
+      "id": "MAP-5478B3A377",
+      "verdict": "accepted",
+      "reason": "rehydrateCommit:579-585 trusts a JSON commit and repairs selected fields; the final JournalEvent envelope validates schema/version/sequence/invariants and blocks unknown tags from replay or projection."
+    },
+    {
+      "id": "MAP-24879D4410",
+      "verdict": "accepted",
+      "reason": "rehydrateOperation:588-604 passes unknown operation tags through unchanged; the repaired versioned decoder exhaustively migrates known actions/observations and routes unknown or unassociated records to CorruptJournal/OperatorRequired."
+    },
+    {
+      "id": "MAP-9D6D33CC94",
+      "verdict": "accepted",
+      "reason": "rehydrateOrder:606-630 copies parsed fields onto a mutable SDK Order; the final scoped OrderSpec preserves all source terms (sizing, trailing, expiry, session, parent/OCA and TP/SL) and leaves SDK construction to adapter compilation. Closure resolution: attached/OCA guarantees remain empirical per broker and unproven protection refuses the full action."
+    },
+    {
+      "id": "MAP-49CD3DC4C6",
+      "verdict": "accepted",
+      "reason": "rehydrateGitState:632-645 silently fills a missing multiplier with one; the final PositionValue requires AccountScope, instrument identity, multiplier/currency/timestamp/valuation provenance and preserves missing history as LegacyEvidence/read-only rather than guessing. Closure resolution: historical multiplier/type evidence remains empirical; missing data cannot acquire write or exact valuation capability."
+    },
+    {
+      "id": "MAP-AA480A4C40",
+      "verdict": "accepted",
+      "reason": "setCurrentRound:648-650 stores a free numeric round on future commits; the final metadata uses revision/sequence/session correlation and makes optional RunLabel read-only grouping rather than execution identity."
+    },
+    {
+      "id": "MAP-31E8F89464",
+      "verdict": "accepted",
+      "reason": "sync:654-690 creates a success synthetic commit from supplied statuses; the final Observe path persists Complete/Partial/Unavailable evidence and typed data rows through ObservationStore, with no transaction WAL/approval/reservation/compensation for the observation itself. Closure resolution: per-adapter batch completeness and ordering remain empirical; partial folds are never terminal absence."
+    },
+    {
+      "id": "MAP-87101B3109",
+      "verdict": "accepted",
+      "reason": "getPendingOrderIds:692-749 infers pending work by scanning latest commit statuses and bracket arrays; the final PendingWorkView derives durable jobs/leases/attempts and converts expired post-dispatch work to ObserveUnknown rather than Ready resend."
+    },
+    {
+      "id": "MAP-A899CFD901",
+      "verdict": "accepted",
+      "reason": "simulatePriceChange:753-897 reads legacy GitState through a callback and mixes broker Contract fields into valuation; the repaired SimulationQueryService uses versioned position/account projections and returns query-only, freshness-bearing results."
+    },
+    {
+      "id": "MAP-9EF5070764",
+      "verdict": "accepted",
+      "reason": "parsePriceChange/applyPriceChange:899-925 use parseFloat, allowing partial tokens such as `10%foo`; the repaired full-string Decimal parser receives resolved selector/currency, enforces the explicit range policy and rejects invalid resulting prices. Closure resolution: selector and fact ownership are integrated; simulation remains strict and visibly indeterminate when evidence is missing."
+    },
+    {
+      "id": "MAP-973EB4700E",
+      "verdict": "accepted",
+      "reason": "parseOperationResult/mapOrderStatus:929-977 casts unknown callback output and collapses statuses into submitted/filled/cancelled/rejected; the final adapter decoders split dispatch Ack/BrokerRejected/Unknown from observation outcomes and preserve native/action identity. Closure resolution: native status/fill enumeration remains empirical per adapter; unknown outcomes retain evidence and cannot satisfy criteria."
+    },
+    {
+      "id": "MAP-02A55B62AE",
+      "verdict": "accepted",
+      "reason": "git/index.ts:1-25 exports TradingGit plus every legacy operation/state type as the default surface; the repaired module plan uses ownership-specific barrels and retains only explicitly named GitAudit views during caller migration."
+    },
+    {
+      "id": "MAP-C65E9CB2ED",
+      "verdict": "accepted",
+      "reason": "interfaces.ts:1-26 imports Decimal and IBKR Contract/Order alongside Git operations and callbacks; the final ports separate TransactionApplication, readers, observation and broker interpretation, with SDK types confined to adapters. Closure resolution: service tags and closed failure categories are explicit; all unknown external outcomes are represented by typed Unknown/RecoveryRequired where applicable."
+    },
+    {
+      "id": "MAP-C2C9449357",
+      "verdict": "accepted",
+      "reason": "ITradingGit:28-34 combines proposal editing, commit/approval, push/execution and reject; the repaired command surface separates Draft/Prepare/Approve/Reject/Recovery while JournalWriter observes evolving state and Git remains read projection."
+    },
+    {
+      "id": "MAP-E712DEE4C8",
+      "verdict": "accepted",
+      "reason": "ITradingGit reconciliation:36-44 accepts caller-supplied stateAfter and writes a synthetic commit; the final ReconciliationApplicationPort records a scoped provenance-bearing data observation receipt and folds accounting facts without accepting stateAfter as authority. It creates no TransactionApproved, ExecutionReservation, EffectJob or compensation state."
+    },
+    {
+      "id": "MAP-78D27998B6",
+      "verdict": "accepted",
+      "reason": "ITradingGit audit reads:46-50 expose synchronous log/show/status over mutable Git state; the repaired readers return typed projection/transaction views with sequence, asOf and named not-found/unavailable failures."
+    },
+    {
+      "id": "MAP-E5FDCD5D01",
+      "verdict": "accepted",
+      "reason": "ITradingGit sync/observation:52-65 couples external updates, pending IDs and synthetic commits; the final BrokerObservePort uses a typed ObservationBatch and resource-scoped ObservationJob, while controlled-effect jobs remain separate. Poll scheduling returns ObservationJob state for data follow-up rather than an EffectJob; broker-specific cadence remains configuration and native completeness is empirical."
+    },
+    {
+      "id": "MAP-470C74976B",
+      "verdict": "accepted",
+      "reason": "ITradingGit serialization/round:67-70 exports aggregate state and mutates a process-local round; the repaired ports expose JournalRecovery and versioned audit export plus explicit execution context, with no generic restore authority."
+    },
+    {
+      "id": "MAP-D40EA86F40",
+      "verdict": "accepted",
+      "reason": "ITradingGit simulation:72-74 puts valuation behind the trading authority interface; the final SimulationQueryService consumes scoped snapshot references and cannot produce transaction approval or dispatch authority."
+    },
+    {
+      "id": "MAP-F70A1BBFEE",
+      "verdict": "accepted",
+      "reason": "TradingGitConfig:77-81 injects unknown executeOperation/getGitState/onCommit callbacks; the repaired Effect services require serializable plans, explicit scope/IDs, typed dispatch/observation failures, funded capability and an approved durable job. Closure resolution: service tags and composition ownership are explicit; missing requirements fail typed startup rather than trigger hidden fallback."
+    },
+    {
+      "id": "MAP-110B9E5ED3",
+      "verdict": "accepted",
+      "reason": "git/types.ts:1-6 wildcard-reexports the protocol Git union to hide ownership; the final migration assigns domain, transaction, broker, journal, projection and public codecs to explicit barrels and blocks unmigrated/corrupt values. Closure resolution: canonical GitAuditView fields and query filters are fixed by ProtocolModels/HTTP; the view remains non-authoritative."
+    }
+  ]
+}

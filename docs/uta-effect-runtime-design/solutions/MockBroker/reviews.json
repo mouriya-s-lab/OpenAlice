@@ -1,0 +1,264 @@
+{
+  "group": "MockBroker",
+  "designBasis": "capability-composition-v1",
+  "analysesSha256": "7aba730623817c26a242940a667181ed8daa74d96a9d8915e51223bd70938619",
+  "designSha256": "a47a5c91cc958b95adff0e0b2d627ea4de0fae72246817916c08245abcd2ae94",
+  "contractSha256": "73f5235ae86d3f1c9038dfd214e7207cdfb1833be7bc369f628d7d3f9017dd4f",
+  "entries": [
+    {
+      "id": "MAP-2807C05FCC",
+      "verdict": "accepted",
+      "reason": "MockBroker.spec.ts:1-19 creates a fresh MockBroker per test, so the target confines that evidence to an explicit fixture and places JournalWriter/DurableMockVenue restart behavior behind the K05/K08/K12 implementation gates."
+    },
+    {
+      "id": "MAP-74610A30AF",
+      "verdict": "accepted",
+      "reason": "MockBroker.spec.ts:21-81 verifies Decimal quantity, WAC, and partial/full-close arithmetic; the AccountScope-bound ExposureSnapshot preserves those facts without promoting Decimal or an in-memory map to transaction proof."
+    },
+    {
+      "id": "MAP-50275FA75F",
+      "verdict": "accepted",
+      "reason": "MockBroker.spec.ts:83-158 proves synchronous market fill, pending limit behavior, BUY exposure, and WAC; the target keeps these as Mock-leaf fixtures, rejects undeclared variants at the schema edge, and separates durable DispatchAck from OrderObservation."
+    },
+    {
+      "id": "MAP-377A30A5EC",
+      "verdict": "accepted",
+      "reason": "MockBroker.spec.ts:160-201 covers full/partial close and missing exposure; the target makes Close an optional scoped effect with quantity-or-All, version/Criterion checks, and adapter-local opposite-side compilation rather than a shared Close SDK."
+    },
+    {
+      "id": "MAP-5484E0ABE8",
+      "verdict": "accepted",
+      "reason": "MockBroker.spec.ts:203-229 shows direct cancellation of a pending order and a generic failure for unknown IDs; the target preserves that fixture while distinguishing scoped versioned cancel intent, Ack, late-fill observations, and structural absence."
+    },
+    {
+      "id": "MAP-B20F6E5551",
+      "verdict": "accepted",
+      "reason": "MockBroker.spec.ts:231-261 mutates pending SDK fields through Partial<Order>; the target replaces that lossy path with an AccountScope-bound tagged amendment, before-image/version checks, and observation-first handling of uncertain queue changes."
+    },
+    {
+      "id": "MAP-BDF7756398",
+      "verdict": "accepted",
+      "reason": "MockBroker.spec.ts:263-284 returns a native OpenOrder for a known ID and null for an unknown ID; the target's four-way scoped lookup result makes complete absence evidence distinct from partial/unavailable delivery without routing reads through approval."
+    },
+    {
+      "id": "MAP-399D99B7AB",
+      "verdict": "accepted",
+      "reason": "MockBroker.spec.ts:286-308 manually fills a pending limit at 139.50 and observes Filled/avgCost; the target treats this as a typed fact injection with execution identity and immutable original quantity, not as an approved UTA job."
+    },
+    {
+      "id": "MAP-BEE79BFA7C",
+      "verdict": "accepted",
+      "reason": "MockBroker.spec.ts:310-339 computes cash, PnL, and net liquidation from mutable state; the target retains signed account facts and explicit incomplete valuation while removing bare USD/override authority from the AccountScope-bound projection."
+    },
+    {
+      "id": "MAP-0DD83C8637",
+      "verdict": "accepted",
+      "reason": "MockBroker.spec.ts:341-359 establishes ascending, mark-anchored synthetic bars and call recording; the target keeps them as finite, explicitly MockFixture historical observations with source/freshness evidence rather than execution prices."
+    },
+    {
+      "id": "MAP-E9E1A05333",
+      "verdict": "accepted",
+      "reason": "MockBroker.spec.ts:361-400 tests only local call count/order/reset; the target correctly limits CallRecord to test instrumentation and assigns recovery evidence to redacted durable phase events, not to call count."
+    },
+    {
+      "id": "MAP-B4C7FEA646",
+      "verdict": "accepted",
+      "reason": "MockBroker.spec.ts:402-413 demonstrates constructor accountInfo overrides; the target retains this as an AccountScope-bound, schema-validated observation fixture whose disagreement with computed facts is evidence, not hidden authority."
+    },
+    {
+      "id": "MAP-CDC7079D83",
+      "verdict": "accepted",
+      "reason": "MockBroker.spec.ts:415-447 exercises Partial SDK factory defaults and a legacy success result; the target separates refined semantic-unit/native constructors and rejects a Filled fixture without execution evidence instead of exporting a universal result union."
+    },
+    {
+      "id": "MAP-ADE49309E9",
+      "verdict": "accepted",
+      "reason": "MockBroker.spec.ts:449-540 proves one resolved BTC identity can converge across deposit, BUY, close, and pending fill; the target preserves that bounded mapping evidence while quarantining display-symbol/native-key or spot/perpetual conflicts."
+    },
+    {
+      "id": "MAP-47DB032F5A",
+      "verdict": "accepted",
+      "reason": "MockBroker.spec.ts:542-648 verifies option multiplier cash debit, metadata retention after flat, and oversell no-credit; the target consumes only a positive refined multiplier and keeps execution identity, metadata, and accounting deltas separate."
+    },
+    {
+      "id": "MAP-0151919B70",
+      "verdict": "accepted",
+      "reason": "MockBroker.spec.ts:650-730 verifies signed short and mixed-book valuation; the target retains Long/Short exposure and entry-mark equations through incomplete FX/mark data without making valuation reads an order effect."
+    },
+    {
+      "id": "MAP-9DFD3B9879",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:1-38 shows one in-memory IBroker class combining SDK conversion, ledger, queries, and controls; the target's composed Mock Layer and optional DurableMockVenue separate those concerns and do not claim the class is durable."
+    },
+    {
+      "id": "MAP-D6BA46AF1A",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:40-52 converts absent or zero multipliers to Decimal(1); the target's Known/ Missing/Invalid MultiplierResolution prevents that repair from becoming option/future accounting authority."
+    },
+    {
+      "id": "MAP-0F7F332B24",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:54-76 stores mutable native Contract/Order records with string status and optional fill fields; the target confines native records to the adapter and uses versioned closed local observations with required variant data."
+    },
+    {
+      "id": "MAP-559086B869",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:78-108 exposes fixed capability arrays, bare account option fields, and a volatile CallRecord while advertising STP LMT; the target derives exact scoped descriptors, removes the contradictory StopLimit leaf, and keeps the trace non-authoritative."
+    },
+    {
+      "id": "MAP-26F708C6F8",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:110-160 constructs Partial SDK objects and a success/orderId/error legacy result; the target's separate refined constructors and leaf-local schemas preserve legal fixtures while rejecting incoherent terminal facts and removing the cross-provider result shape."
+    },
+    {
+      "id": "MAP-B4CEC1AF32",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:164-215 constructs a class owning volatile maps, IDs, overrides, and failure state, with no visible registry self-registration; the target injects scoped Layer dependencies and assigns journal, scheduler, projection, and venue ownership explicitly."
+    },
+    {
+      "id": "MAP-1F7945D7FF",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:217-252 keys generic failures by method/count and records unknown arguments; the target keeps reproducible FailurePlan scenarios in the harness, classifies phase/transport/remote uncertainty, and does not make generic Error behavior a production contract."
+    },
+    {
+      "id": "MAP-8C05962CF7",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:254-256 resolves init after recording/checking failure with no connection evidence; the target makes startup a scoped lifecycle barrier and keeps Ready separate from capability availability and transaction authorization."
+    },
+    {
+      "id": "MAP-A20A4E0C8F",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:257 only records close and releases no resource; the target adds scoped finalization and generation fencing while retaining durable jobs, observations, and recovery cases instead of fabricating an outcome."
+    },
+    {
+      "id": "MAP-03B79FC368",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:259-273 ignores catalog queries and returns a generic AAPL-like Contract/ContractDetails; the target makes catalog search/details a Public venue pull over explicit registrations with typed NoMatch/Ambiguous/Unknown results and no AccountScope invention."
+    },
+    {
+      "id": "MAP-46ED6C273F",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:278-325 mutates cash/positions before returning a combined PlaceOrderResult, leaves limit/stop orders Submitted, and ignores tpsl; the target makes Place optional, AccountScope-bound, schema-exact, write-ahead, and explicit about unsupported protection/StopLimit variants."
+    },
+    {
+      "id": "MAP-5FA8553583",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:327-355 mutates selected pending Order fields in place and silently ignores other Partial<Order> fields; the target uses an exact tagged amendment schema, before-image/version, and separate Ack/observation paths for queue-affecting uncertainty."
+    },
+    {
+      "id": "MAP-F133CDF76E",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:357-367 directly marks Submitted as Cancelled or returns a string error; the target makes Cancel optional and scoped, preserving that source behavior as fixture evidence while requiring durable intent, version, and late-fill reconciliation."
+    },
+    {
+      "id": "MAP-09ABC1ADD4",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:369-383 derives an opposite market order from mutable position state and delegates to placeOrder; the target keeps this adapter detail local and exposes only the optional quantity-or-All Close effect with target-exposure confirmation."
+    },
+    {
+      "id": "MAP-5842AA2B07",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:387-415 computes account totals from marks/avgCost or returns the mutable override; the target decodes AccountScope-bound observations, preserves known exposure under incomplete valuation, and prevents query data from becoming an execution writer."
+    },
+    {
+      "id": "MAP-0BBDEA8E36",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:417-435 renders native Position DTOs from mutable maps with mark/avgCost fallback and wallet source; the target makes them finite AccountScope observations with provenance and explicit valuation/coverage status."
+    },
+    {
+      "id": "MAP-C0D557E0BD",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:437-476 exposes null/arrays and mutates native orders by attaching filledQuantity during reads; the target uses immutable scoped order observations, coverage-aware absence, and no read-side mutation or transaction WAL."
+    },
+    {
+      "id": "MAP-04B4087714",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:479-511 supplies quote default 100 and synthetic historical values with wall-clock timestamps; the target preserves deterministic fixtures as Public venue/instrument observations and rejects missing/stale data as data evidence rather than execution fallback."
+    },
+    {
+      "id": "MAP-BBC8C72572",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:514-517 always returns {isOpen:true} with no scope or calendar; the target uses a Public venue/calendar session observation and separates Open/Closed/Unknown preconditions from a permanent capability."
+    },
+    {
+      "id": "MAP-202708E052",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:519-521 returns process-constant AccountCapabilities including STP LMT; the target derives declaration-scoped descriptors, leaves unsupported StopLimit structurally absent, and treats the historical quality label as compatibility metadata only."
+    },
+    {
+      "id": "MAP-5D79D1084D",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:525-543 keys maps by localSymbol/symbol and fabricates an STK Contract for unknown keys; the target requires canonical, account-independent InstrumentId mapping with explicit unknown/ambiguous quarantine and no fabricated security type."
+    },
+    {
+      "id": "MAP-FED35111E9",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:546-578 stores marks in a native-key Decimal map and auto-matches pending orders; the target makes mark/tick a Public venue/instrument fact control whose sequence/facts feed an independent venue, never an unapproved UTA mutation."
+    },
+    {
+      "id": "MAP-A3F1814B97",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:580-628 validates manual fill quantity but reduces totalQuantity for partial fills and force-cancels any existing order; the target preserves those simulator scenarios as typed FillFact/CancelFact observations with immutable original quantity and sequence-aware outcomes."
+    },
+    {
+      "id": "MAP-AB61645548",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:630-663 builds Contracts from Partial input, casts secType, defaults CRYPTO/MOCK/USD, and first-writes registry entries; the target parses exact derivative metadata once and quarantines conflicts or missing required fields before cash/projection use."
+    },
+    {
+      "id": "MAP-B8A614D67A",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:665-755 synchronously mutates the same cash/position maps for transfers and external trades, including an external SELL opening short; the target isolates sourced BalanceTransfer/ExternalExecution observations from Alice authorization and rejects invalid withdrawal/key merges before mutation."
+    },
+    {
+      "id": "MAP-F0F4E26989",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:757-797 assembles an ad hoc simulator snapshot from volatile maps and optional values; the target provides a versioned, rebuildable read projection with AccountScope on account-owned facts and Public scope on marks, not a second authority."
+    },
+    {
+      "id": "MAP-89456D4461",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:799-839 triggers LMT/STP at mark and deliberately collapses STP LMT into an immediate fill; the target retains proven LMT/STP matcher facts but structurally omits StopLimit until trigger-to-working-limit semantics are implemented."
+    },
+    {
+      "id": "MAP-48652AA629",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:841-844 returns only Decimal-or-null native-key mark lookup; the target returns a Public venue/instrument PriceObservation with source/freshness/identity evidence and leaves any effect precondition to its consumer."
+    },
+    {
+      "id": "MAP-5729FF3D09",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:846-856 exposes number-only setQuote/fillPendingOrder aliases; the target replaces them with scoped PriceObservationInput/FillFact controls and removes the aliases after callers migrate, without treating controls as transaction commands."
+    },
+    {
+      "id": "MAP-67B9817A3D",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:858-888 clears and repopulates maps from legacy DTOs with unchecked status casts; the target confines seeding to a typed test Layer/venue fixture and rejects impossible status, missing scope, or identity mismatch."
+    },
+    {
+      "id": "MAP-91432AF5F2",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:890-902 injects generic method/count failures and misses phase/crash/Unknown semantics; the target keeps FailurePlan test-only, keyed by leaf/phase/dispatch, with typed drop-ack/crash/corrupt-fact outcomes."
+    },
+    {
+      "id": "MAP-38E8988911",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:904-913 merges Partial<AccountInfo> into a mutable override that unconditionally bypasses computed account state; the target makes this a scoped, typed observation fixture and preserves reconciliation disagreement instead of a runtime setter."
+    },
+    {
+      "id": "MAP-150B8F86DC",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:917-966 mutates WAC/partial/full exposure, rejects Alice-style SELL-without-position and oversell, and never flips side; the target extracts this as a pure typed reducer with explicit source policy and exactly-once execution identity."
+    },
+    {
+      "id": "MAP-CF5A1A7070",
+      "verdict": "accepted",
+      "reason": "MockBroker.ts:968-978 clones only selected native fields, parses numeric IDs, and drops trailing/parent/OCA/TPSL fields; the target keeps NativeOrderRequest adapter-private, separates client/broker IDs, and rejects unsupported or lossy fields at the leaf schema boundary."
+    },
+    {
+      "id": "MAP-BF81183BD5",
+      "verdict": "accepted",
+      "reason": "MockBroker/index.ts:1 re-exports the legacy MockBroker surface; the target makes the barrel a composition hook for declarations, Layer, exact adapter contracts, and explicit fixtures, removing legacy IBroker/setter/result aliases after cutover."
+    }
+  ]
+}

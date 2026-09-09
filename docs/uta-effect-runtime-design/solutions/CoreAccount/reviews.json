@@ -1,0 +1,474 @@
+{
+  "group": "CoreAccount",
+  "designBasis": "capability-composition-v1",
+  "analysesSha256": "34e32b1c59e9ff7d671434af4b6853cd1e73d1cb6b15249d1ab1b36e55c7b746",
+  "designSha256": "c10104b2c0571eea5a4f8b30b253b1704376b474f4ba5ffff25f07d93e6d58d2",
+  "contractSha256": "73f5235ae86d3f1c9038dfd214e7207cdfb1833be7bc369f628d7d3f9017dd4f",
+  "entries": [
+    {
+      "id": "MAP-177DF827E5",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:1-23: createUTA constructs UnifiedTradingAccount with MockBroker and getStagedPlaceOrder reads status().staged[0] as an Operation. is covered: the source fixture currently exposes TradingGit staging; the repaired slice instead requires a file-backed JournalWriter reopened after DispatchStarted, with no SDK object in the durable draft. Design falsifier: Prepare a BUY MarketOrder with Quantity 1, reopen the journal, and observe one revision/one DispatchIdentity; schema decoding exposes no SDK object or unknown field in the durable payload. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure uses the completed MockBroker and Polling contracts: DurableMockVenue evidence is opt-in, while legacy MockBroker evidence remains Unknown/RecoveryRequired and cannot trigger a second forward mutation."
+    },
+    {
+      "id": "MAP-7F92A5F120",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:25-83: tests set asVendor/readOnly/keyless flags, allow funded read-only local commit, reject push and direct Git dispatch, reject keyless staging, and allow normal staging. is covered: the source flags distinguish funded read-only local work from keyless and external mutation; the analysis keeps ReviewDraft separate from executable capability and approval. Design falsifier: A read-only draft may be queried and rejected, but an approval attempt yields AuthorizationDenied and zero jobs. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure adopts the verified Principal, AccountScope, and server-side PolicyApprovalBinding from HttpRoutes/RuntimeComposition; body actor claims and legacy flags cannot create executable work."
+    },
+    {
+      "id": "MAP-4144027899",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:85-153: multiSubBroker exposes spot and derivatives and subAccountForContract routes STK to spot; tests require selector, reject unknown/mismatched selector, stamp message, and clear it. is covered: the source exercises spot/derivatives selectors and mismatch rejection; the resolver now returns explicit AccountScope even for a proven single wallet and blocks unprobed defaults. Design falsifier: A two-wallet account with AAPL and no selector yields Discovery/selection failure and no prepared plan. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure adopts C01 revision/generation invalidation: sub-account discovery is not static authority, and stale prepared scopes require rediscovery/reprepare."
+    },
+    {
+      "id": "MAP-189E766E12",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:155-246: raw Git operations call placeOrder with Contract and Order fields, return submitted result, and record broker rejection. is covered: the target keeps native conversion inside the selected declared provider interpreter, persists DispatchIdentity before mutation, and separates acknowledgement from later observation/fill evidence. Design falsifier: An accepted market order first projects Working/Accepted and only observed execution evidence creates a fill. Native idempotency/absence remains unproven, so a post-dispatch timeout stays Unknown/RecoveryRequired rather than authorizing a second place call."
+    },
+    {
+      "id": "MAP-F5D4E6C3D4",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:247-298: close tests pass Decimal quantity, perform live position lookup, reject oversized/stale partial close before broker call, and pass undefined for full close. is covered: the source validates live exposure and full-close undefined quantity; the target models Quantity|All with ExposureEquals and refuses dispatch without native reduce-only evidence. Design falsifier: Quantity 11 against exposure 10 returns PreconditionFailed and no DispatchStarted. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure makes the exposure-version fallback explicit: monotonic native versions are optional evidence, canonical fact hashes are weaker, and strong-CAS policy refuses unproven adapters."
+    },
+    {
+      "id": "MAP-7A53419830",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:299-316: cancel operation calls cancelOrder with order id and returns cancelled submitted result. is covered: the source only observes a submitted cancel result; the target preserves scoped order version, DispatchStarted, and late-fill reconciliation rather than treating Ack as terminal. Design falsifier: Stale version rejects before DispatchStarted. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure retains the adapter conformance prerequisite: source behavior proves a submitted cancel only, so missing horizon/absence evidence remains Unknown/RecoveryRequired and never authorizes blind retry."
+    },
+    {
+      "id": "MAP-1FA95F90E8",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:317-331: modify test forwards Partial<Order> quantity and limit price by raw order id. is covered: the source forwards a Partial<Order> patch by raw id; the target requires scoped before-image merge into a complete replacement and records semantic-loss evidence. Design falsifier: Order version 3 modified to 4 yields an observed replacement; stale version yields no mutation. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure keeps the genuinely venue-specific amend evidence open while making the safe path explicit: no assumed identity/queue preservation, prior projection retained, and no blind restore."
+    },
+    {
+      "id": "MAP-81E9BDAC4E",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:333-390: getState tests account, positions, pending orders from three broker reads, defaults realizedPnL, stamps aliceId, and filters Submitted/PreSubmitted. is covered: the source assembles account, positions, and pending orders from three reads; the target reports per-source freshness and keeps an order-read failure unavailable instead of fabricating an empty list. Design falsifier: An account/position/order view with one Submitted order returns currency-qualified values and a checkpoint; Filled/Cancelled orders are excluded from pending. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure resolves consistency as an explicit SnapshotCoherence ADT: per-source times are retained, non-atomic views are visible, and no cross-read timestamp is invented."
+    },
+    {
+      "id": "MAP-FE83587457",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:392-431: getAccount tests replace same-currency broker placeholder with Decimal sum and preserve broker value for mixed USD/HKD. is covered: the source preserves broker value for mixed USD/HKD; the closed Valuation ADT now separates BrokerReported, Derived, and FX-missing DerivedUnavailable. Design falsifier: USD 100 plus USD 2.04 produces Derived{102.04,USD} with matching as-of evidence. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure adopts the Accounting FX ADT and explicit FxPolicy: provider/pair/freshness are evidence fields, while absent/stale data remains BrokerReported plus DerivedUnavailable."
+    },
+    {
+      "id": "MAP-BA5730BE0C",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:433-493: getQuote overlay tests prevent Contract defaults such as conId=0 from overwriting resolver fields while preserving explicit exchange override. is covered: the source protects resolved quote fields from Contract defaults; the decoder now distinguishes absent from explicit zero and keeps native default rules at the adapter. Design falsifier: AliceId-only request resolves EUR/conId 12087792; default fields do not erase it. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure retains the adapter schema evidence gap and replaces the old zero heuristic with explicit ZeroPolicy handling; no unsupported zero is serialized."
+    },
+    {
+      "id": "MAP-4221233892",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:495-532: stagePlaceOrder tests BUY/SELL and MKT/LMT/STP/STP LMT/TRAIL orderType forwarding through status-staged SDK Order. is covered: the source covers BUY/SELL and five order forms; the OrderSpec union adds explicit TrailingMarket/TrailingLimit variants and exhaustive capability refusal. Design falsifier: BUY Limit has Quantity and Price; SELL TrailingLimit retains its limit leg and exactly one trail mode."
+    },
+    {
+      "id": "MAP-27891FCB27",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:533-580: stage tests reject missing quantity/prices, cash/quantity combinations, non-MKT cash, trailing exclusivity, and empty strings before staging. is covered: the source enumerates missing and mutually exclusive order inputs; schema constructors now return path-specific ValidationIssue values before staging. Design falsifier: LMT missing lmtPrice returns MissingLimit and no draft mutation; MKT cash+quantity returns one deterministic exclusivity issue."
+    },
+    {
+      "id": "MAP-079C9ED6FF",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:582-643: stage tests construct Decimal fields, preserve crypto-scale strings, and JSON-roundtrip staged decimals as strings. is covered: the source requires crypto-scale Decimal fields to survive JSON; the plan codec persists canonical DecimalString with units and no native Decimal. Design falsifier: Roundtrip a crypto quantity/price through JSON and journal; lexical value and numerical exactness remain unchanged."
+    },
+    {
+      "id": "MAP-49119F272B",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:644-668: stage tests default tif DAY, preserve GTC/outsideRth, and place aliceId/symbol on staged Contract. is covered: the target keeps the source-compatible leaf's Day/Gtc/session intent while making TIF/session variants leaf-local, rejecting schema-absent variants before planning, and separating declared-leaf availability from schema shape. Design falsifier: a declared Day variant with unknown availability yields CapabilityUnavailable and no job; adapter schema/availability evidence remains empirical."
+    },
+    {
+      "id": "MAP-8DFEA924F8",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:669-702: stage tests preserve takeProfit-only, stopLoss-only, both, or undefined nested tpsl values in placeOrder Operation. is covered: the target retains only protection variants declared by the selected leaf and compiles declared legs as proven native groups or explicit dependent steps; schema-absent variants cannot be silently dropped or dispatched. Design falsifier: a declared two-leg relation without native evidence yields refusal/dependent policy or Reconciling after partial acceptance, never primary-only success. Adapter relation and atomicity evidence remains empirical."
+    },
+    {
+      "id": "MAP-062ABEC10D",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:704-736: stageModifyOrder converts provided fields to Decimal and omits absent fields in Partial<Order>. is covered: the source omits absent Partial<Order> fields; the target makes that a decoded FieldPatch merged against an ExistingOrder, including explicit clear-vs-retain policy. Design falsifier: Price-only patch retains existing quantity/type/tif in PreparedModify; stale version is rejected without broker call."
+    },
+    {
+      "id": "MAP-1F652F4091",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:738-772: stage close tests convert positive qty to Decimal, use undefined for full close, and reject zero/negative/infinite/non-numeric before staging. is covered: the source uses undefined for full close and rejects invalid quantities; CloseTarget.All is resolved once against an exposure snapshot and persisted. Design falsifier: qty 11 against exposure 10 returns PreconditionFailed and no DispatchStarted. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure applies the explicit monotonic-or-fact-hash exposure policy; no adapter monotonic version is inferred, and strong policy fails closed."
+    },
+    {
+      "id": "MAP-7B3CD75E10",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:774-800: contractFromAliceId tests resolve valid account|nativeKey, reject missing separator, and reject a different UTA id. is covered: the source parses account|nativeKey and rejects foreign UTA ids; branded identity codecs and ownership checks now prevent delimiter strings crossing the domain. Design falsifier: account|AAPL resolves to owned InstrumentId; account-other|AAPL fails before broker lookup; account| with empty native key fails schema."
+    },
+    {
+      "id": "MAP-4303E3E80A",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:802-814: stageCancelOrder adds cancelOrder with orderId to Git status. is covered: the source stages a cancel order id in Git status; the target binds it to AccountScope, revision, before-image, and an atomic Queued job on approval. Design falsifier: Draft appears as CancelOrder with account scope; approval creates exactly one job; reject creates TransactionRejected and no job."
+    },
+    {
+      "id": "MAP-6089771399",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:816-852: git-flow tests reject empty commit and push-before-commit, execute multiple operations, and clear staging after successful push. is covered: the source permits multiple operations and rejects empty/push-before-commit; the repaired design fixes the exact 12-state ADT and explicit known-rejection versus Unknown policy. Design falsifier: Two independent orders yield two steps/jobs and per-step results; the transaction reaches a terminal state only after each criterion is evaluated."
+    },
+    {
+      "id": "MAP-D4F5440582",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:854-903: sync tests detect filled pending orders and aggregate partial fills into Decimal quantity and weighted average price. is covered: the source aggregates partial fills; the target folds cumulative/delta observations idempotently and keeps missing fill facts incomplete rather than synthesizing execution. Design falsifier: 4@148 plus 6@150 yields cumulative 10 and 149.2 exactly as DecimalString. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure retains adapter execution-identity/cursor evidence as empirical and explicitly blocks fill creation when cumulative/delta semantics are not declared."
+    },
+    {
+      "id": "MAP-58E656CE5A",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:904-933: listing-mode tests call getOpenOrders once, confirm only vanished orders, and avoid getOrder for a still-listed order on the next pass. is covered: the source only confirms vanished orders after a listing pass; ListingResult coverage now allows absence to select observation only, never terminal rejection. Design falsifier: A Complete listing has A absent and B present: only A gets a per-order confirmation candidate, and B remains scheduled as StillWorking. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure retains listing coverage as empirical and tightens the safe outcome: Partial/Unavailable preserves pending state, and Complete absence is only a confirmation candidate."
+    },
+    {
+      "id": "MAP-B3655A0EA7",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:934-978: per-order fallback tests poll without getOpenOrders and apply immediate/one-minute/five-minute fake-time backoff. is covered: the source uses in-memory age backoff; durable schedules now preserve the 2-minute/1-hour compatibility bands, lease epochs, and Unknown classification. Design falsifier: After two hours, two polls ten seconds apart create one persisted observation attempt; after five minutes the next Ready schedule is due."
+    },
+    {
+      "id": "MAP-C735359708",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:979-1011: sync passes operation localSymbol to getOrder and leaves pending order unchanged when broker lookup returns no order. is covered: the source leaves a null getOrder result pending; the shared RemoteOutcome keeps null/no-record as Unknown or StillWorking with explicit evidence. Design falsifier: Broker returns null with no evidence: order remains pending and job reschedules. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure retains per-adapter null semantics as empirical and preserves the source-safe pending behavior until definitive absence evidence is supplied."
+    },
+    {
+      "id": "MAP-D4AEAAD74E",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:1013-1049: wallet reconciliation test defers mark-price reconcile while same aliceId has pending order, then records residual after fill/sync. is covered: the source defers mark reconciliation while a pending order exists; valuation-only ReconcileBalance now records residual provenance without creating a mark-price FillObservation. Design falsifier: A pending fill of 5 at 149 plus old 10 at 150 does not create a 160 mark-price FillObservation; after settlement, only unexplained residual gets one valuation-only ReconcileBalance event. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure retains the precision/fee/lot evidence gap and confirms the safe quarantine path; the legacy tolerance is not carried into the target."
+    },
+    {
+      "id": "MAP-FFFCA4765D",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:1051-1081: guard tests reject TSLA via symbol-whitelist before placeOrder and allow AAPL through to broker. is covered: the source rejects TSLA before placeOrder; pure guard facts now precede a separate durable reservation boundary, with unavailable facts blocking both broker and reservation effects. Design falsifier: TSLA produces PrepareRejected and zero reservations/effect jobs; AAPL produces one admitted PlaceOrder with a durable reservation only when policy requires it. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure adopts C08/Guards exact policy rather than deferring to Main: cooldown reservation timing, GrossNotional fail-closed valuation, and canonical identity resolution are now named rules."
+    },
+    {
+      "id": "MAP-92B40EBFD5",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:1083-1101: savedState test exports GitExportState after push and restores a new UTA whose Git log contains the commit. is covered: the source restores Git export into a new UTA; versioned journal replay/checkpoints now restore DispatchStarted identity and refuse corrupt authority. Design falsifier: Restart after a durable DispatchStarted restores the same attempt and schedules ObserveUnknown; no second dispatch. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure retains the actual production-data inventory prerequisite and records the safe read-only/OperatorRequired outcome defined by TradingJournal."
+    },
+    {
+      "id": "MAP-B047ACC95D",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:1103-1147: health tests cover automatic healthy startup, offline initial connect, timer recovery, and recovery after broker returns. is covered: the source tests startup/offline/timer recovery; exact C06 RuntimeHealth is separated from scoped BrokerHealthView and cannot settle Unknown transactions. Design falsifier: Initial connect failure yields broker Offline/Degraded evidence and a supervised retry while RuntimeHealth remains in its correct startup/recovery variant; broker recovery yields Reachable without settling an Unknown transaction."
+    },
+    {
+      "id": "MAP-C7ACDD9C7A",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:1148-1204: health tests handle dead/restored transport, threshold 3 degraded/6 offline, and recovery after failed initial connect. is covered: the source tests dead/restored transport and 3/6 thresholds; recovery now treats restore as a probe hint and scopes thresholds per capability. Design falsifier: A dead event blocks mutation immediately; restored schedules a probe, and health becomes Reachable only after target evidence."
+    },
+    {
+      "id": "MAP-D3C71D3098",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:1205-1253: health tests reset failures on success, fail fast while offline/recovering, and reject push while offline. is covered: the source resets failures on success but rejects offline push; capability admission now remains separate from RuntimeHealth and never treats health as a dispatch permit. Design falsifier: Offline push returns typed failure and zero dispatch; a successful quote does not reopen trading admission if private-write capability is absent."
+    },
+    {
+      "id": "MAP-A0FAA65E2D",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:1255-1285: fake timers verify recovery after six failed reads and close cancels the recovery timer. is covered: the source tests exponential read recovery and close cancellation; reconnect timers become Effects while durable jobs classify interruption as ObserveUnknown or RecoveryRequired. Design falsifier: Close interrupts retry and joins it; restart sees an unfinished dispatch and schedules observation according to evidence."
+    },
+    {
+      "id": "MAP-AB9C95B763",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:1287-1312: health snapshot tests inspect status/counters/timestamps and verify failures across account/position reads are reset by a market-clock success. is covered: the source resets global health counters on market-clock success; the target splits process RuntimeHealth from scoped per-capability evidence so public success cannot clear account-write failure. Design falsifier: Account read remains degraded after a successful public clock read; a private-read success clears only its own failure streak."
+    },
+    {
+      "id": "MAP-DB785C57D5",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:1316-1350: capability-ladder tests stop keyless probing at connected, distinguish funded private-read degradation, and report data/account/trading tiers. is covered: the source stops keyless probing at connected and distinguishes funded private-read degradation; CapabilitySet now exposes exhaustive action availability with CredentialRef evidence. Design falsifier: Keyless quote succeeds while account/trade actions are unavailable; funded private read failure shows account query degraded but public query available. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure adopts typed ConnectionIntent/SecretRef/environment evidence from Catalog and RuntimeComposition; legacy flags no longer remain an unresolved schema decision."
+    },
+    {
+      "id": "MAP-4189A98E6F",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:1352-1372: wallet position tests pass through broker avgCostSource and positions with no source marker unchanged. is covered: the source passes avgCostSource through or leaves it absent; CostBasisSource now makes broker authority, reconstruction, and unknown compatibility explicit. Design falsifier: Broker source yields same avgCost/PnL; missing source appears with provenance Unknown and documented compatibility, while wallet source invokes accounting. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure retains missing avgCostSource meaning as adapter/history evidence and fixes the safe Unknown provenance path; no broker authority is inferred."
+    },
+    {
+      "id": "MAP-5B98644210",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:1373-1427: wallet bootstrap tests prefer broker avgCost, fall back to markPrice, create reconcileBalance, and compute initial PnL. is covered: the source bootstraps from avgCost or mark; the target marks both as provenance-bearing valuation/accounting estimates and forbids synthetic FillObservation. Design falsifier: AAPL 100 with broker-reported avgCost 148.50 and mark 152 produces basis 148.50/PnL 350 with BrokerReportedCostBasis provenance, not a FillObservation. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure retains adapter avgCost authority as empirical and ensures numeric MockBroker behavior cannot promote an unclassified source to BrokerReported."
+    },
+    {
+      "id": "MAP-E991350693",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:1428-1482: wallet drift tests preserve bootstrap basis across mark movement and use weighted average for quantity drift with PnL recomputation. is covered: the source preserves basis across mark changes and applies quantity WAC drift; mark updates affect PnL only and residual corrections are idempotent valuation events. Design falsifier: Mark 90000 after basis 80000 changes PnL only. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure adopts Accounting’s explicit FeeEvent/AccountingPolicy rule: partial WAC is deterministic, fee treatment is never implicit, and unsupported short/lot policy is durable rather than reset."
+    },
+    {
+      "id": "MAP-EE6C7F95C5",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:1483-1524: wallet tests skip reconcile for 1e-9 dust and tolerate a broker position lacking aliceId after UTA stamping. is covered: the target preserves explicit sub-dust no-op policy while moving native-key mapping into the adapter boundary; getPositions stamping is not treated as proof of identity uniqueness or precision. Design falsifier: missing identity yields a visible quarantine with no basis mutation, while a later evidence-bearing identity resolves it once. Native-key and precision evidence remains empirical."
+    },
+    {
+      "id": "MAP-58BE22469E",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:1526-1577: cold-start tests expose connecting until initial connect settles, fail a slow read after 1.5s without poisoning health, and allow reads after instant connect. is covered: the source specifies 1.5s cold-start grace and non-poisoning slow reads; QueryReadiness is separate from exact RuntimeHealth and mutation admission. Design falsifier: Slow init causes a typed Connecting query failure with zero failure-counter increment; after settle, query succeeds."
+    },
+    {
+      "id": "MAP-DC4D7B4995",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:1-37: imports include Decimal, concrete IBKR Contract/Order, BrokerError/IBroker, TradingGit, cost-basis/order-history projections, guards, and a side-effect contract extension. is covered: the source imports SDK, TradingGit, guards, and contract extension in one class; the target relocates SDK construction to adapter Effects and requires durable codec roundtrip proof. Design falsifier: Compile a place action from JSON, run the exact journal schema encoder, and reopen/decode it: no SDK prototype/function/secret is accepted in the durable payload."
+    },
+    {
+      "id": "MAP-2965B55AF1",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:41-55: options combine untyped guard descriptors, savedState, callbacks, and readOnly/keyless/asVendor booleans. is covered: the source combines callbacks, saved state, flags, and untyped guards; named config/credential/policy records preserve AccountId through secret rotation. Design falsifier: Invalid config is rejected before broker acquisition. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure adopts the typed ConnectionIntent/config codec from Catalog and RuntimeComposition; the legacy UTA options shape is no longer an unresolved runtime schema."
+    },
+    {
+      "id": "MAP-760AAF71FB",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:59-78: stage parameter types are re-exported from uta-protocol and numeric values are documented as strings for Decimal precision. is covered: the source re-exports string-valued stage parameters; typed TradeAction variants now carry units, protection, scope, and an explicit notional sizing basis. Design falsifier: Decode market notional and unit quantity as distinct variants; reject both."
+    },
+    {
+      "id": "MAP-076B11499E",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:82-139: class fields hold broker, TradingGit, account flags, mutable health counters/timers, connect promise, cached subaccounts, and transient staged subaccount ids. is covered: the source class fields mix broker, Git, flags, counters, timers, and transient scope; composition now gives each lifecycle/effect service its own scope. Design falsifier: Restart while one transaction is Reconciling and one connection is Offline: transaction remains locked while query health recovers."
+    },
+    {
+      "id": "MAP-7ACD53B4BE",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:141-156: constructor copies broker identity/options, optimistically sets target reach, stores callbacks, and installs setConnectionStateListener. is covered: the source optimistically sets target reach in the constructor; connection events now fold into exact RuntimeHealth/BrokerHealthView without optimistic mutation authority. Design falsifier: Construct with a slow adapter and verify no mutation admission before readiness."
+    },
+    {
+      "id": "MAP-8B7A06270E",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:157-178: constructor closure reads Git pending ids, concurrently calls broker account/positions/orders via _callBroker, stamps aliceId, filters Submitted/PreSubmitted, and returns GitState. is covered: the source closure mixes Git pending ids with three concurrent broker reads; AccountSnapshotView now folds typed observations and query reads projections without writing. Design falsifier: Account read succeeds but orders read fails: view marks orders stale/unavailable instead of claiming an empty pending list."
+    },
+    {
+      "id": "MAP-124109541E",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:180-200: dispatcher checks mutation policy, switches Operation action to direct broker calls, live-checks close quantity, and wraps in-process guards. is covered: the source dispatcher switches operations into direct SDK calls and live close checks; pure prepare/attempt/evolve stops at DispatchStarted and an interpreter owns effects. Design falsifier: Crash between DispatchStarted and broker response yields Unknown/Observe job, never a second blind call."
+    },
+    {
+      "id": "MAP-ABF83BBE4D",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:201-209: gitConfig wires executeOperation, getGitState, and onCommit; TradingGit.restore uses optional savedState or starts new. is covered: the source wires TradingGit callbacks and optional savedState restore; JournalReader/replay now verifies schema/hash and renders Git only as audit. Design falsifier: Restart with a corrupt event payload refuses authority startup; valid journal rebuilds identical transaction state."
+    },
+    {
+      "id": "MAP-B4A46EAD8C",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:211-224: constructor starts _connect immediately, catches only to silence unhandled rejection, and stores raw promise for waitForConnect. is covered: the source starts connect fire-and-forget and silences rejection; startup barrier supervision now makes readiness/recovery explicit and keeps promises at the Effect boundary. Design falsifier: Start with a pending Unknown dispatch and slow connection: runtime blocks mutation, then schedules observation after capability is restored."
+    },
+    {
+      "id": "MAP-03A2A17A58",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:226-228: waitForConnect returns the constructor-created Promise<void>. is covered: the source exposes the constructor promise; waitForConnect now awaits Ready on the exact RuntimeHealth ADT without granting funded write capability. Design falsifier: A keyless account reaches public data readiness without private account probe; a writable account waits for readable capability."
+    },
+    {
+      "id": "MAP-EC8C814F12",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:233-283: tier derives from keyless/readOnly booleans; targetReach is connected/readable; health uses reach, failure thresholds, disabled, and emits mutable snapshot. is covered: the source derives tier/health from booleans and counters; the target uses exact process health plus independent capability evidence and authorization. Design falsifier: Public data remains reachable while funded private read is degraded; BrokerHealthView marks the account capability unavailable and mutation admission is false with a reason."
+    },
+    {
+      "id": "MAP-12EBFAE5E6",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:285-311: _attemptReach calls broker.init, then getAccount for funded targets, stops at connected for keyless, and marks permanent BrokerError disabled. is covered: the source stops keyless reach before getAccount and disables permanent errors; typed probe evidence preserves public-only readiness and adapter-owned error taxonomy. Design falsifier: Keyless layer emits PublicDataReady without private call; funded private-read failure yields ConnectedTransport + AccountUnavailable. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure retains adapter-native error taxonomy as empirical and replaces class/name guessing with UnclassifiedNativeFailure plus safe Unknown/RecoveryRequired behavior."
+    },
+    {
+      "id": "MAP-00D45A7149",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:313-328: _notePermanent checks BrokerError identity or name/permanent fields; _noteFailure stores a string message and Date. is covered: the source stores error messages and Date timestamps; typed adapter failures and redacted HealthEvents now retain classification without raw strings as authority. Design falsifier: Malformed broker payload is ProtocolViolation and disables only the affected capability if policy says so; a venue rejection remains retry/plan-specific."
+    },
+    {
+      "id": "MAP-70C8DB0025",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:330-352: connection listener ignores alive, nudges recovery on restored, and sets down/offline/failure threshold on dead. is covered: the source ignores alive, nudges restored, and marks dead/offline; generation-aware transport events now require a probe after restore. Design falsifier: Dead during an active dispatch leaves its attempt Unknown; restored schedules observe on same identity, not redispatch."
+    },
+    {
+      "id": "MAP-3714A83594",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:354-393: _connect probes asynchronously, clears connecting, warms subaccounts, emits health, starts recovery, and throws BrokerError for disabled/down. is covered: the source interleaves async probes, scope warming, health, and recovery; barrier folding now separates journal verification, connection, scope, and admission stages. Design falsifier: Start with multi-wallet discovery unavailable: market query may run, write prepare returns ScopeDiscoveryPending."
+    },
+    {
+      "id": "MAP-0A714E7908",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:395-407: _awaitConnectOrGrace races _connectPromise with a 1.5s timer and clears the timer in finally. is covered: the source races connect with a 1.5s timer; grace is now QueryReadiness only and cannot alter durable execution or mutation admission. Design falsifier: Slow init returns Connecting for query after grace; a mutation command returns CapabilityUnavailable/StartupRecoveryPending and creates no job."
+    },
+    {
+      "id": "MAP-A0A0E5EBC7",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:409-438: _callBroker rejects disabled/offline-recovering, waits initial grace, invokes arbitrary callback, calls _onSuccess or maps any throw via BrokerError.from/_onFailure. is covered: the source gates arbitrary broker callbacks on mutable health and maps throws; typed query failure, DispatchAttempt, and observation recovery replace broad callback mutation. Design falsifier: Timeout after place mutation returns OutcomeUnknown and one observation job; malformed query response is ProtocolViolation; public query failure does not alter transaction state."
+    },
+    {
+      "id": "MAP-463948E2EB",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:440-505: health callbacks emit snapshots; success resets counters/timer; failure increments and starts exponential setTimeout recovery; nudge schedules immediate attempt. is covered: the source resets counters and schedules exponential timers from callbacks; generation-scoped BrokerHealthView and durable recovery classification prevent blind redispatch. Design falsifier: Kill process while retry and dispatch jobs coexist; restart reconnects and independently recovers jobs according to typed outcomes."
+    },
+    {
+      "id": "MAP-7AF82C011B",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:509-520: stampAliceId concatenates this.id with broker.getNativeKey using |; parseAliceId splits first separator into unbranded strings. is covered: the source concatenates and splits unbranded aliceId strings; branded AccountId/NativeIdentity codecs now keep adapter serialization outside domain identity. Design falsifier: Malformed/empty identifiers are rejected before adapter call; two brokers can use distinct native identities without collisions."
+    },
+    {
+      "id": "MAP-6227B2AFB6",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:522-545: contractFromAliceId parses/owns aliceId, calls broker.resolveNativeKey, and mutates returned Contract.aliceId. is covered: the source mutates Contract.aliceId after native resolution; scoped ownership is pure and native Contract construction stays in the adapter Effect. Design falsifier: A ref from another AccountId is rejected before broker resolution; valid ref retains display/native evidence in adapter boundary only."
+    },
+    {
+      "id": "MAP-520CFD3057",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:549-563: _assertCanCreateProposal blocks only keyless; _assertCanMutateAccount blocks readOnly (including keyless) with CONFIG BrokerError. is covered: the source blocks only keyless proposal creation but blocks readOnly mutation; review drafts remain possible while executable Prepared/AwaitingApproval/Queued requires write capability. Design falsifier: Funded readOnly stage creates review draft but prepare marks nonExecutable; approve returns PlanNotExecutable and zero EffectJobs."
+    },
+    {
+      "id": "MAP-D615CBA78E",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:565-595: dispatcher checks close quantity finite/positive, reads broker positions, matches native key, and rejects missing/oversized quantity immediately before closePosition. is covered: the source reads exposure and rejects oversized close before closePosition; precondition/evolve functions now separate read and broker Effects and retain Unknown locks. Design falsifier: Exposure changes from 10 to 4 after prepare: quantity 5 yields PreconditionFailed, no mutation."
+    },
+    {
+      "id": "MAP-1F24B04239",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:597-638: validation uses open orderType plus optional values, rejects sizing conflicts and per-type missing fields by interpolated Error. is covered: the source validates an open orderType plus optional fields; exhaustive OrderSpec variants close sizing/trailing/expiry relationships before any native compilation. Design falsifier: Market with notional and units returns one exclusivity issue; TrailLimit without limit fails; GTD requires valid Instant/timezone."
+    },
+    {
+      "id": "MAP-F0694AE4F6",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:642-655: _ensureSubAccounts calls optional listSubAccounts once, memoizes it, and otherwise synthesizes a unified default; listSubAccounts exposes cache. is covered: the source memoizes optional subaccount discovery and synthesizes default; DirectoryState now distinguishes Discovering/Available/Unavailable without fallback. Design falsifier: Before discovery, write returns ScopeDiscoveryPending; after a one-scope snapshot, action uses explicit default scope id."
+    },
+    {
+      "id": "MAP-82E54D80F1",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:657-689: _resolveWriteSubAccount uses _subAccounts??[], requires selector for >1, validates id and broker route, but returns undefined for unprobed/single. is covered: the source returns undefined for unprobed or single scope; explicit AccountScope plus revision invalidation forces rediscovery/reprepare. Design falsifier: Multi-wallet AAPL with no selector cannot prepare; spot selector yields explicit account/spot scope; directory revision change invalidates old approval."
+    },
+    {
+      "id": "MAP-7864431508",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:693-725: stagePlaceOrder validates params, resolves aliceId to native Contract, sets symbol/Decimal Order fields/default DAY/GTD/outsideRth/parent/OCA, builds optional tpsl, and git.adds operation. is covered: the source builds native Contract/Order defaults and nested TPSL during staging; typed draft/prepare persist quote conversion, relations, session, and protection before dispatch. Design falsifier: A notional MKT plan persists quote identity/rounding; a TRAIL LIMIT plan retains explicit limit and trail; unsupported adapter returns typed refusal rather than drop. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure retains relation support as adapter evidence and confirms typed full-intent refusal instead of claiming support from SDK field forwarding."
+    },
+    {
+      "id": "MAP-100C8043F8",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:727-740: stageModifyOrder builds Partial<Order> from optional fields and adds modify operation keyed by raw orderId. is covered: the source creates Partial<Order> from optional Decimal fields; the replacement uses ScopedOrderRef/FieldPatch then complete before-image merge. Design falsifier: Existing LMT order with price-only patch yields complete replacement retaining quantity/tif; stale version produces no job."
+    },
+    {
+      "id": "MAP-603C98B3C5",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:742-767: stageClosePosition resolves native Contract, parses positive Decimal qty or undefined, validates subaccount, and git.adds close operation. is covered: the source resolves native close and passes undefined for full close; typed CloseTarget and durable residual observation replace SDK-native staging. Design falsifier: A full close against exposure 10 persists resolved target 10 in Prepared; broker partial fill leaves a durable residual outcome."
+    },
+    {
+      "id": "MAP-A0C78D8C68",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:769-772: stageCancelOrder checks keyless proposal policy and git.adds only raw orderId. is covered: the source stages only a raw cancel id after a keyless policy check; scoped CancelOrder and versioned prepared state now precede any broker call. Design falsifier: Foreign scope id fails before broker call; current order version 3 cancellation enters one durable job; unknown ack creates observation."
+    },
+    {
+      "id": "MAP-DBBD7BE69C",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:776-781: commit calls git.commit with stamped message, returns hash/count, then clears transient staged subaccount ids. is covered: the source returns a Git hash then clears transient scope ids; PrepareTransaction now atomically records plan, locks, receipt, and revision. Design falsifier: Prepare success returns receipt after commit; duplicate command returns same receipt; crash before commit leaves no prepared state."
+    },
+    {
+      "id": "MAP-7C856D1CDF",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:784-791: _stampSubAccount deduplicates staged ids and appends [sub:...] to message; Operation/GitCommit schemas unchanged. is covered: the source stamps subaccount text onto Git messages; structured scope now drives audit rendering while text is non-authoritative. Design falsifier: Audit tag says spot because event scope is spot; changing text cannot cause dispatch to derivatives."
+    },
+    {
+      "id": "MAP-E59A917F82",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:793-804: push checks readOnly/disabled/offline then invokes git.push(hash); post-push callback is fire-and-forget. is covered: the source pushes Git and fires an unawaited callback; approval/queue and DispatchStarted now use durable jobs with post-commit receipts and Unknown recovery. Design falsifier: Crash immediately after DispatchStarted yields one Unknown attempt and observe job; readOnly approval creates no job."
+    },
+    {
+      "id": "MAP-152865F791",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:806-811: reject calls git.reject(reason,hash), clears subaccount ids, and launches post-reject callback without await. is covered: the source rejects by Git hash and launches callback side effects; typed Reject only releases pre-dispatch locks and cannot erase a dispatch boundary. Design falsifier: Reject Prepared with no dispatch records PlanRetired and releases reservation; reject after DispatchStarted yields Aborting/RecoveryRequired, not no-effects."
+    },
+    {
+      "id": "MAP-502614A0DB",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:815-825: log/show/status delegate directly to TradingGit commit log, hash lookup, and GitStatus. is covered: the source delegates history/status directly to TradingGit; projections now render deterministic audit/history while Git hashes remain explanatory. Design falsifier: Projection query after restart returns same transaction state/checkpoint; stale projection is marked, not silently empty."
+    },
+    {
+      "id": "MAP-C11719131D",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:827-915: sync scans Git pending ids, optional delay, listing or in-memory backoff, getOrder confirms absence, maps status/fills, fetches state, and writes Git sync commit. is covered: the source scans pending ids, lists/orders, maps fills, and writes sync commits; durable Observe jobs now use complete/partial listing coverage and shared RemoteOutcome. Design falsifier: Complete listing with one absent candidate selects one observation job; its first result is Unknown/StillWorking unless explicit scoped absence evidence is returned, so absence never becomes terminal rejection by omission. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure retains per-adapter listing/idempotency evidence and binds the safe Partial/Unavailable path to the durable Observe job contract."
+    },
+    {
+      "id": "MAP-6E4258767C",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:917-919: getPendingOrderIds returns pending orderId/symbol/localSymbol directly from TradingGit. is covered: the source returns pending ids directly from Git; projection queries now include scoped order summaries while Scheduler eligibility remains a read-only classification. Design falsifier: Pending order remains visible while Observe job is Leased; querying does not claim or mutate the job."
+    },
+    {
+      "id": "MAP-80F3D97161",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:921-929: orderHistory/tradeHistory project exported Git commits into exchange-style rows with default limit. is covered: the source projects exchange-style history with default limits; compatibility rows now carry required scope/provenance/checkpoint and only observed fill facts. Design falsifier: External order observed then filled appears in order/trade history after projection checkpoint; Git audit remains explanatory only."
+    },
+    {
+      "id": "MAP-CBFF2224B1",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:931-951: _pollState Map stores firstSeenAt/lastPolledAt and selects 0/60s/300s intervals by age. is covered: the source keeps first/last poll times in an in-memory Map; durable schedules now carry leases, epochs, DispatchIdentity, and reconciliation outcomes. Design falsifier: Restart after 2h preserves next due time; two workers cannot claim same order; Unknown remains excluded from forward dispatch."
+    },
+    {
+      "id": "MAP-5C48EEF269",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:953-981: observeExternalOrders lists open orders, filters ids unknown to Git, stamps identity, records one observed Git commit with stateAfter, and returns count. is covered: the source records unknown open orders as Git commits; ExternalOrderObservation now requires C07 listing coverage and no absence inference from incomplete data. Design falsifier: A Complete listing records each new scoped order once; replay returns observed=0. A Partial listing yields follow-up job and cannot claim absent namespace orders. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure retains full namespace coverage as a venue evidence prerequisite and prevents the legacy open-listing result from claiming account-wide absence."
+    },
+    {
+      "id": "MAP-1EF01B52AD",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:983-989: simulatePriceChange and setCurrentRound delegate directly to TradingGit and mutate in-process simulation state. is covered: the source mutates TradingGit simulation state; the target emits versioned MarketObservation events through an isolated Effect and folds only accepted facts. Design falsifier: A test round/price changes only the Mock projection; a production transaction cannot use it as broker evidence."
+    },
+    {
+      "id": "MAP-E8B780DC9D",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:1005-1024: getAccount reads broker account, reads positions, sums position PnL when currencies match base, otherwise keeps broker value. is covered: the source sums same-currency position PnL and preserves mixed-currency broker value; the target uses closed Valuation and query-side read-only projections. Design falsifier: Same-currency USD account plus USD position PnL produces Derived USD with exact DecimalString sum. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure resolves FX provider/staleness/rounding as explicit FxPolicy and observation evidence, retaining BrokerReported plus DerivedUnavailable whenever that evidence is absent."
+    },
+    {
+      "id": "MAP-D19FB60347",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:1026-1031: getPositions calls broker.getPositions, stamps aliceId, invokes wallet reconciliation that may commit Git, and returns mutable Position[]. is covered: the source stamps positions and may commit during getPositions; immutable observations and valuation-only reconciliation move writes to the worker boundary. Design falsifier: Repeated query after the same observation emits no new reconciliation event and returns the same projection version."
+    },
+    {
+      "id": "MAP-044AE7B4DD",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:1040-1106: wallet positions compare broker quantity with cost basis from Git, defer drift while pending order ids contain aliceId, record reconcileBalance beyond 1e-8 at avgCost/mark, then mutate avgCost/unrealizedPnL via pnlOf. is covered: the source mutates avgCost/PnL after pending-id race checks; explicit valuation-only ReconcileBalance, DispatchIdentity, and replay idempotency preserve accounting semantics. Design falsifier: Fill arrives between position read and sync: classify Deferred; after fill observation only unexplained residual becomes one valuation-only ReconcileBalance at broker evidence price. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure retains the external accounting policy evidence and explicitly rejects the legacy tolerance/fee/short defaults until a versioned policy is present."
+    },
+    {
+      "id": "MAP-0AF3B67931",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:1115-1124: _buildReconcileStateAfter returns zero account values, current positions, and empty pending orders to satisfy GitCommit stateAfter. is covered: the source constructs zeroed stateAfter solely for GitCommit; real observed facts now form a valuation-only event and never a synthetic FillObservation. Design falsifier: A valuation-only reconcile event with active pending order retains it in projection; account values are not overwritten by zeros and no remote fill is emitted."
+    },
+    {
+      "id": "MAP-8DC763EDB9",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:1126-1130: getOrders calls broker.getOrders, stamps each Contract.aliceId, and returns native OpenOrder objects. is covered: the source returns mutable native OpenOrder objects with stamped aliceId; schema-decoded OrderObservation/OrderView now persist scope and provenance. Design falsifier: A native order with missing status fails ProtocolViolation rather than becoming empty/Submitted; repeated observation is idempotent."
+    },
+    {
+      "id": "MAP-229EF12AA4",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:1132-1155: getQuote/getHistorical/getMarketClock expand aliceId-only contracts, delegate through _callBroker, stamp returned contracts, and CONFIG-fail unsupported historical bars. is covered: the source expands native contracts and routes quote/history/clock through _callBroker; typed market observations and capability failures keep broker IO at the adapter boundary. Design falsifier: An aliceId-only quote resolves canonical instrument; unsupported history yields CapabilityUnavailable; stale market data reports observedAt. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure adopts the ProtocolModels venue-calendar/instrument-session MarketClock target; AccountScope is only query authorization/context and clock success cannot grant trading capability."
+    },
+    {
+      "id": "MAP-188B023F53",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:1164-1178: expandContract checks optional broker method, parses/owns aliceId, passes native key/filters, stamps returned Contracts, and returns ContractExpansion. is covered: the source optionally expands hub/leaf contracts and stamps native results; catalog expansion now preserves hub keys and uses typed Complete/Partial/Unavailable results. Design falsifier: A supported issuer expands into scoped leaf InstrumentIds; unsupported broker returns CapabilityUnavailable; malformed owner fails before call."
+    },
+    {
+      "id": "MAP-36B15212DF",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:1180-1184: searchContracts sends a free-form pattern to broker and stamps aliceId on native ContractDescription results. is covered: the source sends free-form searches and returns native descriptions; InstrumentSearchRequest/Summary adds branded ids, scope, cursor, and completeness. Design falsifier: Search “AAPL” returns Complete summaries with branded ids; adapter timeout returns CatalogUnavailable; a partial cursor is not treated as exhaustive."
+    },
+    {
+      "id": "MAP-ED33D20EB9",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:1193-1196: refreshCatalog calls optional broker.refreshCatalog and otherwise resolves without doing anything. is covered: the source silently resolves when refreshCatalog is absent; explicit CatalogCapability/RefreshResult now distinguishes Unsupported, Refreshed, and stale retry. Design falsifier: Unsupported refresh returns typed unavailable; successful refresh advances catalog version/checkpoint; timeout leaves stale and schedules retry."
+    },
+    {
+      "id": "MAP-EA70A361BF",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:1198-1203: getContractDetails expands aliceId-only query, delegates broker, stamps returned Contract, and returns ContractDetails or null. is covered: the source returns ContractDetails or null; typed Found/NotFound/Unavailable results prevent null from becoming a zero instrument. Design falsifier: Found details carry canonical id and observedAt; NotFound does not create a zero-valued instrument; unavailable leaves prior projection stale."
+    },
+    {
+      "id": "MAP-D37BF3A34F",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:1210-1235: _expandAliceIdIfNeeded resolves only when no symbol/localSymbol, then copies nonempty/nonzero/non-sentinel Record values over expanded Contract. is covered: the source copies nonzero/non-sentinel Record values over a Contract; schema InstrumentOverrides now distinguishes absent/zero and leaves sentinel policy to adapters. Design falsifier: Omitted conId keeps resolved value; explicit supported zero is either preserved or rejected by schema; default Contract cannot alter compiled request. Remaining open point is an external adapter/config/accounting fact; the target keeps it unavailable or blocks the action until evidence exists. Closure retains per-adapter zero/override enumeration as empirical and removes the source heuristic from the target path; unsupported explicit zero is rejected, not dropped."
+    },
+    {
+      "id": "MAP-C1727C9E38",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:1237-1239: getCapabilities returns broker.getCapabilities() AccountCapabilities directly. is covered: the source exposes broker AccountCapabilities directly; CapabilityService now derives action-scoped schema/idempotency/compensation evidence and blocks stale plans. Design falsifier: A provider leaf that declares TPSL but lacks native evidence yields NativeAtomicityUnavailable/CapabilityUnavailable; a leaf without TPSL has no such parameter, public market read remains available, and stale capability blocks approval. A schema-absent TP/SL variant is rejected before a job; missing idempotency or compensation evidence blocks a declared relation, and a post-dispatch unknown remains locked and observation-owned. Closure retains the genuine adapter idempotency/compensation evidence gap and binds it to action-specific capability evidence."
+    },
+    {
+      "id": "MAP-A4B5DBBF39",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:1243-1245: getState returns private _getState result combining broker account/positions/pending orders into GitState. is covered: the source returns a private closure combining live broker data with Git pending orders; AccountQuery projection now unifies getState/getAccount freshness and valuation. Design falsifier: A query after one position update returns same checkpoint across getState/getAccount views; stale order source is marked rather than empty."
+    },
+    {
+      "id": "MAP-6B72864B5E",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:1247-1249: exportGitState returns TradingGit.exportState() directly. is covered: the source exports TradingGit state directly; AuditExportService renders compatibility output from journal/projections without feeding authorization or recovery. Design falsifier: Journal rebuild and direct compatibility export produce equivalent audit rows; a RecoveryRequired transaction remains visible and locked."
+    },
+    {
+      "id": "MAP-7DA2BE5D55",
+      "verdict": "accepted",
+      "reason": "Source evidence services/uta/src/domain/trading/UnifiedTradingAccount.ts:1253-1261: close unregisters broker listener, cancels recovery timer/flag, and calls broker.close. is covered: the source unregisters listeners, cancels timers, and closes broker; ordered shutdown now closes admission, joins workers, flushes writer, and classifies interrupted dispatch. Design falsifier: Shutdown while broker call is in flight leaves durable attempt and later observation; no job is silently marked complete."
+    }
+  ]
+}

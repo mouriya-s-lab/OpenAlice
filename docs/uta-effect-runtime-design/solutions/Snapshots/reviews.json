@@ -1,0 +1,229 @@
+{
+  "group": "Snapshots",
+  "designBasis": "capability-composition-v1",
+  "analysesSha256": "e42a2e598463276003833abfebf765457ba7df5ee8e2a6bb9306e0b05dbf68c6",
+  "designSha256": "e9d8d69ab2fe0d58add403ca6dfecb58162d8de66ec72653064feb6b4656fb30",
+  "contractSha256": "73f5235ae86d3f1c9038dfd214e7207cdfb1833be7bc369f628d7d3f9017dd4f",
+  "entries": [
+    {
+      "id": "MAP-92BA447044",
+      "verdict": "accepted",
+      "reason": "builder.ts:1-12 is a live UTA assembler that interprets the IBKR sentinel and returns a nullable result. The repaired target makes provider codecs own sentinel/schema decoding, then assembles scoped observations with separate native/local revision evidence and no dispatch capability."
+    },
+    {
+      "id": "MAP-3EA45A1B4F",
+      "verdict": "accepted",
+      "reason": "builder.ts:13-18 collapses disabled and offline before any read. The target preserves the no-fabrication behavior with reasoned availability/capture outcomes and permits stale projection reads only under an explicit policy, without turning availability into schema support."
+    },
+    {
+      "id": "MAP-473BE32758",
+      "verdict": "accepted",
+      "reason": "builder.ts:20-31 hides sync, Git pending-ID lookup, and three live reads behind one Promise.all. The target separates finite provider reads from GitAudit, preserves read uncertainty/listing coverage, and treats a committed source event only as provenance; no order effect is introduced."
+    },
+    {
+      "id": "MAP-2A00814D1F",
+      "verdict": "accepted",
+      "reason": "builder.ts:33-80 mixes account facts, derivative metadata, Submitted/PreSubmitted orders, health, and Git intent in a plain object. The target keeps lossless derivative data and the working-order slice, distinguishes ByIds from complete enumeration, and derives only provider-declared observation fields rather than a universal order type."
+    },
+    {
+      "id": "MAP-69E23AB274",
+      "verdict": "accepted",
+      "reason": "builder.ts:81-85 catches every failure as a warning plus null. The target retains the no-fabrication intent while classifying provider, transport, schema, availability, projection, uncertainty, and supervised defect outcomes for data-reader policy."
+    },
+    {
+      "id": "MAP-27667D4B9F",
+      "verdict": "accepted",
+      "reason": "snapshot/index.ts:1-8 exposes service, Pump, JSONL store, builder, and plain types as public authority. The target narrows the barrel to declared view/query/capture/retention data contracts, leaving provider and persistence construction at composition and avoiding aliases or a global action registry."
+    },
+    {
+      "id": "MAP-F64B549F14",
+      "verdict": "accepted",
+      "reason": "scheduler.ts:1-18 has only an in-process Pump callback, so the target correctly separates optional scheduled pulls from post-commit data requests and forbids coalescing source identities away. The retained empirical question is material: legacy cursor/schema/scope mapping and monotonic revision remain unverified until production inventory."
+    },
+    {
+      "id": "MAP-5F2BAD0154",
+      "verdict": "accepted",
+      "reason": "scheduler.ts:19-29 uses enabled:boolean and a free-form duration string with void lifecycle results. The target parses AutoSchedule/ManualOnly and explicit scoped capacity/reader uncertainty policy; these are data-resource controls and do not become order approval or compensation policy."
+    },
+    {
+      "id": "MAP-F7BC708300",
+      "verdict": "accepted",
+      "reason": "scheduler.ts:31-44 fans one tick into all accounts under a process-local serial Pump. The target emits per-scope optional admissions, reports undiscovered scopes explicitly, and gives source-event requests distinct identities; it does not require a universal provider interface."
+    },
+    {
+      "id": "MAP-330646FEBC",
+      "verdict": "accepted",
+      "reason": "scheduler.ts:46-57 only wraps Pump start/stop/runNow and exposes no recovery barrier or admission result. The local lifecycle ADT and typed data-job receipt preserve repeated lifecycle behavior while keeping scheduler recovery separate from broker/order recovery."
+    },
+    {
+      "id": "MAP-B273D4875A",
+      "verdict": "accepted",
+      "reason": "service.ts:1-18 hard-codes a 3-second in-process retry and maps all failure classes to null/logging. The target persists data-reader attempt/backoff/uncertainty policy and keeps stale, unavailable, decode, and uncertain reads distinct without importing order recovery semantics."
+    },
+    {
+      "id": "MAP-FC05F3240D",
+      "verdict": "accepted",
+      "reason": "service.ts:20-25 mixes capture, batch scheduling, query, and timestamp deletion behind nullable/boolean returns. The target splits data admission, read-only projection query, and authorized retention, with scoped typed outcomes and no transaction approval/dispatch port."
+    },
+    {
+      "id": "MAP-622FCFCD63",
+      "verdict": "accepted",
+      "reason": "service.ts:27-43 caches JSONL stores by accountId in one process while also holding EventLog. The target makes explicit AccountScope and projection identity composition inputs, separates the post-commit sink from persistence receipt, and does not invent a default subaccount."
+    },
+    {
+      "id": "MAP-5BD7779096",
+      "verdict": "accepted",
+      "reason": "service.ts:45-76 appends before snapshot.taken and lets sink failure fall into the catch that returns null after a row may exist. The target gives capture a typed post-persistence receipt, keeps sink status observational, and preserves per-scope typed failure without execution compensation."
+    },
+    {
+      "id": "MAP-19A41F635E",
+      "verdict": "accepted",
+      "reason": "service.ts:78-102 uses Promise.allSettled, a fixed sleep, one retry, and a void batch result. The target keeps independent scope progress but persists data-job identity/lease/uncertainty, coalesces only optional schedules, and retains committed source requests."
+    },
+    {
+      "id": "MAP-226B693FB4",
+      "verdict": "accepted",
+      "reason": "service.ts:104-112 reads raw store arrays and deletes by timestamp. The target provides scoped typed projection queries and authorized projection retention, so no-history, partial/unavailable, duplicate timestamps, and retained observations are conflated."
+    },
+    {
+      "id": "MAP-2EF977A049",
+      "verdict": "accepted",
+      "reason": "snapshot.spec.ts:1-57 builds UTA/MockBroker/order/temp-path helpers but no durable data writer or projection boundary. The target retains fixture isolation while adding explicit scope/cause/listing/sequence and treats mocks as boundary data, not native or execution evidence."
+    },
+    {
+      "id": "MAP-83DAA2E639",
+      "verdict": "accepted",
+      "reason": "snapshot.spec.ts:58-137 preserves string financial values and OPT/FOP metadata while omitting STK multiplier, but lacks envelope evidence. The target adds exact decimal/unit, scope, checkpoint, freshness, and listing assertions without enumerating executable order combinations."
+    },
+    {
+      "id": "MAP-FAA33A98FD",
+      "verdict": "accepted",
+      "reason": "snapshot.spec.ts:139-225 collapses disabled/offline/query errors to null and filters only Submitted/PreSubmitted. The repaired target preserves that filter but explicitly models the source pending-ID read as ByIds, reserves absence claims for complete enumeration, and keeps GitAudit separate."
+    },
+    {
+      "id": "MAP-DCBAABE629",
+      "verdict": "accepted",
+      "reason": "snapshot.spec.ts:227-261 creates accountId temp directories and treats an empty index as normal. The target uses scoped persistence namespaces plus a legacy importer, making initialized NoHistory distinct from missing/corrupt input and checking persistence rollback without requiring a particular database."
+    },
+    {
+      "id": "MAP-95A7E16E24",
+      "verdict": "accepted",
+      "reason": "snapshot.spec.ts:263-301 proves append/read and 50-row rollover only under monotonic timestamps. The target retains history/rebuild intent but makes local sequence, observation identity, and persistence checkpoint—not chunk names—the data ordering and durability evidence."
+    },
+    {
+      "id": "MAP-A605F93FC5",
+      "verdict": "accepted",
+      "reason": "snapshot.spec.ts:303-351 relies on lexicographic timestamp bounds, truthy limit, and reverse physical order. The target keeps range/limit use while parsing typed Instants, validating limits, ordering by sequence/tie-breaker, and distinguishing NoHistory from partial/corrupt/unavailable results."
+    },
+    {
+      "id": "MAP-DF2BB19B01",
+      "verdict": "accepted",
+      "reason": "snapshot.spec.ts:353-369 treats an empty array and Promise.all appends as sufficient. The target tests a bounded data queue, scope isolation, backpressure, response-loss identity, and persisted data state without turning the queue into an order WAL or compensation mechanism."
+    },
+    {
+      "id": "MAP-E65165A605",
+      "verdict": "accepted",
+      "reason": "snapshot.spec.ts:371-395 observes manager/mock/EventLog/temp-path wiring rather than selected writer/projection behavior. The target composes explicit scope data fixtures, separates sink delivery from persistence, and retains setup/teardown isolation without a mandatory writer implementation."
+    },
+    {
+      "id": "MAP-30284C5902",
+      "verdict": "accepted",
+      "reason": "snapshot.spec.ts:397-432 treats store write plus snapshot.taken as success and null for unknown/builder failure. The target retains success/skipped/failure isolation with typed capture receipts, post-commit sink observation, and no empty fallback or trading recovery state."
+    },
+    {
+      "id": "MAP-F2E552347E",
+      "verdict": "accepted",
+      "reason": "snapshot.spec.ts:434-466 preserves all-scope progress when one account is disabled but does not persist identities or restart behavior. The target uses per-scope data results, independent capacity/leases, and source-event identity retention while keeping the batch outside order effects."
+    },
+    {
+      "id": "MAP-BC1C2B98A1",
+      "verdict": "accepted",
+      "reason": "snapshot.spec.ts:468-477 checks only that limit=1 returns one item. The target makes scope, selected sequence/checkpoint, as-of, freshness/coherence, deterministic tie-breaking, and typed query status observable while keeping the query read-only."
+    },
+    {
+      "id": "MAP-3AF27244D4",
+      "verdict": "accepted",
+      "reason": "snapshot.spec.ts:479-501 uses a mock service, fake timer, and process-local stop. The target keeps the 15-minute scheduling intent and testability but verifies data admission, recovery barrier, lease, drain, and optional dedup rather than callback counts."
+    },
+    {
+      "id": "MAP-051EE15C40",
+      "verdict": "accepted",
+      "reason": "snapshot.spec.ts:503-528 establishes immediate runNow, idempotent start, and manual operation despite disabled automatic ticks. The target preserves that distinction with explicit scoped data admission, Existing/backpressure/unavailable outcomes, and durable command identity."
+    },
+    {
+      "id": "MAP-D073ACA66E",
+      "verdict": "accepted",
+      "reason": "snapshot.spec.ts:530-566 suppresses concurrent calls in memory, stops future calls, and swallows service errors. The target deduplicates only optional scope/window schedules, drains accepted data jobs, and records typed reader uncertainty instead of dropping source requests or retrying blindly."
+    },
+    {
+      "id": "MAP-E9161D7938",
+      "verdict": "accepted",
+      "reason": "snapshot.spec.ts:568-624 verifies callbacks after push/reject and callback-error isolation, while the hook receives only an account id. The target requires a committed source identity/scope/sequence and replayable data request, with sink failure unable to change the already committed source result."
+    },
+    {
+      "id": "MAP-78D69C071D",
+      "verdict": "accepted",
+      "reason": "store.ts:1-24 makes accountId JSONL/index files runtime authority. The target confines that layout to validated migration/backup input and makes the runtime data boundary explicitly scoped with local sequence, schema, and rebuildable projection metadata."
+    },
+    {
+      "id": "MAP-D9EDA3CFCA",
+      "verdict": "accepted",
+      "reason": "store.ts:26-34 combines append/read/delete with plain accountId, timestamp strings, and numbers. The target separates data writer, projection query, and retention ports with explicit AccountScope, typed bounds/limits, and no ordinary timestamp deletion contract."
+    },
+    {
+      "id": "MAP-D8989CCCCB",
+      "verdict": "accepted",
+      "reason": "store.ts:36-41 derives paths from accountId and serializes only within one process via Promise chain. The target moves runtime ownership to composition-provided scoped persistence/data jobs and leaves filesystem construction only to import, without making the chain an order lock."
+    },
+    {
+      "id": "MAP-CF8F8B0486",
+      "verdict": "accepted",
+      "reason": "store.ts:43-50 turns every missing, corrupt, or inaccessible index into version-one empty chunks. The target's typed decoder distinguishes initialized NoHistory/NotFound from corruption, storage unavailability, and schema migration, preserving checkpoint evidence."
+    },
+    {
+      "id": "MAP-22671716C7",
+      "verdict": "accepted",
+      "reason": "store.ts:52-57 atomically renames only index.json while chunk data is separate. The target scopes any commit boundary to snapshot observation/projection/checkpoint metadata, keeps migration rename as legacy evidence, and does not claim broker or order atomicity."
+    },
+    {
+      "id": "MAP-88C7B6755F",
+      "verdict": "accepted",
+      "reason": "store.ts:59-61 exposes chunk-NNNN naming as the physical ordering helper. The target removes names from the UTA contract and uses recorded observation identity/local sequence for data query/rebuild, so compaction cannot masquerade as provider revision."
+    },
+    {
+      "id": "MAP-C7360CA0A4",
+      "verdict": "accepted",
+      "reason": "store.ts:63-86 spreads append across index read, file append, and index save with unvalidated casts. The target validates declared observation data, records identity/payload and projection checkpoint at the selected persistence boundary, and makes data-command replay idempotent only."
+    },
+    {
+      "id": "MAP-CECC039853",
+      "verdict": "accepted",
+      "reason": "store.ts:88-125 deletes by timestamp through scan/rewrite and can remove rows/evidence. The target removes ordinary deletion, gates projection compaction by identity/sequence/checkpoint/rebuildability, and retains source and uncertain data evidence."
+    },
+    {
+      "id": "MAP-25F7996D49",
+      "verdict": "accepted",
+      "reason": "store.ts:127-139 advances an in-memory Promise chain after failures without capacity or commit receipt. The target introduces bounded supervised data jobs and explicit Backpressured/Failed/ObservationUncertain outcomes, with retention separated from capture."
+    },
+    {
+      "id": "MAP-7CCB6F93A0",
+      "verdict": "accepted",
+      "reason": "store.ts:141-168 scans chunks backward, compares timestamp strings, casts JSON, and conflates errors with arrays. The target uses validated scoped query bounds, sequence ordering, provider extensions, and Complete/Partial/Unavailable/NoHistory statuses."
+    },
+    {
+      "id": "MAP-BF84B32A4C",
+      "verdict": "accepted",
+      "reason": "types.ts:10-12 has four trigger strings with no scope or replay identity. The target keeps those four provenance intents in a small serializable SnapshotCause carrying the needed source/manual evidence, explicitly not an action/approval contract."
+    },
+    {
+      "id": "MAP-587333CEE9",
+      "verdict": "accepted",
+      "reason": "types.ts:14-66 is a plain snapshot combining account strings, positions, orders, health, and Git fields. The target preserves observable content and derivative omissions in a versioned scoped envelope with exact provider extensions and freshness/listing states, not a closed order Cartesian model."
+    },
+    {
+      "id": "MAP-26E7DEFDF7",
+      "verdict": "accepted",
+      "reason": "types.ts:68-80 exposes chunk file/time/count metadata as the index. The target replaces it at the UTA boundary with scoped schema/hash/checkpoint/coverage metadata, retaining physical chunks only as migration detail and making decode/retention states explicit."
+    }
+  ]
+}

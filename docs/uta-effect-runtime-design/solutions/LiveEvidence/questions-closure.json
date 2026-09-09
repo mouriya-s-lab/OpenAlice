@@ -1,0 +1,119 @@
+{
+  "group": "LiveEvidence",
+  "entries": [
+    {
+      "id": "MAP-4D4A864108",
+      "question": "The source does not prove whether the Bybit adapter returns parent-linked TP/SL legs for this request; acceptance must obtain a venue capability/observation fixture before claiming bracket confirmation.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/__test__/e2e/ccxt-bybit.e2e.spec.ts:140-184",
+        "../composition-contract.md#k02",
+        "../composition-contract.md#k03",
+        "../composition-contract.md#k04",
+        "../composition-contract.md#k07",
+        "../composition-contract.md#k08",
+        "entries.md#map-4d4a864108"
+      ],
+      "resolution": "Retain the empirical prerequisite. The Bybit bracket leaf may preserve exact provider TP/SL parameters and Decimal/tick provenance, but bracket-confirmed requires both declared capability evidence and a parent-linked leg observation fixture. Until then emit ProtectionCapabilityAbsent or BracketObservationUnknown and keep uncertain cleanup in the controlled-effect RecoveryCase."
+    },
+    {
+      "id": "MAP-E5356E684D",
+      "question": "The source does not establish whether the venue trigger query exposes a stable native identity after cache invalidation; adapter observation coverage is required.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/__test__/e2e/ccxt-bybit.e2e.spec.ts:186-234",
+        "../composition-contract.md#k02",
+        "../composition-contract.md#k07",
+        "../composition-contract.md#k08",
+        "../composition-contract.md#k09",
+        "entries.md#map-e5356e684d"
+      ],
+      "resolution": "Retain the empirical prerequisite. Trigger identity is provider/adapter evidence, not a global cache contract. After cache invalidation, if no stable native identity is observed, preserve Unknown and block takeover/cancel; do not infer UTA dispatch or cleanup success."
+    },
+    {
+      "id": "MAP-A60C86B58F",
+      "question": "The source does not prove Hyperliquid execution/fill latency or stablecoin normalization across all account modes; live acceptance must supply observed execution and currency-policy evidence.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/__test__/e2e/ccxt-hyperliquid.e2e.spec.ts:97-129",
+        "../composition-contract.md#k03",
+        "../composition-contract.md#k04",
+        "../composition-contract.md#k05",
+        "../composition-contract.md#k08",
+        "entries.md#map-a60c86b58f"
+      ],
+      "resolution": "Retain the empirical prerequisite. The Hyperliquid order.place effect admits 0.001 BTC only with versioned quote/minimum-notional capability evidence; Ack does not prove fill. Without observed finality and a versioned account-mode stablecoin policy, preserve ExecutionUnknown or CurrencyNormalizationUnavailable and do not claim USD equivalence."
+    },
+    {
+      "id": "MAP-FBF3A41608",
+      "question": "The exact OKX dust/minimum-balance threshold is venue/account dependent; retain policy configuration and observe residual rather than hard-code a universal threshold.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/__test__/e2e/ccxt-okx.e2e.spec.ts:106-161",
+        "../composition-contract.md#k04",
+        "../composition-contract.md#k08",
+        "../composition-contract.md#k11",
+        "entries.md#map-fbf3a41608"
+      ],
+      "resolution": "Retain the empirical prerequisite. OKX cleanup sells only the operation-owned acquired delta under a declared provider/account ResidualPolicy. Without account-specific dust/minimum-balance evidence, preserve the residual as policy-unknown/RecoveryRequired rather than applying a universal percentage or claiming a clean baseline."
+    },
+    {
+      "id": "MAP-7DAC2704FB",
+      "question": "The adapter must empirically map OKX account-mode error codes beyond the observed 51010 text before classifying additional variants as non-fatal capability refusal.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/__test__/e2e/ccxt-okx.e2e.spec.ts:173-195",
+        "../composition-contract.md#k02",
+        "../composition-contract.md#k03",
+        "../composition-contract.md#k07",
+        "../composition-contract.md#k08",
+        "entries.md#map-7dac2704fb"
+      ],
+      "resolution": "Retain the empirical prerequisite. Only the observed 51010/current-account-mode evidence may decode to AccountModeUnsupported in the OKX order.place error schema. Every unmapped code/text remains provider rejection or Unknown and cannot become a non-fatal capability refusal until adapter evidence classifies it."
+    },
+    {
+      "id": "MAP-B5990574ED",
+      "question": "The diagnostic source does not establish complete spot/perp namespace coverage; catalog probe must report Partial/Unavailable until adapter pagination evidence exists.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/__test__/e2e/ccxt-raw-diagnostic.e2e.spec.ts:92-113",
+        "../composition-contract.md#k02",
+        "../composition-contract.md#k03",
+        "../composition-contract.md#k04",
+        "../composition-contract.md#k05",
+        "../composition-contract.md#k08",
+        "entries.md#map-b5990574ed"
+      ],
+      "resolution": "Retain the empirical prerequisite. The CCXT catalog probe is a Public read-only capability (or an explicitly declared account-scoped capability when the provider requires it) with namespace, pagination/cursor, and completeness evidence. Until spot/perp coverage is observed complete, return Partial or Unavailable and authorize neither mutation nor absence conclusions; any S7 order remains separately labeled and requires UTA observation/takeover."
+    },
+    {
+      "id": "MAP-FFA9030D49",
+      "question": "The source observes a TWS snapshot timeout pattern but does not prove quote request behavior for every TWS/Gateway version; acceptance must preserve an explicit unavailable branch.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/__test__/e2e/ibkr-paper.e2e.spec.ts:272-299",
+        "../composition-contract.md#k03",
+        "../composition-contract.md#k05",
+        "../composition-contract.md#k07",
+        "../composition-contract.md#k08",
+        "entries.md#map-ffa9030d49"
+      ],
+      "resolution": "Retain the empirical prerequisite. The known TWS snapshot timeout is one observed MarketDataUnavailable outcome that blocks price-dependent effects. An unrecognized TWS/Gateway version or timeout variant remains Unavailable or Unexpected and cannot become a passing skip or satisfy FreshQuote."
+    },
+    {
+      "id": "MAP-C2F022975E",
+      "question": "The source does not prove concurrent JSONL append/import ordering; evidence sink acceptance must establish sequence/conflict handling under concurrent writers.",
+      "disposition": "empirical-retained",
+      "evidence": [
+        "services/uta/src/domain/trading/__test__/e2e/live-paper-evidence.ts:68-87",
+        "../composition-contract.md#k05",
+        "../composition-contract.md#k07",
+        "../composition-contract.md#k08",
+        "../composition-contract.md#k12",
+        "entries.md#map-c2f022975e"
+      ],
+      "resolution": "Retain the empirical prerequisite. EvidenceSink acceptance must establish per-run/sink sequence allocation, same-sequence same-digest idempotence, and divergent-payload conflict rejection under concurrent writers. If ordering is unavailable, the evidence projection fails or is unavailable and never changes authoritative JournalWriter effect state."
+    }
+  ],
+  "remainingCount": 8
+}

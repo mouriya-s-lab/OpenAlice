@@ -1,0 +1,124 @@
+{
+  "group": "Guards",
+  "designBasis": "capability-composition-v1",
+  "analysesSha256": "9fa11305d914f5c0f1c233d43f74877fed40c31ffff5126b3463f6ab2faf65e0",
+  "designSha256": "74111220359b56889654b01a0b29f61405f3c67c1aedbe4a656eb0af5f05c403",
+  "contractSha256": "73f5235ae86d3f1c9038dfd214e7207cdfb1833be7bc369f628d7d3f9017dd4f",
+  "entries": [
+    {
+      "id": "MAP-B4E6F4C1A3",
+      "verdict": "accepted",
+      "reason": "cooldown.ts:1-4 establishes the unbranded 60_000 default and UnifiedTradingAccount.ts:198-203 resolves guards at construction; the final target keeps the absent default and explicit zero while moving policy evaluation to a pure declaration and preserving each provider leaf's exact HOF schemas. Durable consumption is deliberately at approval-bound admission, not remote fill, and is not claimed as runtime-verified."
+    },
+    {
+      "id": "MAP-F123F6082F",
+      "verdict": "accepted",
+      "reason": "cooldown.ts:6-32 uses Date.now, a mutable display-symbol map, a pre-dispatch write, and a nullable string, while packages/uta-protocol/src/types/git.ts:310-321 supplies the literal unknown fallback. The final target replaces those exact mechanisms with AccountScope+canonical InstrumentId, explicit time and activity evidence, leaf-declared applicability, and one writer-owned reservation with CAS; rejection/Unknown remains a later outcome."
+    },
+    {
+      "id": "MAP-EC7E347D9E",
+      "verdict": "accepted",
+      "reason": "guard-pipeline.ts:18-35 and UnifiedTradingAccount.ts:180-203 make direct broker dispatch and the zero-guard identity bypass observable. The final target removes that authority shortcut, composes guards only around declared controlled-effect leaves, sends an empty policy through compiler/writer authority, keeps data pull/push outside order transactions, and retains the closePosition quantity check as a leaf-specific before-image/precondition."
+    },
+    {
+      "id": "MAP-3B189C535B",
+      "verdict": "accepted",
+      "reason": "guards.spec.ts:1-15 imports native IBKR DTOs, legacy classes, registry seams and MockBroker, while services/uta/src/domain/trading/README.md:78-84 defines MockBroker as an in-memory exchange rather than a durable journal or scheduler. The final target splits schema-derived pure fixtures from the narrow HOF boundary, preserves adapter and push/sync evidence, and explicitly leaves crash/disconnect, durable DispatchStarted/Unknown, approval and ReturnToAgent proof to the shared controlled-effect harness."
+    },
+    {
+      "id": "MAP-23766FB528",
+      "verdict": "accepted",
+      "reason": "guards.spec.ts:17-52 constructs native Contract/Order values with AAPL/BUY/MKT and USD 100000 defaults but no scope, units, freshness or revision; packages/uta-protocol/src/types/git.ts:22-54 carries those native values through legacy operations. The final target uses per-leaf schema-derived fixtures, keeps provider extensions exact, distinguishes quantity from notional, and emits only a serializable handoff for the transaction owner to materialize after approval."
+    },
+    {
+      "id": "MAP-3921C05A55",
+      "verdict": "accepted",
+      "reason": "guards.spec.ts:54-119 and max-position-size.ts:18-45 pin the 25%/20%/30% arithmetic and explicitly allow an unestimable new-symbol quantity. The final target preserves the numeric examples but makes GrossNotional valuation scoped and evidence-backed, includes durable unsettled intents at writer recheck, treats a proven non-increasing leaf as the only NotApplicable path, and fails closed on missing valuation rather than using zero."
+    },
+    {
+      "id": "MAP-4933588230",
+      "verdict": "accepted",
+      "reason": "guards.spec.ts:121-162 and cooldown.ts:15-31 observe ambient time, mutable consumption and same-symbol repeat blocking. The final target drives the 59_999/60_000 boundary with explicit Instants, delegates restart/concurrency/scheduler and crash recovery to the C08 harness, and records the old non-placeOrder bypass only as empirical source behavior rather than an action-name exemption."
+    },
+    {
+      "id": "MAP-7409CE214D",
+      "verdict": "accepted",
+      "reason": "guards.spec.ts:164-191 tests raw AAPL/TSLA membership, throwing construction and cancelOrder allowance; packages/uta-protocol/src/types/git.ts:313-321 confirms unknown for target-less legacy variants. The final target requires canonical identity and matching scope before pure membership, uses ActionScopeMismatch plus ambiguity/missing-target failures, and composes the whitelist per exact controlled-effect leaf without authorizing an unknown target."
+    },
+    {
+      "id": "MAP-909C3AD7DA",
+      "verdict": "accepted",
+      "reason": "guards.spec.ts:193-267 asserts direct dispatcher identity, first-rejection short circuit and concurrent account/position reads, while services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:1053-1080 observes only broker.placeOrder calls. The final target tests typed per-leaf preparation with exact provider schemas, no handler before approval, explicit keyless/readOnly refusal, and separate ReturnToAgent/data lifecycles; durable scheduler, Unknown and recovery remain owner-harness evidence rather than a Guards claim."
+    },
+    {
+      "id": "MAP-97E0672862",
+      "verdict": "accepted",
+      "reason": "guards.spec.ts:269-293 and registry.ts:21-35 show known raw factories, warning-and-skip of unknown types and an unversioned empty result. The final target resolves an ordered per-declaration policy atomically, keeps the empty policy non-authoritative for dispatch, rejects undeclared/malformed entries without partial state, and distinguishes a declared-but-unavailable capability from a structurally absent leaf."
+    },
+    {
+      "id": "MAP-4A48C821C3",
+      "verdict": "accepted",
+      "reason": "guards.spec.ts:295-306 and registry.ts:12-19 prove process-global custom registration and overwrite, but no production or persisted third-party guard requirement is observed. The final target removes that mutable authority while leaving future extensions open through independently evidenced, immutable typed composition-root declarations that preserve the exact provider leaf schemas; the closure resolution retains this as a current source-availability finding, not a universal closed SDK."
+    },
+    {
+      "id": "MAP-ADFBE7F5CF",
+      "verdict": "accepted",
+      "reason": "guards/index.ts:1-6 and the UTA import/install path expose dispatcher wiring, mutable classes, raw registry and nullable-string types through the public barrel. The final target narrows that barrel to pure policy codecs, assessors, issues and an exact-schema-preserving HOF, leaving TransactionApplication, writer, scheduler, adapters and data streams in their owning modules with no alias back to direct dispatch."
+    },
+    {
+      "id": "MAP-90A054EDC1",
+      "verdict": "accepted",
+      "reason": "max-position-size.ts:1-5 and registry.ts:6-10 establish raw numeric 25, Number coercion, native UNSET_DECIMAL handling and untyped construction. The final target canonicalizes PercentPoints with an explicit 25 default, decodes sentinel absence at the adapter boundary, and makes undeclared order fields/parameter variants absent from the leaf schema while keeping declared availability separate; it does not introduce a Cartesian order product."
+    },
+    {
+      "id": "MAP-865F7C9623",
+      "verdict": "accepted",
+      "reason": "max-position-size.ts:7-49 and guards.spec.ts:80-118 show first-symbol matching, fail-open unknown valuation and non-positive-equity zeroing; packages/uta-protocol/src/types/broker.ts:112-137 carries side/currency/multiplier that the guard ignores. The final target uses scoped GrossNotional and typed valuation/equity failures, consumes multiplier-applied marked values without reapplying the multiplier, requires evidence for raw quantity/terms, and bases NotApplicable on a proven leaf relation rather than Cancel/Modify/Close names."
+    },
+    {
+      "id": "MAP-1D7814E6DD",
+      "verdict": "accepted",
+      "reason": "services/uta/src/domain/trading/guards/registry.ts:1-10 and index.ts:1-6 represent exactly three current built-ins as raw strings and mutable classes. The final target retains those source concepts and configured order as named immutable declarations, permits independently evidenced extensions at composition time, and keeps structural leaf/parameter absence distinct from declared availability without creating a universal handler list."
+    },
+    {
+      "id": "MAP-381B0ECC7A",
+      "verdict": "accepted",
+      "reason": "registry.ts:12-19 and guards.spec.ts:295-306 demonstrate global Map mutation and registration-order coupling. The final target uses immutable declaration snapshots with plan fingerprints and explicit reload/reprepare, isolates compositions, rejects post-start replacement, and does not let a stream resource or data availability mutate controlled-effect policy."
+    },
+    {
+      "id": "MAP-CD34F7EFDA",
+      "verdict": "accepted",
+      "reason": "services/uta/src/domain/trading/guards/registry.ts:21-35, src/core/config.ts:436-454 and services/uta/src/domain/trading/uta-manager.ts:61-77 show raw persisted options, warning-and-skip resolution and direct construction handoff. The final target performs versioned per-declaration decoding atomically, rejects unknown/malformed entries with no partial policy, keeps empty policy behind declared controlled-effect admission, and reports declared provider unavailability separately from structural absence."
+    },
+    {
+      "id": "MAP-2DA2B0FD1D",
+      "verdict": "accepted",
+      "reason": "services/uta/src/domain/trading/guards/symbol-whitelist.ts:1-3 imports the legacy operation helper and packages/uta-protocol/src/types/git.ts:310-321 returns raw symbols or unknown for only some variants. The final target resolves native Contract/aliceId/conId/display aliases at the application/provider boundary with catalog/before-image evidence, then applies pure canonical membership through an exact-leaf HOF; data units never enter this order rule."
+    },
+    {
+      "id": "MAP-1CDFD8E4DA",
+      "verdict": "accepted",
+      "reason": "symbol-whitelist.ts:4-24 and guards.spec.ts:167-190 confirm unchecked options, generic constructor throws, raw Set membership and unknown-symbol allowance. The final target preserves the non-empty policy and AAPL/TSLA semantics after canonical resolution, replaces throws with typed config failures, records scope/version/fingerprint, and fails unresolved target-bearing leaves instead of treating unknown as NotApplicable."
+    },
+    {
+      "id": "MAP-E8C4D090C3",
+      "verdict": "accepted",
+      "reason": "services/uta/src/domain/trading/guards/types.ts:1-3 and the local brokers/git compatibility shims transitively expose native Contract/Order/Position/AccountInfo values to domain guards. The final target moves decoding and sentinel normalization to provider adapters, retains exact native extensions, uses per-leaf semantic observations, and explicitly separates a missing leaf from a declared leaf with availability evidence; public data units do not acquire order scope or WAL."
+    },
+    {
+      "id": "MAP-FB69BBC6D0",
+      "verdict": "accepted",
+      "reason": "services/uta/src/domain/trading/guards/types.ts:4-9 and guard-pipeline.ts:20-27 provide only an ephemeral GuardContext, while services/uta/src/domain/trading/UnifiedTradingAccount.ts:549-563 proves keyless/readOnly authorization distinctions. The final target makes GuardEvaluationInput a per-leaf immutable schema projection, carries revision/authorization with the transaction owner, rejects stale or mixed-scope facts before admission, and leaves data streams without order locks, approvals or reservations."
+    },
+    {
+      "id": "MAP-38E91ECD6A",
+      "verdict": "accepted",
+      "reason": "services/uta/src/domain/trading/guards/types.ts:11-15 exposes Promise<string|null> and guard-pipeline.ts:28-35 converts a non-null string into a generic error before dispatch. The final target replaces that exact contract with a pure declaration, non-empty typed issue result, serializable pass facts and explicit applicability, while the HOF preserves each provider leaf's input/result/error schemas and all clock/provider/transaction effects remain outside the rule."
+    },
+    {
+      "id": "MAP-ACA43262AC",
+      "verdict": "accepted",
+      "reason": "services/uta/src/domain/trading/guards/types.ts:17-21 and services/uta/src/domain/trading/guards/registry.ts:6-9,21-33 show raw string/Record factories with no relationship between options, actions, observations or failures. The final target derives rule config/decision/issue schemas and checks compatibility against the provider leaf's authoritative exact input/result/error schemas, so serialized config contains no closure/SDK/secret and unrelated leaves need no handler."
+    }
+  ]
+}

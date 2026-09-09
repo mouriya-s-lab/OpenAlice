@@ -1,0 +1,409 @@
+{
+  "group": "Longbridge",
+  "designBasis": "capability-composition-v1",
+  "analysesSha256": "2e4a69ea3a781a83efd71b08f4b4f058342e93b3c976a2e826196b2788334cdd",
+  "designSha256": "d68148e127e8b6a85960ab15e878556694335a003b24b7c8562b3ab9581ab25b",
+  "contractSha256": "73f5235ae86d3f1c9038dfd214e7207cdfb1833be7bc369f628d7d3f9017dd4f",
+  "entries": [
+    {
+      "id": "MAP-7805D80DA1",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:1-45 mocks numeric enums and promise-returning contexts only, so a resolved mock cannot prove remote acceptance or native envelope/version semantics. The repaired entry now requires a version-tagged codec, an independent ledger, and a crash cut; until conformance exists, unknown envelope/version is ProtocolViolation/RecoveryRequired and accepted-before-ack is Unknown/Observe, not redispatch."
+    },
+    {
+      "id": "MAP-F105D05B4C",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:47-82 injects structurally incomplete private contexts and literal credentials, bypassing init. The target now requires a scoped Layer, explicit RuntimeHealth/generation, no pre-ready SDK call, and redacted credential diagnostics."
+    },
+    {
+      "id": "MAP-F2F4CA1A39",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:84-168 intentionally accepts bare TSLA, currency inference, and always-STK projections even though Longbridge contracts.ts:4-6 declares suffix identity. The design removes bare/ CNY guesses and admits only catalog-correlated InstrumentId evidence."
+    },
+    {
+      "id": "MAP-E1A5D342A5",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:170-201 proves HK MKT→ELO, US MKT→MO, LO/MIT/LIT and TSMPCT, but the mapper has no unit/protection context. The final compiler preserves these source mappings and excludes unsupported amount/notional/protection variants from each leaf input schema while reporting availability separately; it never silently drops them or imposes a global order union."
+    },
+    {
+      "id": "MAP-4D504B3E91",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:203-223 and LongbridgeBroker.ts:103-120 show unknown TIF→Day, GTD without expiry, and null IOC/FOK/OPG. The final TIF leaf admits only declared variants; it retains GoodTill only with expiry evidence, keeps unsupported variants as separate availability facts, and rejects unknown or expiry-less input before the SDK."
+    },
+    {
+      "id": "MAP-1FA8030A9B",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:225-233 covers only a few status numbers while contracts.ts:113-135 defaults unknown to Submitted and collapses rejection/expiry/partial states. The repaired codec keeps unknown raw status with RecoveryRequired and prevents a Submitted projection."
+    },
+    {
+      "id": "MAP-ABF45B8D66",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:235-275 proves only trade accountBalance probing and message-regex auth retries, not native error code/status mapping or quote coverage. The reviewed entry now records per-endpoint ProbeFacts and keeps unknown codes or unprobed quote reach non-Ready/Unavailable with write admission closed until pack conformance."
+    },
+    {
+      "id": "MAP-4E3338B271",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:277-336 proves HKD/largest-bucket selection, empty zeros, and stub FX folding. The repaired model preserves every currency bucket as AccountObservation, exposes compatibility only as an explicitly degraded view, and marks no-FX/stale/empty valuation non-executable instead of presenting one bucket as total."
+    },
+    {
+      "id": "MAP-044F075AE6",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:340-378 shows channels flattened and zero rows omitted. The entry now preserves raw accountChannel plus resolved scope, records zero as closing evidence, and rejects scope ambiguity instead of merging symbols."
+    },
+    {
+      "id": "MAP-A1AEAB7EEB",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:380-391 verifies -100→short/100, while the old projection discarded signed quantity. The review keeps signed native evidence and corrects the boundary case: Decimal -0 is valid Flat zero; only malformed/nonfinite values fail."
+    },
+    {
+      "id": "MAP-CB076F4422",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:393-427 explicitly expects quote failure to use costPrice as current mark. The repaired observation model removes that fallback, keeps cost basis displayable, and permits Exact valuation only from a quality-stamped mark."
+    },
+    {
+      "id": "MAP-551B60712E",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:429-475 proves option multiplier 100 and warrant ratio 0.1 affect value/PnL, while missing maps default one in LongbridgeBroker.ts:511-526. The entry requires positive, instrument-bound multiplier evidence and retains EquityLike ambiguity until kind is corroborated."
+    },
+    {
+      "id": "MAP-58D7C0FC99",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:477-505 proves mixed stock/option arithmetic but not response ordering or symbol collision safety. The repaired batch join keys rows by canonical InstrumentId+scope and lets one failed option enrichment leave an unrelated stock exact."
+    },
+    {
+      "id": "MAP-AED659F1F2",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:507-522 expects staticInfo failure to value an option-like row as equity with multiplier one. The review rejects that unsafe coercion, preserves the live mark as incomplete evidence, and schedules metadata recovery."
+    },
+    {
+      "id": "MAP-EF0A0DA76D",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:524-529 only checks a text BrokerError for stockPositions failure. The entry now distinguishes transport/protocol/scope failures, preserves a prior projection as stale when available, and never turns failed reads into an empty position set."
+    },
+    {
+      "id": "MAP-CAE41001D0",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:534-570 observes direct submit and a synthetic New result; `_tpsl` is unused in LongbridgeBroker.ts:271-312. The final placement leaf preserves only declared protection/relation variants, rejects omitted ones rather than sending entry-only intent, and adds approval-gated WAL/CAS/idempotency/observe semantics only through the optional transaction wrapper."
+    },
+    {
+      "id": "MAP-BEFFDF63C5",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:572-598 proves refusal before submit only through string errors. The repaired entry distinguishes invalid identity, unsupported capability, and idempotency conflict, with a durable PrepareRejected receipt but no EffectJob/dispatch artifact."
+    },
+    {
+      "id": "MAP-878575E9EE",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:600-627 checks IOC and nonpositive quantity only; the implementation lacks lot/precision/unit checks and unknown TIF safety. The final validation is a specific-leaf schema/HOF composition: omitted sizing or TIF variants fail at the schema boundary, availability stays separate, and no global Units/Notional restriction is assumed."
+    },
+    {
+      "id": "MAP-D79C2F71F2",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:629-646 proves LO/Sell and Decimal 305.5, while placeOrder passes an unchecked cast and permits missing/sentinel limit fields. The repaired entry validates currency/tick/Decimal and rejects an unset LMT price before an executable job."
+    },
+    {
+      "id": "MAP-5350D6AC75",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:648-662 surfaces only a free-form insufficient-buying-power message. The review does not treat that text as conclusive rejection: provider-coded rejection may follow policy, but any post-DispatchStarted unclassified exception is Unknown and pauses forward work."
+    },
+    {
+      "id": "MAP-CCB1983C80",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:667-685 and cancelOrder:337-343 synthesize terminal Cancelled on an SDK promise and stringify errors. The repaired action carries scope/version/criterion, treats Ack as reconciling, and observes filled/cancelled/unknown outcomes."
+    },
+    {
+      "id": "MAP-724EE5B17D",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:687-706 requires totalQuantity and sends 150, but Partial<Order> omits unchanged fields/version and the implementation returns Replaced on any resolved promise. The entry now requires a complete replacement, before-image/version CAS, and post-ack observation."
+    },
+    {
+      "id": "MAP-7E38FF8EE5",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:710-734 validates only first quote/depth values; getQuote takes the first response without identity/schema checks. The repaired MarketObservation validates expected symbol, freshness and side quality, including one-sided books."
+    },
+    {
+      "id": "MAP-B3AFB5C72C",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:736-755 documents rejected depth becoming numeric bid/ask zero. The review removes this invented liquidity and distinguishes Present, EmptyBook, BidOnly, AskOnly and Unavailable."
+    },
+    {
+      "id": "MAP-1D6CD6D97F",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:760-774 treats any all-day HK session as an account-wide open bool. The repaired query is venue/scope keyed and treats empty session coverage as Unknown rather than Closed, with explicit boundaries and freshness."
+    },
+    {
+      "id": "MAP-14E0507DE2",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:776-798 monkey-patches local Date hours/minutes to test a closed interval; isWithinSession ignores seconds/timezone/holidays. The entry moves evaluation to explicit Instant plus venue calendar and endpoint policy."
+    },
+    {
+      "id": "MAP-965560EC86",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:803-810 asserts a static STK/order string list, and getCapabilities:676-681 varies with no context. The repaired capability ADT is scope/permission/session/reach/SDK-fingerprint keyed and refuses unproven derivatives or mutations."
+    },
+    {
+      "id": "MAP-6FEA0D0AA9",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:812-816 proves only 700.HK round-trip, while getNativeKey:685-688 falls back to display symbol or empty. The review uses a branded, scope-bound native key and rejects empty/display fallback."
+    },
+    {
+      "id": "MAP-149A0DE19D",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:818-823 only checks AAPL.US projection, but resolveNativeKey:690-692 feeds arbitrary strings to permissive makeContract. The repaired resolver retains validated suffix evidence and marks legacy ambiguous keys operator-required."
+    },
+    {
+      "id": "MAP-B35B59A740",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.spec.ts:828-843 uses a toString-only Decimal helper and defaults every omitted balance field to zero. The reviewed fixtures now require observed SDK schema/version plus an independent remote ledger; absent either, Missing remains distinct from Zero and crash/remote outcomes stay ProtocolViolation or Unknown/Observe."
+    },
+    {
+      "id": "MAP-E02EBB0CE2",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:18-69 combines IBKR facade, Longbridge SDK, mutable state and unchecked casts. The final adapter may depend on SDK types through the domain SPI, while the kernel and UTA-facing domain core import none; native decoding stays behind typed, serializable ports without SDK objects/effects/secrets crossing the boundary."
+    },
+    {
+      "id": "MAP-9218DFF430",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:71-101 maps known market/stop/trailing tags but returns raw enum/null with no sizing, protection or relation semantics. The final compiler preserves exact proven tags and lets each Longbridge leaf declare its own sizing/trailing/protection variants; unsupported variants are absent from that leaf schema with separate availability, not a global Units/Notional rule."
+    },
+    {
+      "id": "MAP-A6705CD1ED",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:103-121 defaults unknown TIF to Day and maps GTD without expiry. The final TIF leaf admits only declared variants, treats empty as migration evidence, requires expiry-bearing GoodTill, and records IOC/FOK/OPG as unavailable rather than accepting those inputs or defaulting them."
+    },
+    {
+      "id": "MAP-50CE86A3DE",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:125-151 validates raw credential strings, defaults paper false, and accepts optional endpoints without environment/account proof; longbridge-types.ts:17-31 documents only a paper marker and matching credentials. The repair retains EnvironmentUnknown/no-write until pack evidence links paper/live intent to observed endpoint/account, persists CredentialRef only, and rejects explicit mismatch."
+    },
+    {
+      "id": "MAP-B7CFC53F8F",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:153-172 stores uninitialized contexts and a mutable optional FxService setter. The reviewed target makes identity/generation/FX observations immutable, separates C06 health from reach, and invalidates old plans on reconnect/provider changes."
+    },
+    {
+      "id": "MAP-4DE673DCFE",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:174-228 performs one accountBalance probe with five sleeps, message-regex auth detection and raw lastErr. The correction adds per-endpoint ProbeFacts and typed UnclassifiedNativeFailure/ProbeCoverageUnknown; no unknown code/status or missing coverage can establish RuntimeHealth.Ready or admission before empirical conformance."
+    },
+    {
+      "id": "MAP-39CF059275",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:230-233 implements close as an async no-op because Rust handles rely on GC, so the source directly resolves that no explicit release API exists. The reviewed design uses scoped finalization, closed-generation evidence and CleanupEvidenceUnavailable without claiming deterministic native release; closing one generation does not force unrelated accounts or global RuntimeHealth Stopping/Failed, and whole-process shutdown remains a separate coordinator path."
+    },
+    {
+      "id": "MAP-7E1D54C751",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:235-244 returns [] only for empty search and otherwise echoes a guessed symbol/default US ContractDescription. The review adds Complete/Partial/Unavailable/NoMatch/Ambiguous catalog states and requires complete scoped evidence for placement."
+    },
+    {
+      "id": "MAP-6E47D8CD20",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:246-267 uses infos[0], `lotSize || 1`, hardcoded MKT/LMT/STP details and null for every error. The repaired entry requires response identity/positive lot correlation, keeps derivative kind incomplete when this path cannot prove it, and returns typed lookup states."
+    },
+    {
+      "id": "MAP-4472AC0A90",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:269-313 sends SubmitOrderOptions immediately, casts Decimal values, stringifies errors and ignores `_tpsl`. The repaired plan preserves a non-executable Draft/Prepared phase, requires approval before reservation/job, and separates Ack from observed confirmation while refusing unexpressible protection/relations."
+    },
+    {
+      "id": "MAP-8B830F55F5",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:315-335 accepts Partial<Order>, requires quantity by convention, and reports Replaced on resolved replaceOrder. The correction makes unchanged fields explicit, binds before-image/version/compensation, and reconciles unknown replacement outcomes."
+    },
+    {
+      "id": "MAP-8387D189AE",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:337-344 sends a bare string order id and returns synthetic Canceled on Ack. The reviewed action retains scoped native identity and cancel criterion, then observes cancellation versus fill/working/unknown."
+    },
+    {
+      "id": "MAP-06A7A665B6",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:346-362 reads a projected position and recursively submits a reverse DAY MKT order, allowing race/oversize and no exact rollback. The repaired ClosePosition carries signed exposure before-image, ExposureEquals, lock and residual recovery criterion."
+    },
+    {
+      "id": "MAP-AE0972BE69",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:364-372 returns foldBalancesToBase without await inside try, so async FX failures escape BrokerError.from. The entry makes the boundary await/decode raw buckets first and returns typed Unknown valuation without deleting durable facts."
+    },
+    {
+      "id": "MAP-B6320BAFF1",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:381-409 selects HKD or the largest netAssets bucket and zeros empty accounts. The correction preserves every currency bucket, renders compatibility only as explicitly degraded without inventing a numeric total, and represents no-FX/empty as UnknownValuation/EmptyObserved rather than an executable base total."
+    },
+    {
+      "id": "MAP-2EDFABE32A",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:411-435 converts buckets to HKD but discards rate/source evidence and hardcodes unrealizedPnL=0. The repaired accounting fold retains FX observations and derives PnL from fills/marks, leaving unavailable PnL Unknown."
+    },
+    {
+      "id": "MAP-E45F535798",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:437-447 divides one-unit USD conversions, while fx-service.ts:140-204 can return stale/default and unknown-currency 1:1 values with only a warning. The review preserves both rate observations and makes default/unknown cross-currency results non-executable."
+    },
+    {
+      "id": "MAP-F91287463C",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:449-509 drops zero rows, deduplicates raw symbols, swallows enrichment errors and treats missing static metadata as equity. The repaired pipeline keys canonical scoped rows, preserves EmptyObserved/zero evidence, and records per-row enrichment status/retry."
+    },
+    {
+      "id": "MAP-9763981047",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:511-541 always builds STK, uses cost as mark, defaults multiplier one and writes realizedPnL=0. The review moves valuation/PnL to typed accounting observations and permits only evidence-backed Exact values."
+    },
+    {
+      "id": "MAP-6B2FD586C2",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:543-557 catches every quote batch error into an empty map, after which buildPosition uses costPrice. The final keyed result preserves per-instrument Live/Stale/NoQuote/Unavailable evidence and never substitutes cost as current mark; retries remain observation work, not order jobs."
+    },
+    {
+      "id": "MAP-6D6AB93685",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:559-575 catches staticInfo failure into an empty map and line 567 uses `stockDerivatives ?? []`, conflating missing with explicit empty and then treating both as equity. The correction keeps Unresolved versus EquityLike and blocks exact derivative decisions."
+    },
+    {
+      "id": "MAP-7EC922FE58",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:577-593 leaves option multiplier absent on failure and buildPosition defaults it to one. The reviewed model requires a positive InstrumentId-bound observation, durable retry and incomplete valuation on absence."
+    },
+    {
+      "id": "MAP-F3E1B444EC",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:595-611 leaves warrant conversionRatio absent on failure and defaults one. The repair preserves issuer/ratio evidence, requires positive ratio for Exact value, and treats even ratio 1 as unproven without native evidence."
+    },
+    {
+      "id": "MAP-B6BFE850B2",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:613-620 drops null results from requested-id queries. The corrected model returns one Found/NotFound/Unavailable/Unknown per ScopedOrderRef, separates requested-set completeness from true listing namespace/cursor completeness, and schedules observation for Unknown."
+    },
+    {
+      "id": "MAP-C2165A9F8E",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:622-629 catches transport, permission, malformed and not-found orderDetail errors as null. The review decodes native identity/status and classifies only conclusive absence as NotFound; post-dispatch null-equivalent evidence is Unknown."
+    },
+    {
+      "id": "MAP-C6EFEC85F5",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:631-657 takes first quote/depth values and converts depth rejection to empty arrays/zero bid-ask. The repaired codecs correlate symbol, preserve source/time/session, and expose EmptyBook/one-sided/Unavailable quality."
+    },
+    {
+      "id": "MAP-F3BCDE7625",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:659-672 compares all sessions against machine-local Date and returns one isOpen bool; empty `?? []` becomes false. The correction keys observations by venue/session, supplies calendar/timezone evidence, and maps empty/failed coverage to Unknown."
+    },
+    {
+      "id": "MAP-8E4DBDDD86",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:674-681 returns the same STK/five-order list for every context. The repaired capability set separates authorization, provider support, session, reach, idempotency and compensation and fingerprints evidence for reprepare."
+    },
+    {
+      "id": "MAP-224C7730A0",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:683-692 uses resolved string/contract.symbol and reconstructs any native key through permissive makeContract. The reviewed identity codec validates suffix/venue/currency/kind, binds scope, and refuses legacy ambiguity."
+    },
+    {
+      "id": "MAP-FBC40DB2EA",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:694-714 makes STK and mutable Order, writes orderId=0, ignores executedQuantity/version and defaults unknown native types. The final observation retains native id/fills/version and raw unknown enum/version evidence; compatibility is deliberately lossy and never fabricates type/TIF or dispatch authority."
+    },
+    {
+      "id": "MAP-6F32F8A928",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:716-734 maps known order types but defaults unknown numbers to LMT and collapses amount/percent to legacy strings. The repaired decoder retains raw/version and trailing unit, routes unknown to RecoveryRequired, and keeps display mapping lossy only at the edge."
+    },
+    {
+      "id": "MAP-51D9E4799C",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:736-743 defaults unknown TIF numbers to DAY and LongbridgeOrderLike has no expiry field. The review retains Unknown(raw), requires expiry for GTD, and prevents a compatibility DAY projection from becoming authority."
+    },
+    {
+      "id": "MAP-10B9DD48C9",
+      "verdict": "accepted",
+      "reason": "LongbridgeBroker.ts:745-761 uses local hour/minute inclusive comparisons, ignoring seconds/timezone/holiday semantics. The corrected pure evaluator consumes explicit Instant/calendar windows with endpoint policy and next boundaries."
+    },
+    {
+      "id": "MAP-312213403A",
+      "verdict": "accepted",
+      "reason": "longbridge/index.ts:1-2 exports only the mutable LongbridgeBroker/config, so no Layer/codec/SPI composition is reachable. The final barrel plan adds explicit Layer/interpreter/codecs, reports unavailable evidence for a declared leaf, leaves unsupported leaves absent, and keeps legacy export only during controlled cutover."
+    },
+    {
+      "id": "MAP-E0B62F1C14",
+      "verdict": "accepted",
+      "reason": "longbridge-contracts.ts:9-25 contains only a loose suffix→exchange/currency table. The correction treats that table as closed venue/currency metadata, obtains jurisdiction/kind/timezone separately, and rejects unknown suffixes rather than inventing facts."
+    },
+    {
+      "id": "MAP-CB5B6AC097",
+      "verdict": "accepted",
+      "reason": "longbridge-contracts.ts:27-43 accepts bare/unknown suffixes, always emits STK and preserves the raw localSymbol. The reviewed constructor accepts only validated InstrumentId and represents derivative/ambiguous metadata explicitly."
+    },
+    {
+      "id": "MAP-C517435305",
+      "verdict": "accepted",
+      "reason": "longbridge-contracts.ts:45-57 splits at the last dot and defaults bare symbols to US without validating ticker/suffix. The correction adds closed suffix/ticker parsing and requires catalog evidence before bare input is tradeable."
+    },
+    {
+      "id": "MAP-CF32BE43EE",
+      "verdict": "accepted",
+      "reason": "longbridge-contracts.ts:59-92 lets localSymbol/aliceId/currency inference override missing corroboration, collapses CNY/CNH to SH and unknown currency to US. The repaired resolver treats aliceId as a routing/UTA reference, requires typed identity evidence, and uses currency only as corroboration; AccountScope is added only for account-owned leaves."
+    },
+    {
+      "id": "MAP-C9E3109EB0",
+      "verdict": "accepted",
+      "reason": "longbridge-contracts.ts:94-107 maps CN to SH and unknown/Crypto to US even though this helper is unused. The review removes it after decoder migration and makes unknown board/market a protocol/identity failure."
+    },
+    {
+      "id": "MAP-D77E448B20",
+      "verdict": "accepted",
+      "reason": "longbridge-contracts.ts:109-136 collapses statuses and defaults unknown to Submitted. The repaired status ADT retains Unknown(raw), distinguishes expiry/rejection/partial outcomes, and keeps RecoveryRequired exclusion until observation."
+    },
+    {
+      "id": "MAP-C75A8AB5E2",
+      "verdict": "accepted",
+      "reason": "longbridge-contracts.ts:138-144 copies msg only for status 14 and exposes all other failures through coarse OrderState. The review keeps redacted rejection evidence only for decoded rejection and separates protocol/unavailable/unknown outcomes."
+    },
+    {
+      "id": "MAP-93839B42CF",
+      "verdict": "accepted",
+      "reason": "longbridge-contracts.ts:146-151 turns any search string into a ContractDescription via makeContract without existence evidence. The correction returns explicit NoMatch/Unavailable/Ambiguous states and emits descriptions only from complete validated catalog evidence."
+    },
+    {
+      "id": "MAP-FCDA99890A",
+      "verdict": "accepted",
+      "reason": "longbridge-types.ts:9-32 defines raw secrets, paper marker and optional endpoint URLs but no endpoint/account consistency evidence. The reviewed codec requires broker-pack composition conformance, keeps missing evidence EnvironmentUnknown/no-write, rejects explicit conflict as EnvironmentMismatch, and persists only CredentialRef/fingerprint."
+    },
+    {
+      "id": "MAP-1B0A73A8CA",
+      "verdict": "accepted",
+      "reason": "longbridge-types.ts:34-42 models getter-only numeric fields structurally with no runtime presence/currency/scope checks. The correction validates getter presence and Decimal/CurrencyCode, distinguishing Missing from explicit zero in AccountObservation."
+    },
+    {
+      "id": "MAP-06A331A1E5",
+      "verdict": "accepted",
+      "reason": "longbridge-types.ts:44-57 exposes unbranded position strings/numbers and places accountChannel only on the outer response; getPositions discards it. The reviewed codec retains channel/scope/native market/signed units and rejects unknown market or malformed quantity."
+    },
+    {
+      "id": "MAP-34C03E3ABF",
+      "verdict": "accepted",
+      "reason": "longbridge-types.ts:59-74 has structural quote/depth values and nullable side prices without quality/context. The repair validates Decimal/volume/timestamps and distinguishes EmptyBook, one-sided and Unavailable depth instead of numeric zero."
+    },
+    {
+      "id": "MAP-DE6DDE18C3",
+      "verdict": "accepted",
+      "reason": "longbridge-types.ts:76-90 exposes numeric order enums, optional prices, free msg and unvalidated executedQuantity. The final provider-declared leaf schema selects required fields and preserves raw unknown enum/version evidence, validates fill bounds, and keeps incomplete/unknown observations separate from absence or terminal state."
+    },
+    {
+      "id": "MAP-6BEB2F95EE",
+      "verdict": "accepted",
+      "reason": "longbridge-types.ts:92-101 says Option=0/Warrant=1 but an empty stockDerivatives array is plain equity/fund and lot is unchecked. The repair uses EquityLike for explicit empty, Unresolved for missing, positive lot validation, and no unknown-tag equity fallback."
+    },
+    {
+      "id": "MAP-F13669001D",
+      "verdict": "accepted",
+      "reason": "longbridge-types.ts:103-115 only provides toString-capable multiplier/ratio fields with no positivity, timestamp or instrument relation. The reviewed MultiplierObservation requires positive finite value, expected InstrumentId/kind, source/version and durable incomplete status."
+    },
+    {
+      "id": "MAP-878E4140F3",
+      "verdict": "accepted",
+      "reason": "longbridge-types.ts:117-125 contains numeric market/session tags and local hour-minute-second windows but no timezone/date/calendar evidence. The correction decodes known tags, supplies calendar-derived instants, and maps unknown/empty coverage to Unknown rather than false/closed."
+    }
+  ]
+}

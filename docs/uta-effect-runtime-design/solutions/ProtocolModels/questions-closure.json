@@ -1,0 +1,13 @@
+{
+  "group": "ProtocolModels",
+  "entries": [
+    {
+      "id": "MAP-9F0ED3057E",
+      "question": "Native SDK/provider error fields, stable code precedence, and idempotency/absence guarantees are unavailable in this shared source; each adapter must supply evidence before classifying a native failure as safe retry or terminal rejection.",
+      "disposition": "empirical-retained",
+      "evidence": "packages/uta-protocol/src/types/broker.ts:63-79 only lowercases arbitrary message text and applies the observed precedence for market-closed, network/rate-limit/5xx, AUTH, and exchange-like patterns; it exposes no provider structured fields, native code precedence, idempotency window, or conclusive absence semantics. Completed Alpaca, IBKR, CCXT, and Longbridge designs preserve adapter-specific conformance gaps. Under capability-composition-v1, this finding remains source evidence about the shared helper, not proof of any universal provider contract.",
+      "resolution": "Retain the empirical prerequisite. Each provider declares its own error leaf/response schema and versioned mapping; only documented native fields and evidence may construct KnownNativeFailure. The shared lexical classifier may remain adapter-local HeuristicEvidence with redaction and classifier version, but it never proves retry safety, terminal rejection, or absence. If a failure could follow DispatchStarted, persist the redacted evidence with action/dispatch identity and enter durable Unknown/RecoveryRequired with observation; do not retry, redispatch, reject, or infer absence from the heuristic. Pre-dispatch malformed input remains a protocol/leaf validation failure. Native error precedence, idempotency, and absence guarantees therefore remain open per adapter and are not resolved by the composition abstraction."
+    }
+  ],
+  "remainingCount": 1
+}

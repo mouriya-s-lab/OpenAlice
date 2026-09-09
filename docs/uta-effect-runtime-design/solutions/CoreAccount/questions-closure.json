@@ -1,0 +1,244 @@
+{
+  "group": "CoreAccount",
+  "entries": [
+    {
+      "id": "MAP-177DF827E5",
+      "question": "MockBroker idempotency/absence evidence must be supplied by its interpreter contract; otherwise the crash case remains Unknown and requires reconciliation.",
+      "disposition": "integration-resolved",
+      "evidence": "K07/K08/K11 in docs/uta-effect-runtime-design/solutions/composition-contract.md establish that interpreter evidence is separate from native guarantees; MAP-177DF827E5 and MAP-189E766E12 retain the MockBroker/Polling test boundary without promoting simulator behavior to venue idempotency evidence.",
+      "resolution": "Use an interpreter contract with explicit IdempotencyEvidence and AbsenceEvidence variants. The legacy in-memory MockBroker supplies neither; a crash after DispatchStarted therefore remains OutcomeUnknown/RecoveryRequired, keeps the conflict lock, and schedules observe/reconciliation without a second forward mutation. A DurableMockVenue test may supply the evidence, but the simulator is never silently promoted to a venue guarantee."
+    },
+    {
+      "id": "MAP-7F92A5F120",
+      "question": "Which external identity provider fields form Actor and policy version is owned by the application group; this shard cannot infer it from UTA options.",
+      "disposition": "integration-resolved",
+      "evidence": "K02/K08/K09 and C12/C16 in docs/uta-effect-runtime-design/solutions/composition-contract.md and docs/uta-effect-runtime-design/solutions/integration-decisions.md establish verified Principal/policy binding, AccountScope, and typed receipts; MAP-7F92A5F120 keeps this application-owned rather than inferring it from UTA flags.",
+      "resolution": "Actor is constructed from a transport-verified Principal and provisioned service identity, with authorized AccountScope and server-side policy binding; request-body actor fields and UTA booleans are not authority. policyVersion is the versioned PolicyApprovalBinding supplied by configuration/application policy. Missing principal, scope, or policy evidence returns AuthorizationDenied or CapabilityUnavailable and creates no executable plan, lock, job, or dispatch."
+    },
+    {
+      "id": "MAP-4144027899",
+      "question": "Whether sub-account discovery is static per connection or can change at runtime must be declared by each broker adapter; the current cache comment assumes static.",
+      "disposition": "integration-resolved",
+      "evidence": "K02/K08 and C01/C06 establish revisioned AccountScope discovery and connection-generation invalidation; MAP-4144027899 retains the source-specific selector and route checks without assuming static cache discovery.",
+      "resolution": "Scope discovery is revisioned and may change at runtime. A cached Available directory is valid only for its connection generation/revision; a changed listing, reconnect, or unavailable probe invalidates capability and prepared scope, requiring rediscovery/reprepare. No adapter may assume static discovery or default a missing wallet."
+    },
+    {
+      "id": "MAP-189E766E12",
+      "question": "Native idempotency support of MockBroker is test-owned; absent evidence should keep Unknown unresolved.",
+      "disposition": "integration-resolved",
+      "evidence": "K07/K08 and MAP-177DF827E5/MAP-189E766E12 separate scheduler identity from the MockBroker counter and preserve Unknown when native idempotency/absence evidence is missing.",
+      "resolution": "The test interpreter uses stable scheduler DispatchIdentity and a separate DurableMockVenue ledger. The current MockBroker order counter is not an idempotency guarantee; if the interpreter does not return explicit native identity/absence evidence after an accepted or timed-out place, the action remains Unknown/RecoveryRequired and only observation is allowed."
+    },
+    {
+      "id": "MAP-F5D4E6C3D4",
+      "question": "Whether each broker exposes a monotonic exposure version is unresolved; otherwise hash canonical observed facts and treat absence as weaker precondition.",
+      "disposition": "design-decided",
+      "evidence": "K03/K04/K08 and C11 establish serializable exposure facts, observation identity, and a weak-vs-strong precondition policy; MAP-F5D4E6C3D4 retains this as a design decision without claiming any adapter supplies monotonic versions.",
+      "resolution": "Use a closed ExposureVersionEvidence policy: MonotonicNativeVersion when the adapter supplies it, otherwise FactHashOnly over canonical scoped exposure facts plus observation identity/time. FactHashOnly is a weaker precondition that requires a fresh admission observation and must fail closed whenever policy requires a strong CAS; no monotonicity is inferred from a snapshot or a hash."
+    },
+    {
+      "id": "MAP-7A53419830",
+      "question": "Broker-specific cancellation idempotency horizon remains adapter evidence, not inferred from method name.",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:299-316 proves only a cancel call and submitted result; K07/K08/K11 and C10 require adapter-specific horizon/absence evidence to remain empirical, as retained by MAP-7A53419830.",
+      "resolution": "Retain the empirical prerequisite. Each adapter must publish a versioned cancellation idempotency/retention horizon and absence evidence; until then a cancel after DispatchStarted is Ack plus StillWorking/Unknown, keeps the RecoveryCase/order exclusion, schedules observation, and cannot be blindly reissued or declared terminal."
+    },
+    {
+      "id": "MAP-1FA95F90E8",
+      "question": "Native order replacement semantics differ by broker; adapter must state whether identity and queue priority are preserved.",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:317-331 only forwards a Partial<Order> patch; K03/K04/K08/K11 and MAP-1FA95F90E8 require complete replacement semantics while retaining venue identity/queue behavior as unproven.",
+      "resolution": "Retain the empirical prerequisite. An adapter must declare whether amend preserves broker order identity, execution identity, and queue priority, including partial-fill behavior. Until evidence exists, expose QueuePriorityLoss/ReplacementSemanticsUnknown in CompensationAssessment, keep the old projection on Unknown, and do not claim a restorable amend or auto-dispatch a reverse patch."
+    },
+    {
+      "id": "MAP-81E9BDAC4E",
+      "question": "Exact consistency window across the three broker reads is not guaranteed; expose per-observation times and a snapshot consistency marker.",
+      "disposition": "design-decided",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:333-390 proves three independent broker reads; K05/K08 and C07/C13 require per-source sequence/time, freshness, and explicit incomplete coherence, as retained by MAP-81E9BDAC4E.",
+      "resolution": "Define SnapshotCoherence as AtomicCheckpoint when all sources share a writer checkpoint, otherwise NonAtomicPerSource with each observedAt/source sequence retained; an unavailable source yields IncompleteObservation and never an empty substitute. Queries expose the marker, and any mutation precondition requiring coherence rejects non-atomic/stale evidence."
+    },
+    {
+      "id": "MAP-FE83587457",
+      "question": "FX provider, quote currency, and acceptable staleness are external evidence; absent or stale FX leaves BrokerReported plus DerivedUnavailable and never authorizes a derived conversion.",
+      "disposition": "design-decided",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:392-431 proves same-currency sum and mixed-currency broker fallback; K03/K05/K08 and C13 require CurrencyPair/ProviderId/freshness/rounding evidence, as retained by MAP-FE83587457.",
+      "resolution": "Use the Accounting FX contract: CurrencyPair and ProviderId come from the decoded observation, quote currency is the Money/Fx pair target, max age and rounding are versioned FxPolicy fields. Same-currency uses IdentityConversion; cross-currency conversion requires Confirmed evidence within policy. Missing/stale provider evidence returns BrokerReported plus DerivedUnavailable and never authorizes a derived amount."
+    },
+    {
+      "id": "MAP-BA5730BE0C",
+      "question": "Which numeric fields may legitimately be zero must be enumerated per broker schema; current implementation assumes none.",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:433-493 shows only IBKR Contract defaults and explicit exchange override; K03/K07 and C01 require per-field native zero/sentinel evidence, as retained by MAP-BA5730BE0C.",
+      "resolution": "Retain the native-schema prerequisite. Each adapter codec must classify every numeric field as ZeroAllowed, ZeroMeansAbsent, or ZeroRejected with a versioned schema; until then preserve explicit presence but reject ambiguous zero/sentinel overrides as OverrideNotAllowed or NativeProtocolViolation, never apply the generic “nonzero only” heuristic."
+    },
+    {
+      "id": "MAP-49119F272B",
+      "question": "Exact accepted TimeInForce set for every adapter is outside this file; capability service must publish it.",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:644-668 proves DAY default/GTC/outsideRth forwarding only; K02/K03/K04/K07 and MAP-49119F272B require the selected leaf schema and adapter availability evidence for TIF/session values.",
+      "resolution": "Retain the per-adapter capability prerequisite. Each provider leaf publishes its exact versioned TimeInForce/session schema; a parameter variant absent from that schema is rejected at the schema boundary, not represented as a runtime unsupported option. For declared variants, CapabilitySet reports availability and calendar evidence; Unknown/unavailable availability blocks preparation or queue, while the source-compatible DAY default remains an explicit leaf value rather than a native guarantee."
+    },
+    {
+      "id": "MAP-8DFEA924F8",
+      "question": "Longbridge, IBKR, and CCXT semantics and idempotency evidence must be supplied by broker owners; this entry cannot declare atomicity.",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:669-702 proves only nested TP/SL intent preservation; K03/K04/K07/K08 and MAP-8DFEA924F8 require leaf-local relation schema plus adapter native mechanism, identity, and atomicity evidence.",
+      "resolution": "Retain the broker conformance prerequisite. A provider leaf declares only the relation variants it accepts; schema-absent TP/SL combinations are rejected before planning. For a declared relation, Longbridge/IBKR/CCXT and future adapters must provide versioned native-group, leg-identity, idempotency, and compensation evidence. Until then prepare returns NativeAtomicityUnavailable/RelationCapabilityUnknown or an explicitly policy-approved dependent plan; after DispatchStarted any missing leg outcome is Unknown/RecoveryRequired, never primary-only success."
+    },
+    {
+      "id": "MAP-1F652F4091",
+      "question": "Whether each broker exposes a monotonic exposure version is unresolved; otherwise hash canonical observed facts and treat absence as weaker precondition.",
+      "disposition": "design-decided",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:738-772 proves positive/full-close validation; K03/K04/K08/C11 and MAP-F5D4E6C3D4 define expected exposure evidence without claiming an adapter monotonic version.",
+      "resolution": "Use the same ExposureVersionEvidence rule as close preparation: MonotonicNativeVersion when explicitly supplied, otherwise canonical scoped FactHashOnly with a fresh admission observation. A hash-only precondition is weaker and cannot satisfy a policy requiring strong CAS; missing evidence is PreconditionFailed/ExposureVersionUnproven with no dispatch."
+    },
+    {
+      "id": "MAP-D4F5440582",
+      "question": "Broker execution identity and cumulative-vs-delta semantics must be documented by each adapter.",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:854-903 proves only MockBroker filledQuantity/avgFillPrice aggregation; K03/K07/K08 and MAP-D4F5440582 retain adapter execution identity/cursor semantics as empirical.",
+      "resolution": "Retain the adapter evidence prerequisite. Each adapter must declare stable execution identity and whether each quantity/price is cumulative or delta, with cursor/version semantics. Without it, the reducer keeps status evidence separate from fill evidence, returns FillDetailsUnavailable/OutcomeUnknown, preserves the prior projection, and schedules observation instead of deduplicating by array position or guessing a delta."
+    },
+    {
+      "id": "MAP-58E656CE5A",
+      "question": "Venue listing namespace completeness is empirical; adapters must prove what “present/absent” covers.",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:904-933 proves only the MockBroker open-list optimization; K03/K05/K08 and C07/MAP-58E656CE5A require scope/namespace/cursor coverage before absence can select observation.",
+      "resolution": "Retain the venue listing-coverage prerequisite. An adapter must return versioned Complete(scope, namespace coverage, cursor boundary, observedAt, orders) evidence; absent proof is Partial/Unavailable, not an empty complete listing. Even Complete absence only selects a per-order confirmation candidate; terminal cancellation/rejection still requires conclusive scoped order evidence."
+    },
+    {
+      "id": "MAP-C735359708",
+      "question": "Adapter must define when null is definitive; the current MockBroker test does not.",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:979-1011 proves MockBroker null leaves pending unchanged; K03/K05/K08 and MAP-C735359708 retain per-adapter NotFoundWithEvidence semantics as empirical.",
+      "resolution": "Retain the adapter null-semantics prerequisite. A null result is definitive only when the request scope/namespace and adapter evidence explicitly yield NotFoundWithEvidence; otherwise classify it as StillWorking or Unknown, keep the pending projection and durable conflict lock, and reschedule observation without redispatch."
+    },
+    {
+      "id": "MAP-D4AEAAD74E",
+      "question": "Instrument precision and any fee/lot policy must be supplied by the accounting/adapter contract; absent precision uses the explicit defer/quarantine path rather than a guessed tolerance.",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:1013-1049 proves only a mark/pending-order race; K04/K05/K08/C13 and MAP-D4AEAAD74E require instrument precision and fee/lot evidence before reconciliation.",
+      "resolution": "Retain the accounting/adapter evidence prerequisite. DustPolicy must carry instrument precision, lot/fee treatment, and policy version; without complete precision/economic evidence, classify ReconciliationDeferred or quarantine as AccountingConflict, preserve the observation and lock, and emit neither a tolerance-based ReconcileBalance nor a FillObservation."
+    },
+    {
+      "id": "MAP-FFFCA4765D",
+      "question": "CooldownGuard, MaxPositionSizeGuard, and SymbolWhitelistGuard have separate legacy semantics noted by Main; exact policy for unknown facts must be shared.",
+      "disposition": "integration-resolved",
+      "evidence": "K08 and C08 require guard-specific policy, reservation, and unknown-fact behavior; MAP-FFFCA4765D keeps cooldown, exposure, and whitelist rules separate rather than inferring a universal guard.",
+      "resolution": "Use the shared guard policy: Cooldown is a versioned pure rule keyed by AccountScope+InstrumentId and consumed only in the Approved→Queued writer transaction; MaxPositionSize uses GrossNotional with typed mark/FX/multiplier and fails closed on unknown valuation or non-positive equity; SymbolWhitelist resolves canonical InstrumentId and unknown identity blocks. Cancel/Close are explicitly NotApplicable to the new gross-exposure rule, while Modify resolves its scoped before-image."
+    },
+    {
+      "id": "MAP-92B40EBFD5",
+      "question": "Historical production Git export import policy needs data investigation; absent identities must remain read-only.",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:1083-1101 proves only in-memory Git export/restore; K08/K11 and C10/C11 require one-shot legacy inventory, read-only handling for missing identity, and no execution recovery from historical narrative, as retained by MAP-92B40EBFD5.",
+      "resolution": "Retain the production-data prerequisite. LegacyImportRecord must inventory source digest, record index, account/scope mapping, schema, and dispatch identity; complete records become read-only audit/observation facts, while missing identity/scope or mixed-account ownership becomes LegacyEvidence/OperatorRequired and cannot create a job or dispatch. Existing SQLite corruption is blocked, not treated as empty history."
+    },
+    {
+      "id": "MAP-DB785C57D5",
+      "question": "Exact CredentialRef/Environment evidence is owned by identity/config groups; this source only supplies legacy flags.",
+      "disposition": "integration-resolved",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.ts:41-55 exposes the legacy untyped options; K02/K07/K08 and C09/C12 define SecretRef, environment evidence, AccountScope, and policy boundaries, as retained by MAP-DB785C57D5.",
+      "resolution": "Use typed ConnectionIntent with SecretRef, TradingEnvironmentHint plus observed TradingEnvironmentEvidence, AccountSelectorHint resolved to AccountScope, and AccessPolicy. Secret values never enter plans/journal; keyless is PublicDataOnly, funded read-only is DraftReview/PreparationPreview only, and environment mismatch or missing credential evidence is CapabilityUnavailable/NeedsRepair rather than writable capability."
+    },
+    {
+      "id": "MAP-4189A98E6F",
+      "question": "Whether missing avgCostSource historically means broker-authoritative for all adapters must be confirmed from adapter mappings.",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:1352-1372 proves only pass-through/absence of avgCostSource; K03/K05/K08 and MAP-4189A98E6F retain adapter/history provenance mapping as empirical.",
+      "resolution": "Retain the adapter/history evidence prerequisite. Decode avgCostSource as BrokerReported, WalletReconstructed, or Unknown; a missing marker never upgrades to broker authority. Unknown cost basis remains queryable with provenance but cannot authorize accounting correction or execution preconditions requiring authoritative basis until adapter mapping evidence is recorded."
+    },
+    {
+      "id": "MAP-5B98644210",
+      "question": "Which broker avgCost fields are authoritative is adapter evidence; MockBroker behavior alone cannot upgrade it.",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:1373-1427 proves MockBroker avgCost/mark fallback and PnL arithmetic; K04/K05/K08/C13 and MAP-5B98644210 require provenance-bearing authority evidence and prohibit mark-as-fill.",
+      "resolution": "Retain per-adapter authority evidence. Only a decoded BrokerReported source with adapter evidence is authoritative; WalletReconstructed and mark-based ReconcileBalance are valuation/accounting estimates, never FillObservation. If authority is absent or conflicting, preserve both observations as Unknown/AccountingConflict and block any authority-dependent projection update."
+    },
+    {
+      "id": "MAP-E991350693",
+      "question": "WAC treatment of fees/partial reductions is not visible in this test and needs accounting policy.",
+      "disposition": "design-decided",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:1428-1482 proves mark-only PnL movement and quantity-drift WAC; K04/K05/K08 and MAP-E991350693 retain fee/lot/short policy as an explicit accounting choice.",
+      "resolution": "Use explicit AccountingPolicy: confirmed fills drive WAC; long partial/full reductions preserve WAC/Empty semantics; fees are separate currency-qualified FeeEvents and affect basis/PnL only when the selected policy says so; missing fee/lot/short policy returns UnsupportedPolicy/Unavailable rather than silently folding fees or resetting oversell to zero. ReconcileBalance remains valuationOnly and never creates a fill."
+    },
+    {
+      "id": "MAP-EE6C7F95C5",
+      "question": "Exact instrument precision and whether broker getNativeKey can safely derive it require adapter evidence.",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.spec.ts:1483-1524 proves only the 1e-8 dust test and no-throw behavior after UTA stamping; K03/K04/K07 and MAP-EE6C7F95C5 retain native-key uniqueness and precision as empirical.",
+      "resolution": "Retain the adapter evidence prerequisite. getNativeKey may contribute an InstrumentId/alias only when venue/listing/native-key uniqueness and precision/lot metadata are decoded and versioned; absent or conflicting evidence yields InstrumentUnavailable/IdentityConflict and blocks executable plans. Never derive precision from a display symbol, SDK object shape, or a nominal brand."
+    },
+    {
+      "id": "MAP-2965B55AF1",
+      "question": "Exact external config schema is owned by identity/config group; no runtime guarantee is inferred here.",
+      "disposition": "integration-resolved",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.ts:41-55 exposes the legacy untyped options; K01/K02/K07 and C09/C12 define the typed ConnectionIntent/config and policy boundary, as retained by MAP-2965B55AF1.",
+      "resolution": "Replace the untyped UTA options boundary with versioned ConnectionIntent/config schemas: SecretRef instead of credential values, TradingEnvironmentHint plus observed EnvironmentEvidence, AccountSelectorHint resolved to AccountScope, AccessPolicy, and broker pack descriptor version. Invalid schema is ConfigDecodeFailure; missing evidence is NeedsRepair/CapabilityUnavailable, not a runtime guarantee inferred from flags."
+    },
+    {
+      "id": "MAP-12EBFAE5E6",
+      "question": "Exact permanent-error taxonomy is adapter evidence and should not be guessed from error.name.",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.ts:285-311 proves only class/name-based permanent handling; K07/K08/K11 and C10 require adapter structured code/version evidence, as retained by MAP-12EBFAE5E6.",
+      "resolution": "Retain the adapter error-mapping prerequisite. Adapter-local structured code/version evidence may classify a permanent failure; until then decode it as redacted UnclassifiedNativeFailure/HeuristicEvidence, keep capability unavailable, and for any post-DispatchStarted failure enter OutcomeUnknown/RecoveryRequired with observation rather than guessing terminal rejection or retryability from error.name."
+    },
+    {
+      "id": "MAP-7864431508",
+      "question": "Native support for each relation is adapter evidence; do not claim bracket atomicity from this method.",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.ts:693-725 proves relation fields are accepted into one mutable SDK request; K03/K04/K07/K08 and MAP-7864431508 require leaf-local relation schema and adapter mechanism/atomicity/compensation evidence.",
+      "resolution": "Retain the native relation-support prerequisite. Parent/OCA/TP/SL relations are represented only by the selected leaf's exact schema and typed ScopedOrderRef/StepId/group identities; a schema-absent variant is rejected before a job. For declared relations each adapter must provide evidence for native mechanism, atomicity, and compensation. Without it, return CapabilityUnavailable/NativeAtomicityUnavailable or an explicit dependent plan allowed by policy, never silently drop or entry-only succeed."
+    },
+    {
+      "id": "MAP-C11719131D",
+      "question": "Adapter listing namespace coverage/idempotency are empirical and must be declared.",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.ts:827-915 proves pending-id/listing sync only; K03/K05/K08 and C07/MAP-C11719131D require adapter-declared listing completeness, pagination, client scope, and absence evidence.",
+      "resolution": "Retain the adapter listing conformance prerequisite. The broker SPI records scope, namespace coverage, cursor boundary, freshness, and idempotency evidence in ListingResult/REMOTE_OBSERVATIONS; unsupported or incomplete listing is Unavailable/Partial, preserves pending/external work, and never emits NoNewOrders, terminal rejection, or redispatch by omission."
+    },
+    {
+      "id": "MAP-5C48EEF269",
+      "question": "Whether broker listing includes all order namespaces is empirical per venue.",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.ts:953-981 proves only open-order listing and Git-known-id comparison; K03/K05/K08/C07 and MAP-5C48EEF269 require explicit namespace coverage before claiming external-account completeness.",
+      "resolution": "Retain the venue namespace prerequisite. External discovery accepts only Complete listing evidence that names all covered namespaces, scope, pagination/cursor, and observation time; Partial/Unavailable retains ExternalObserved/OperatorRequired evidence and cannot claim no unseen namespace orders or auto-cancel them. Closed history is never implied by an open listing."
+    },
+    {
+      "id": "MAP-E8B780DC9D",
+      "question": "FX provider identity, staleness window, and conversion rounding remain adapter/accounting policy evidence.",
+      "disposition": "design-decided",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.ts:1005-1024 proves same-currency sum/mixed-currency broker fallback; K04/K05/K08/C13/C16 and MAP-E8B780DC9D require FX identity, freshness, uncertainty, and rounding evidence.",
+      "resolution": "Use the same explicit FxPolicy as MAP-FE83587457: provider/pair/rounding/max-age are versioned policy/evidence fields; same-currency is IdentityConversion, cross-currency requires a Confirmed rate within policy, and stale/missing evidence returns BrokerReported plus DerivedUnavailable. No `.usd` fallback, default rate, or zero is permitted for an unresolved currency."
+    },
+    {
+      "id": "MAP-044AE7B4DD",
+      "question": "Fee/lot/short-side accounting policy remains an external contract fact; instrument precision/tolerance uses the explicit DustPolicy and defers when evidence is absent.",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.ts:1040-1106 hard-codes 1e-8, avgCost/mark fallback, and pending-id race behavior; K04/K05/K08/K11 and MAP-044AE7B4DD retain fee/lot/short and precision policy as evidence-dependent.",
+      "resolution": "Retain the accounting-policy prerequisite. Fee/lot/short treatment and precision must be selected in a versioned AccountingPolicy/DustPolicy; until then the projection preserves signed position core, emits ReconciliationDeferred/AccountingConflict, and never applies the legacy 1e-8 tolerance, silently folds fees into WAC, or turns an estimate into FillObservation."
+    },
+    {
+      "id": "MAP-229EF12AA4",
+      "question": "Whether MarketClock is account-scoped or venue/session-scoped must be resolved by market-and-jurisdiction owner.",
+      "disposition": "integration-resolved",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.ts:1132-1155 only routes market-clock calls through UTA; K04/K05/K06 and C01/C06/MAP-229EF12AA4 define venue/session targeting without inventing public AccountScope or using clock success as account health.",
+      "resolution": "MarketClock is venue/session scoped, not an account-owned lifecycle fact. A query must carry an explicit Public or AccountScoped context; AccountScope may authorize or resolve an account-bound instrument, but no public query invents accountId/subAccountId. The clock target is VenueCalendar or InstrumentSession with jurisdiction, calendar version, and Open/Closed/Halted/Unknown state; account health/capability cannot be inferred from clock success."
+    },
+    {
+      "id": "MAP-D37BF3A34F",
+      "question": "Zero-valid fields and allowed overrides must be enumerated per native adapter.",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.ts:1210-1235 proves generic nonempty/nonzero/sentinel overlay; K03/K07/C01 and MAP-D37BF3A34F move presence/zero rules to the selected native adapter schema.",
+      "resolution": "Retain the adapter schema prerequisite. Override decoding must preserve Absent versus explicit zero and apply a per-field ZeroPolicy plus an allowlisted override set; without adapter evidence, zero semantics or field permission are OverrideNotAllowed/ZeroSemanticsUnknown and no native plan is emitted. Native sentinels never become generic domain defaults."
+    },
+    {
+      "id": "MAP-C1727C9E38",
+      "question": "Idempotency/compensation evidence is absent from this source and must remain unavailable until adapter proof.",
+      "disposition": "empirical-retained",
+      "evidence": "services/uta/src/domain/trading/UnifiedTradingAccount.ts:1237-1239 exposes an unscoped AccountCapabilities object; K01/K02/K07/K08/K11/C10 and MAP-C1727C9E38 require action-scoped schema and idempotency/compensation evidence without a universal action map.",
+      "resolution": "Retain the native evidence prerequisite. CapabilitySet carries action/context, schema, scope/session, idempotency, atomicity, and compensation evidence as Verified|Unknown|Unavailable; missing evidence returns CapabilityUnavailable/EvidenceStale and prevents job creation or false atomic/bracket claims. After DispatchStarted, any unknown idempotency/compensation outcome remains RecoveryRequired/observe-only."
+    }
+  ],
+  "remainingCount": 20
+}

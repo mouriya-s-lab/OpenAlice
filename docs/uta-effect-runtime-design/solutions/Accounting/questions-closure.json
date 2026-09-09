@@ -1,0 +1,370 @@
+{
+  "group": "Accounting",
+  "entries": [
+    {
+      "id": "MAP-CA5605FEB6",
+      "question": "UnifiedTradingAccount.ts:509-520 proves aliceId is {utaId}|{nativeKey}, not AccountId|SubAccountId; :784-791 only stamps sub-account IDs in commit messages and leaves Operation/GitCommit untouched. Historical events therefore lack a reversible subAccountId mapping; migration must require an explicit manifest or linked observation and otherwise remain Unavailable, never derive subAccountId from nativeKey.",
+      "disposition": "empirical-retained",
+      "evidence": "UnifiedTradingAccount.ts:509-520 and :784-791; MAP-CA5605FEB6; K01/K02/K03; C01 in integration-decisions.md.",
+      "resolution": "Historical aliceId contains utaId|nativeKey and commit-message sub tags do not bind each Operation/GitCommit. Import accepts only an explicit manifest or linked observation; without it the historical scope is Unavailable and nativeKey is never converted to SubAccountId."
+    },
+    {
+      "id": "MAP-977FF0C895",
+      "question": "The product policy for FIFO/lot tracking, short exposure, splits and token migrations remains an evidence decision; no unsupported policy should be represented as WAC reset.",
+      "disposition": "design-decided",
+      "evidence": "Accounting source only demonstrates spot WAC behavior; MAP-977FF0C895; K03/K04/K08; C13 in integration-decisions.md.",
+      "resolution": "For the source-backed declared spot capability, a versioned policy may select SpotWac for confirmed spot fills. FIFO/lot, short exposure, splits, and token migrations require their own explicit policy and evidence; otherwise they produce UnsupportedAccountingPolicy/Unavailable and never reset WAC."
+    },
+    {
+      "id": "MAP-7BEE7FDB8C",
+      "question": "Whether a venue reports cumulative fills or per-execution fills must be verified per adapter; the decoder must not infer one from the legacy sync shape.",
+      "disposition": "empirical-retained",
+      "evidence": "cost-basis.spec.ts:266-301 only supplies one syncOrders operation/result shape; adapter designs and C10 require native observation evidence.",
+      "resolution": "The decoder carries a FillMeasure variant for cumulative cursor versus per-execution identity. Until the adapter declares which measure is evidenced, the observation is Unknown/CapabilityUnavailable and cannot create a FillEvent or infer semantics from positional sync results."
+    },
+    {
+      "id": "MAP-68C7EFD89F",
+      "question": "Venue-specific correction semantics and execution identifiers need adapter evidence; until supplied, correction remains UnsupportedCorrection and recovery-required.",
+      "disposition": "empirical-retained",
+      "evidence": "cost-basis.spec.ts:302-374 proves only legacy origin/sync pairing; C10 and broker adapter designs explicitly do not prove native correction identity.",
+      "resolution": "FillCorrection is enabled only with venue-provided correction identity/link evidence. Missing or conflicting identity remains UnsupportedCorrection and RecoveryRequired; no second fill is emitted."
+    },
+    {
+      "id": "MAP-D807137749",
+      "question": "Which legacy Git records can be imported as confirmed fills versus requiring reconciliation requires migration evidence and must be recorded as an import policy.",
+      "disposition": "empirical-retained",
+      "evidence": "cost-basis.ts:1-24; MAP-D807137749; K05/K08/K11; legacy Git records contain no migration manifest in this source.",
+      "resolution": "Migration requires a per-record import manifest. Only records whose scope, instrument, execution identity, side, quantity, price, and order are evidenced become FillEvent; mark bootstrap or incomplete records become authorized reconciliation candidates or Unavailable, never confirmed fills."
+    },
+    {
+      "id": "MAP-FE12115ED5",
+      "question": "Whether policyVersion is global or instrument-specific must align with the accounting-policy registry and migration table.",
+      "disposition": "design-decided",
+      "evidence": "CostBasisProjection is keyed by AccountScope+InstrumentId in analyses target and by the shared C01/C08 policy bindings.",
+      "resolution": "policyVersion is instrument-specific: it binds the AccountingPolicy registry revision, AccountScope, InstrumentId/instrument class, and migration version. A global version cannot authorize a differently scoped policy; mismatch returns ProjectionVersionConflict."
+    },
+    {
+      "id": "MAP-EBE3DF37DD",
+      "question": "The legacy Git migration ordering and missing timestamps require an import manifest; do not infer durable sequence from filesystem order.",
+      "disposition": "empirical-retained",
+      "evidence": "cost-basis.ts:38-134 uses array order/current timestamps; TradingGit import behavior is not a durable sequence source.",
+      "resolution": "Legacy import requires a manifest with explicit sequence/observedAt or linked evidence. Filesystem order and generated current time are rejected; absent ordering/timestamp evidence yields Unavailable/ReplayViolation while sibling records remain attributable."
+    },
+    {
+      "id": "MAP-FE7C71CD03",
+      "question": "UnifiedTradingAccount.ts:509-520 defines aliceId as {utaId}|{nativeKey}; only :784-791 records sub-account tags in commit messages, and Operation/GitCommit do not carry a subAccountId field. Historical composite-id to subAccountId mapping remains unavailable without linked evidence.",
+      "disposition": "empirical-retained",
+      "evidence": "cost-basis.ts:136-148 plus UnifiedTradingAccount.ts:509-520,:784-791 and C01.",
+      "resolution": "Historical composite IDs are not reversible scope keys. Decode only separately evidenced AccountId/SubAccountId; otherwise retain the row as Unavailable and do not derive SubAccountId from nativeKey."
+    },
+    {
+      "id": "MAP-EB2F40AA83",
+      "question": "Short accounting and close semantics require product policy; until selected, return UnsupportedCloseDirection rather than assume long spot.",
+      "disposition": "design-decided",
+      "evidence": "cost-basis.ts:150-167 demonstrates the unsafe non-SELL/close defaults; C02 and the Accounting target already define typed close direction.",
+      "resolution": "Only an explicitly selected source-backed long-spot policy with scoped exposure evidence may map close to sell. Short close requires a selected ShortExposure policy and exposure evidence; absent policy or evidence returns UnsupportedCloseDirection without mutating basis, and no action default is allowed."
+    },
+    {
+      "id": "MAP-556EBB388B",
+      "question": "Whether an observation without execution price can later be completed by the same identity depends on venue callback semantics; model it as a stateful observation update, not a new fill.",
+      "disposition": "empirical-retained",
+      "evidence": "cost-basis.ts:169-173 omits observeExternalOrder and gives no venue callback identity contract.",
+      "resolution": "An identity-preserving callback may update an existing Pending observation to Confirmed and then emit one FillEvent; a new identity is not a completion. Until venue identity/update semantics are evidenced, retain Pending/Unknown and do not invent execution price or fill."
+    },
+    {
+      "id": "MAP-082EF635D6",
+      "question": "The vendor snapshot schema and timestamp field must be verified per provider adapter before accepting it as Confirmed.",
+      "disposition": "empirical-retained",
+      "evidence": "fx-service.spec.ts:1-11 supplies unchecked base/counter/last_rate records and empty client methods; C10 forbids treating this fixture as provider schema evidence.",
+      "resolution": "Each provider adapter must runtime-decode its snapshot schema and observation timestamp. Unknown/malformed schema or missing provider time returns Malformed/Unavailable; it cannot become Confirmed through the fixture shape."
+    },
+    {
+      "id": "MAP-592DD5394C",
+      "question": "None; identity semantics are fixed by currency units.",
+      "disposition": "source-resolved",
+      "evidence": "fx-service.spec.ts:13-28 returns rate one without provider access; MAP-592DD5394C; K03/K05/K11 defines identity conversion by equal CurrencyCode.",
+      "resolution": "Same-currency conversion is IdentityConversion with no provider observation or fabricated timestamp; amount and currency units are preserved, including zero."
+    },
+    {
+      "id": "MAP-612CCE1A5D",
+      "question": "The exact yfinance payload schema and provider timestamp semantics require adapter evidence; the domain must reject unknown shapes until mapped.",
+      "disposition": "empirical-retained",
+      "evidence": "fx-service.spec.ts:30-43 checks only a positive yfinance number; MAP-612CCE1A5D; K03/K05/K07 and C10 require provider schema/time evidence.",
+      "resolution": "The yfinance adapter must map an exact payload/pair and provider observation time before Confirmed. Unknown payload, pair, non-finite/non-positive rate, or missing provider time returns Malformed/Unavailable and cannot enter valuation."
+    },
+    {
+      "id": "MAP-A6935CF652",
+      "question": "TTL and stale-admission durations are policy/configuration evidence and must be recorded with valuation results.",
+      "disposition": "design-decided",
+      "evidence": "Accounting analyses target already separates injected Clock/cache from valuation authority; C10 distinguishes policy configuration from source evidence.",
+      "resolution": "TTL and stale admission are required injected FreshnessPolicy values, never hidden defaults. Missing/invalid policy yields CapabilityUnavailable or StaleNotAdmissible; any accepted classification persists the policy/version with valuation evidence."
+    },
+    {
+      "id": "MAP-F57EB058EB",
+      "question": "Maximum stale age and which consumers may accept estimates require product/risk policy evidence.",
+      "disposition": "design-decided",
+      "evidence": "MAP-F57EB058EB; K03/K05/K08; C13 separates display uncertainty from authoritative account/risk decisions.",
+      "resolution": "Confirmed/Identity is the default for authoritative equity, risk, and reservations; Estimated/Stale may be displayed only with explicit status and evidence. No consumer silently accepts stale data, and absent policy rejects it."
+    },
+    {
+      "id": "MAP-1B24CAB86B",
+      "question": "Who may approve default FX for risk/reservation decisions remains a product-policy decision; conservative default is reject for authoritative equity.",
+      "disposition": "design-decided",
+      "evidence": "MAP-1B24CAB86B; K03/K05/K08; dated defaults are not broker facts and data lookup has no order-approval semantics.",
+      "resolution": "Default FX remains an Estimated(DefaultFxObservation), never a broker fact. A persisted non-trading EstimateAdmissionPolicy may admit it for an explicitly estimate-enabled display/query consumer; no actor or order-approval path is implied, while authoritative equity/risk/reservation rejects it and records EstimateNotAdmissible."
+    },
+    {
+      "id": "MAP-5159E38E38",
+      "question": "Supported currency registry and behavior for delisted/temporary codes must be supplied by market-data configuration.",
+      "disposition": "empirical-retained",
+      "evidence": "fx-service.spec.ts:104-120 demonstrates the unsafe unknown-code 1:1/epoch path; the supported currency registry is external market-data configuration.",
+      "resolution": "The registry adapter must supply canonical supported, temporary, and delisted-code status. Until mapped, unknown/delisted codes return UnknownCurrency/ValuationUnavailable (including zero amounts); no 1:1 or epoch timestamp is created."
+    },
+    {
+      "id": "MAP-1CA6BEB099",
+      "question": "Notification retention and dedupe window are observability policy decisions, not accounting semantics.",
+      "disposition": "design-decided",
+      "evidence": "fx-service.spec.ts:122-133 only tests a process-local warning Set; MAP-1CA6BEB099; K05/K08/K11 places notification effects outside valuation.",
+      "resolution": "Notification retention/dedupe cannot affect accounting. Persist valuation uncertainty first; an absent observability policy suppresses or expires notifications only, while structured valuation evidence remains durable and queryable."
+    },
+    {
+      "id": "MAP-1955CFFDB9",
+      "question": "Whether UI may display a numeric estimated total while risk rejects it must be explicit per consumer policy.",
+      "disposition": "design-decided",
+      "evidence": "MAP-1955CFFDB9; K03/K05/K11/K12 defines explicit ValuationResult and consumer separation.",
+      "resolution": "UI/query consumers may render a numeric Estimated/Stale total only with its uncertainty and policy status; risk, reservation, and authoritative equity require Confirmed/Identity and otherwise return Partial/Rejected. Zero does not bypass currency validation."
+    },
+    {
+      "id": "MAP-0A93815E49",
+      "question": "Registry contents and alias policy must be sourced from the supported market-data configuration.",
+      "disposition": "empirical-retained",
+      "evidence": "fx-service.spec.ts:168-175 proves only uppercase normalization; registry contents and aliases are not in this source.",
+      "resolution": "The market-data registry must define supported codes and aliases. Until an alias is explicitly mapped, malformed/unregistered/delisted code input returns InvalidCurrencyCode/UnsupportedCurrency; uppercase alone never authorizes a pair."
+    },
+    {
+      "id": "MAP-946AA65B76",
+      "question": "Hub API table schema, timestamp semantics and freshness SLA require live contract evidence; until verified, adapter capability remains explicitly unverified.",
+      "disposition": "empirical-retained",
+      "evidence": "fx-service.spec.ts:177-228 stubs global fetch and ad-hoc table values; C10 requires live hub contract evidence.",
+      "resolution": "Hub use remains explicitly unverified until response schema, provider observation timestamp, table identity, and freshness SLA are evidenced. Decoder returns HubMalformed/HubUnavailable/StaleTable and never marks a missing timestamp as current."
+    },
+    {
+      "id": "MAP-C3F063DA6A",
+      "question": "SLA and policy thresholds for stale/default acceptance remain a product/risk decision.",
+      "disposition": "design-decided",
+      "evidence": "MAP-C3F063DA6A; K03/K05/K08 defines safe valuation variants; no hardcoded SLA is needed for correctness.",
+      "resolution": "The default valuation admission is Confirmed/Identity only. Stale/default thresholds are required configuration; without them stale/default values remain Estimated or Unavailable and cannot authorize equity, risk, or reservations."
+    },
+    {
+      "id": "MAP-3FBA652916",
+      "question": "Protocol field naming/version and decimal wire encoding must match shared protocol model decisions.",
+      "disposition": "integration-resolved",
+      "evidence": "MAP-3FBA652916; K02/K03/K05/K07; shared protocol decisions define serializable DecimalString/CurrencyCode/Instant and valuation variants.",
+      "resolution": "Use the shared protocol field names, schema version, canonical decimal strings, and explicit ValuationResult evidence; the mapper rejects out-of-contract values and never silently quantizes or drops provenance."
+    },
+    {
+      "id": "MAP-A46E156A09",
+      "question": "Default-data refresh cadence and approval owner need explicit operational evidence.",
+      "disposition": "design-decided",
+      "evidence": "fx-service.ts:42-71 contains a mutable dated table; MAP-A46E156A09; K03/K05/K11 requires immutable versioned defaults plus explicit non-trading admission policy.",
+      "resolution": "The accounting kernel defines no refresh cadence or operational approval authority. A released immutable dataset must carry version/releasedAt, and any consumer admission uses a separate non-trading EstimateAdmissionPolicy; absent release or policy metadata leaves the estimate unavailable rather than silently refreshing or treating it as live."
+    },
+    {
+      "id": "MAP-A66387BED8",
+      "question": "Cache TTL and stale window require agreed market-data policy.",
+      "disposition": "design-decided",
+      "evidence": "fx-service.ts:73-79 exposes Date.now TTL cache; Accounting analyses target uses injected Clock and non-authoritative cache.",
+      "resolution": "Cache TTL/stale windows are required FreshnessPolicy inputs and are recorded with accepted valuations. Missing policy returns explicit unavailable/stale-not-admissible; cache eviction never changes journaled valuation."
+    },
+    {
+      "id": "MAP-20D6995F44",
+      "question": "Which provider is mandatory for each broker/account requires capability registry evidence.",
+      "disposition": "empirical-retained",
+      "evidence": "fx-service.ts:81-103 makes the client optional and has no broker/account capability registry; C09/C10 require scoped capability evidence.",
+      "resolution": "A scoped capability registry may record required provider coverage for a particular broker/account when product policy designates it. Until a provider is evidenced for that scope, cross-currency lookup returns CapabilityUnavailable/UnknownFx and does not use an optional client as confirmation."
+    },
+    {
+      "id": "MAP-7B53178995",
+      "question": "Hub endpoint response schema and freshness SLA require external contract evidence before enabling as confirmed source.",
+      "disposition": "empirical-retained",
+      "evidence": "fx-service.ts:105-138 casts hub JSON, substitutes Date.now for missing updatedAt, and serves old tables during backoff; live hub schema/SLA is absent.",
+      "resolution": "Hub adapter remains Unavailable/Malformed/Stale until schema, timestamp, and freshness evidence is supplied. It preserves the original provider timestamp and outage context; backoff never relabels old data as live."
+    },
+    {
+      "id": "MAP-B7DBA0C5CB",
+      "question": "Provider precedence, stale windows and estimate acceptance remain policy/configuration evidence per consumer.",
+      "disposition": "design-decided",
+      "evidence": "fx-service.ts:140-205 has an implicit fallback ladder; MAP-B7DBA0C5CB; K03/K05/K07 defines explicit lookup/admission variants.",
+      "resolution": "Provider precedence is an explicit scoped policy (the current source ordering may be retained as a configured baseline), not a hidden fallback. Without policy/capability, return Unavailable; stale/default results retain evidence and cannot become Confirmed."
+    },
+    {
+      "id": "MAP-2683B949E2",
+      "question": "Public protocol shape and precision/rounding rules must align with shared protocol-model decisions.",
+      "disposition": "integration-resolved",
+      "evidence": "MAP-2683B949E2; K02/K03/K05/K11; shared protocol decisions define the public valuation/result boundary and canonical decimal representation.",
+      "resolution": "The protocol mapper uses the shared ValuationResult/DecimalString/CurrencyCode contract, preserves scale and evidence, and rejects out-of-contract precision rather than silently quantizing; same-currency Identity is explicit."
+    },
+    {
+      "id": "MAP-7DA6DF620B",
+      "question": "Legacy GitState import field mapping needs migration evidence; do not infer sequence from snapshot timestamps.",
+      "disposition": "empirical-retained",
+      "evidence": "order-history.spec.ts:8-41 contains zeroed GitState fixtures; MAP-7DA6DF620B; K03/K07/K11 makes GitState read-only and legacy identity incomplete.",
+      "resolution": "Legacy GitState import requires field-by-field migration evidence for scope, instrument, lifecycle, identities, sequence, and timestamps. Missing evidence produces LegacyEvidence/read-only or Unavailable; snapshot timestamp is never inferred as event sequence."
+    },
+    {
+      "id": "MAP-51B32EF77E",
+      "question": "Exact history status vocabulary and ordering tie-breaker must align with public protocol schema.",
+      "disposition": "integration-resolved",
+      "evidence": "MAP-51B32EF77E; K02/K03/K07/K11/K12 defines shared history lifecycle/provenance vocabulary and listing completeness.",
+      "resolution": "Accounting uses Working, PartiallyFilled, Filled, Cancelled, Expired, Rejected, UserRejected, Unknown, and Reconciling as public projection vocabulary; a provider emits only states its declared observation leaf can evidence. Local Prepared/PendingSubmit is non-remote pre-dispatch state, final history ordering is newest-first by descending journal sequence with deterministic event-identity tie-breaker after full reduction, and no missing status becomes terminal."
+    },
+    {
+      "id": "MAP-CD50878370",
+      "question": "Venue execution identity/correction semantics remain adapter evidence; unsupported identity stays explicit unavailable.",
+      "disposition": "empirical-retained",
+      "evidence": "order-history.spec.ts:122-168 only proves legacy origin/sync joining; adapter-specific execution/correction identity remains unproven under C10.",
+      "resolution": "Fill identity is accepted only from a declared source-specific identity: a controlled fill carries DispatchId plus the provider-declared broker/execution identity, while a proven external observation carries its provider-declared native/event identity. Until adapter evidence exists, preserve the observation as Unavailable/Unknown and do not deduplicate by array position or fabricate correction."
+    },
+    {
+      "id": "MAP-2A6F3FE722",
+      "question": "Public HistoryContract optional field semantics and derivative canonicalization require protocol evidence.",
+      "disposition": "integration-resolved",
+      "evidence": "MAP-2A6F3FE722; K02/K03/K04/K07 defines HistoryInstrument/InstrumentDescriptor, required derivative fields, and optional projection terms.",
+      "resolution": "HistoryContract is a protocol projection of validated InstrumentDescriptor: required identity/currency and derivative canonical fields are enforced, optional absent terms remain Absent/Unavailable, and display/native symbols are never keys."
+    },
+    {
+      "id": "MAP-66445C2610",
+      "question": "Wire rounding/scale limits must match protocol schema; do not silently quantize in the mapper.",
+      "disposition": "integration-resolved",
+      "evidence": "MAP-66445C2610; K03/K07/K11 requires canonical encoding and boundary decoding; runtime validation remains a boundary obligation.",
+      "resolution": "Wire DecimalString scale/rounding is enforced by the shared schema/codec at the boundary. Accounting does not quantize in the mapper; over-scale, non-finite, or malformed values return ProtocolViolation/InvalidDecimal."
+    },
+    {
+      "id": "MAP-0BC39A0EFF",
+      "question": "Which native order fields are observable on each broker requires adapter capability evidence; unobservable fields must be explicit unavailable.",
+      "disposition": "empirical-retained",
+      "evidence": "order-history.ts:53-68 proves only legacy SDK field handling; ProtocolModels/adapter designs require per-broker capability evidence for native observability.",
+      "resolution": "Native field availability is represented as Present or Unavailable per adapter/schema. An unobservable optional field remains explicit Unavailable; missing required action/identity is Invalid/Unknown and never inferred from a legacy default."
+    },
+    {
+      "id": "MAP-B34D1F5166",
+      "question": "History ordering tie-breakers and status mapping must align with protocol model; no default terminal state.",
+      "disposition": "integration-resolved",
+      "evidence": "MAP-B34D1F5166; K02/K03/K07/K11/K12 supplies history lifecycle/provenance and complete/partial listing semantics.",
+      "resolution": "Use the shared lifecycle vocabulary and sort final rows newest-first by descending journal sequence with a deterministic event-identity tie-breaker after full reduction. Partial/Unavailable listing cannot imply cancel or a terminal state."
+    },
+    {
+      "id": "MAP-0C54B9142F",
+      "question": "Exact tax/reporting treatment for corrections and realized PnL is outside this legacy fold and needs accounting-policy evidence.",
+      "disposition": "design-decided",
+      "evidence": "MAP-0C54B9142F; K03/K05/K08/K11 separates correction facts, realized/unrealized PnL, and broker-reported facts.",
+      "resolution": "Correction/tax reporting is not synthesized by this legacy fold. Confirmed realized PnL requires an explicit closing-fill/basis policy; otherwise correction and realized reporting remain Unavailable/Unattributed while raw facts and broker AccountFacts are preserved."
+    },
+    {
+      "id": "MAP-9B65095C78",
+      "question": "Venue rules for determining externally owned versus UTA-dispatched orders require per-adapter evidence and Complete listing scope.",
+      "disposition": "empirical-retained",
+      "evidence": "order-history.ts:254-263 infers external provenance from Git; C07 and adapter designs require complete per-namespace/listing evidence.",
+      "resolution": "External versus UTA-dispatched provenance must come from durable dispatch/native identity or an adapter observation. If namespace coverage is incomplete or identity is absent, retain Externality Unknown/Unavailable and never infer absence or ownership from a Git scan."
+    },
+    {
+      "id": "MAP-B9E75F067C",
+      "question": "Target module export names and protocol mapper placement must align with the shared source layout.",
+      "disposition": "integration-resolved",
+      "evidence": "MAP-B9E75F067C; K01/K02/K03/K07 defines typed domain exports and protocol projection ownership.",
+      "resolution": "The accounting package exports typed reducers/ports (`valuePosition`, `aggregateAccount`, `evolveCostBasis`) through the market-and-accounting boundary; ProtocolModels owns wire mappers/views, and legacy raw helper exports are removed after callers migrate."
+    },
+    {
+      "id": "MAP-022335DA27",
+      "question": "Derivative multiplier authority and supported fallback per venue must come from capability evidence; no blanket one default.",
+      "disposition": "empirical-retained",
+      "evidence": "position-math.spec.ts:5-60 proves arithmetic only; Identity and broker designs require per-instrument/venue multiplier capability evidence.",
+      "resolution": "Derivative multiplier authority is a capability observation, not a formula default. Until the venue/instrument registry supplies positive evidence, valuation is CapabilityUnavailable/Incomplete; explicit unit multiplier one is accepted only where metadata proves it."
+    },
+    {
+      "id": "MAP-45921BE3BA",
+      "question": "Whether broker-reported unrealized PnL should take precedence over derived PnL is broker/account policy; preserve both until decided.",
+      "disposition": "design-decided",
+      "evidence": "MAP-45921BE3BA; K03/K04/K08 requires preserving BrokerReported and Derived evidence separately.",
+      "resolution": "Broker-reported and derived PnL are both retained; neither silently supersedes the other in Accounting. Consumer policy may choose an authority for a specific decision, while mismatch remains a durable evidence/reconciliation result."
+    },
+    {
+      "id": "MAP-1DD062830E",
+      "question": "Instrument classes for which multiplier one is intrinsic must be enumerated in the capability registry.",
+      "disposition": "empirical-retained",
+      "evidence": "position-math.spec.ts:77-89 only demonstrates the unsafe fallback; MAP-1DD062830E; K02/K03/K04 requires explicit instrument metadata.",
+      "resolution": "The capability registry must enumerate intrinsic unit-multiplier classes per venue. Until enumerated, missing/zero/invalid multiplier remains unavailable and does not become one."
+    },
+    {
+      "id": "MAP-70D15B704F",
+      "question": "Per-broker treatment of short-sale proceeds, margin and collateral requires broker facts; default to explicit policy refusal when absent.",
+      "disposition": "empirical-retained",
+      "evidence": "position-math.spec.ts:91-138 proves one raw aggregation convention only; broker designs and C13 require per-account cash/margin/collateral evidence.",
+      "resolution": "Short proceeds, margin, collateral and fee treatment remain scoped AccountFacts/ExposureAccountingPolicy evidence. Missing broker semantics yields Partial/Rejected or explicit policy refusal; it never applies a global convention."
+    },
+    {
+      "id": "MAP-D53569BA15",
+      "question": "Exact ownership split with Identity group PositionObservation schema must remain synchronized.",
+      "disposition": "integration-resolved",
+      "evidence": "MAP-D53569BA15; K02/K03/K04/K07 assigns canonical PositionObservation decoding to Identity and pure valuation/aggregation to Accounting.",
+      "resolution": "Identity owns the canonical PositionObservation schema and native decoding; Accounting owns valuePosition/cost basis/account aggregation. Changes cross the shared contract and cannot reintroduce IBroker.Position as authority."
+    },
+    {
+      "id": "MAP-A901893CDA",
+      "question": "Decimal scale/rounding and wire encoding must follow shared protocol contract.",
+      "disposition": "integration-resolved",
+      "evidence": "MAP-A901893CDA; K03/K07/K11 defines canonical decimal strings and runtime boundary refinement.",
+      "resolution": "Decimal scale, rounding, sign, units, and wire encoding are enforced by the shared protocol/domain codec; Accounting calculations retain exact Decimal values and return InvalidDecimal/ProtocolViolation rather than silently coercing."
+    },
+    {
+      "id": "MAP-948A6A2A73",
+      "question": "Which optional broker fields can be absent versus required is adapter-specific evidence and must be encoded in capability/schema.",
+      "disposition": "empirical-retained",
+      "evidence": "position-math.ts:35-39 shows a generic fallback; Identity/broker designs state optional-versus-required fields vary by native adapter schema.",
+      "resolution": "Each adapter declares field availability/requiredness in its capability/schema. Missing optional fields become explicit Unavailable; missing required fields fail decoding or valuation, and present zero remains distinct from missing."
+    },
+    {
+      "id": "MAP-147386F739",
+      "question": "Intrinsic multiplier rules for each secType/venue need capability evidence before accepting one.",
+      "disposition": "empirical-retained",
+      "evidence": "position-math.ts:41-46 proves only the unsafe one fallback; per-secType/venue multiplier capability is not in Accounting source.",
+      "resolution": "Intrinsic multiplier acceptance remains capability evidence. Until a secType/venue rule is observed, only explicit positive metadata is accepted; absent/zero/invalid values yield CapabilityUnavailable."
+    },
+    {
+      "id": "MAP-6033F222D1",
+      "question": "Whether broker-reported marketValue/PnL supersedes derived output is policy; expose both evidence variants.",
+      "disposition": "design-decided",
+      "evidence": "MAP-6033F222D1; K03/K04/K08 requires BrokerReported and Derived valuation variants to coexist.",
+      "resolution": "Broker-reported marketValue/PnL is preserved as BrokerReported and derived output as Derived; Accounting never silently supersedes one. A consumer requiring one authority must state policy and receives mismatch/Partial when the pair disagrees."
+    },
+    {
+      "id": "MAP-C33457A353",
+      "question": "Migration must inventory all PnL callers, including hidden protocol/UI paths, before deleting the export.",
+      "disposition": "source-resolved",
+      "evidence": "Repository callers are enumerated by source search: UnifiedTradingAccount.ts:19,1097; brokers/contract-builder.ts:23,136; brokers/ibkr/IbkrBroker.ts:44,734; brokers/mock/MockBroker.ts:36,396; position-math.spec.ts:3; packages/uta-protocol/src/types/broker.ts:130.",
+      "resolution": "The migration inventory is complete for current source callers; all must move to the single typed ValuationResult field projection before removing the raw export. Hidden/UI/protocol use is covered by the protocol mapping boundary, and no caller may recompute raw PnL."
+    },
+    {
+      "id": "MAP-B5B21108F4",
+      "question": "Net liquidation formula and treatment of broker-reported totals versus reconstructed totals must be decided per broker capability.",
+      "disposition": "empirical-retained",
+      "evidence": "position-math.ts:81-118 lacks broker-specific NetLiquidation/margin semantics; IBKR/Longbridge/CCXT designs preserve native account facts but do not prove one universal formula.",
+      "resolution": "Account aggregation retains broker-reported totals and reconstructed Complete/Partial/Rejected variants. Per-broker net-liquidation composition, margin, collateral, and FX authority remain capability/account evidence; a complete derived total is authoritative only when the declared policy and all required scoped/unit/FX evidence are present, otherwise the result is Partial/Rejected."
+    },
+    {
+      "id": "MAP-A318FB662B",
+      "question": "Per-broker short/margin semantics require live adapter/account evidence; no global convention beyond documented policy.",
+      "disposition": "empirical-retained",
+      "evidence": "position-math.ts:95-106 documents one proceeds assumption; broker adapter/account observations are required for short/margin semantics.",
+      "resolution": "Short/margin semantics remain per-broker AccountFacts and ExposureAccountingPolicy. Until cash-proceeds/margin treatment is evidenced, preserve signed facts and return policy refusal/Partial rather than apply a global subtraction."
+    },
+    {
+      "id": "MAP-A50E762BBD",
+      "question": "Exact account equity policy, broker native totals and margin semantics must be reconciled with each broker adapter before replacing current aggregation.",
+      "disposition": "empirical-retained",
+      "evidence": "position-math.ts:107-118 is an in-memory convention; C13 and broker designs require native equity/margin/FX evidence before replacement.",
+      "resolution": "Replacing aggregation requires per-broker equity policy, native total precedence, and margin semantics evidence. Where declared policy and complete scoped/unit/FX facts support derivation, expose the derived result alongside each signed native/broker fact; otherwise preserve those facts and expose Partial/Rejected, never substitute zero, one, or a universal reconstructed total."
+    }
+  ],
+  "remainingCount": 26
+}
