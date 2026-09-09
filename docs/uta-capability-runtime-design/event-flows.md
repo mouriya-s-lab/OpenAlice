@@ -399,7 +399,7 @@ sequenceDiagram
 
 ### EF03 source-specific evidence 与边界
 
-- **IBKR historical**：native request 带 `keepUpToDate`；decoder 发出多条 `historicalData`、单个 `historicalDataEnd`，持续更新通过 `historicalDataUpdate`。因此 `historicalDataEnd` 只能派生 `SnapshotEnd`；在 `keepUpToDate=true` 时不能派生 `Completed`。同一 bar identity 的后续 update 只有在 leaf 声明 correction/revision 语义时才能成为 `Correction`，否则是新的 `Data`/unknown conflict。
+- **IBKR historical**：native request 带 `keepUpToDate`；decoder 发出多条 `historicalData`、单个 `historicalDataEnd`，持续更新通过 `historicalDataUpdate`。因此 `historicalDataEnd` 只能派生 `SnapshotEnd`；在 `keepUpToDate=true` 时不能派生 `Completed`。同一bar key的更新只有在leaf能认证replacement/revision时才成为`Correction`。若声明仅提供独立观测，可用新的observation identity交付`Data`并标明它不替代旧值；不能复制同一event identity却改变payload，也不能伪造revision来覆盖旧bar。相同event identity的冲突按声明进入reconciliation/明确失败政策，未声明可恢复策略时使该次流失败，不隐式选择最后到达值。
 - **IBKR cancel**：`cancelHistoricalData(reqId)` 是 resource-level cancel；只允许在最后 owner 释放后调用。无 native ack 时 attachment 仍结束为本地 `Cancelled`，resource manager 另记 `CancelCleanupDiagnostic`/recovery state；这不是 financial Unknown，也不是新的 data terminal。
 - **RSS news**：现有 collector 是 timer/poll + JSONL ingest，不是 Push protocol。将来若把它包成 Push，必须把每次 poll 的 feed result 声明为 Pull/segment，再由 resource manager产生 Data/ItemFailure；不能因为 `onIngested` callback 存在就声称 provider replay 或 live terminal。
 - **CCXT**：当前 `getHistorical` 是有限 Pull；没有可核实的 native Push/replay/finality 证据，因此 EF03 不为 CCXT 静态 capability 自动添加 live stream。
@@ -441,6 +441,16 @@ source child terminal 与 per-item failure 不是同一变体：`ItemFailure` �
 | `Join` | join key（InstrumentId/AccountScope/source identity 等）、时间关系、缺侧策略、revision policy 明确 | 只按 display symbol、缺侧静默删行、把 unmatched 当 zero |
 | `Revision`/`Correction` | 以 source target identity + new revision 重新计算受影响 projection | 直接改历史 row、不保留旧 source event/lineage |
 
+### EF04 计算构造与消费
+
+按主书§5.4.3，从子 binding、精确单元、业务函数、初态、身份/修订及关闭/失败政策构造同一个 `step_O`。输入帧先经对应子声明解码，计时器或边界也作为明确输入；纯 step 推进 filter membership、window accumulator 或 join candidates，解释器负责交付、持久化及资源释放。schema 与 parser 来自此关联，不从 schema 猜业务函数，也不要求所有算子共用一个 optional-field config。
+
+过滤 close≥100 时，c1=99 不输出，c2=101 输出；可信修订将 c1 改为100，首次产生 `ProjectedItem`，不能发送指向从未输出目标的 `DerivedCorrection`。c2 改为99则撤回已有派生项。充分的成员/来源证据可来自保留状态或声明的完整replacement；证据不足才进入失效/重建，不能假定全量历史永远可回放。
+
+窗口关闭、子源终止与外层终止分别推进各自状态。两源News merge中一源失败、另一源继续时，deadline可关闭一个Partial窗口而保留外层；晚到输入按政策形成新窗口revision。外层终止后不再向该invocation交付修订，但持久projection可由合法存活owner或新调用更新同一稳定身份。释放只作用于该operator自己的attachment，不关闭其他owner共用的原生资源。
+
+账户/FX join沿相同关系消费币种、scope、时间及双侧lineage：缺FX不补零；汇率修订重算估值，币种改变使旧pair失效并构造新后继查询。这些派生结果不创建订单或授权，估值例见主书§5.4.3、§13.5。
+
 ### EF04 派生事件/消息表
 
 | 类型 | 类别 | 派生 payload | 生产者 → 接受者 | identity/顺序/终态 | 失败/恢复 |
@@ -452,7 +462,7 @@ source child terminal 与 per-item failure 不是同一变体：`ItemFailure` �
 | `DerivedCorrection`/`DerivedRetraction` | derived nonterminal event | affected derived id/revision、source target event、new lineage/reason | Operator → projection/subscriber | target derived identity + revision；不能删除 source event | source correction without original => reconciliation candidate |
 | `CompositeGap` | derived nonterminal event | source partition/range、missing child lineage、impact set、recovery plan | Operator → projection/subscriber | gap belongs to composite partition; no global SourceClosed | unresolved gap prevents Complete; resync/query can rebuild |
 | `CompositePartial`/`OperatorFailed` | outcome/diagnostic | child `MemberOutcome{sourceBinding,terminal,failure}`（仅 partial-result profile）、policy、coverage、terminal decision | Operator → projection/caller | outer terminal only from declared composite policy；closed child never resumes，terminal 只选择一次 | explicit partial profile => Partial output；per-item recoverable error 才能是 ItemFailure；default/unhandled child Failed => outer Failed |
-| `ProjectionCheckpoint` | committed evidence | input child positions/transport seq, source generations, operator revision, output commitSeq | Projection writer → recovery | checkpoint is local durable barrier, not provider cursor unless declared | writer failure leaves stale checkpoint; source event stays intact |
+| `ProjectionCheckpoint` | committed evidence | input child positions/transport seq、source generations、operator revision、output commitSeq及支持修订的成员/窗口/配对状态或合法重建证据 | Projection writer → recovery | checkpoint是本地持久边界，不自动成为provider cursor；修订关系不假定全序 | writer failure保留旧checkpoint；缺充分证据则失效/Unavailable，不捏造replay |
 
 ### EF04 时序
 
@@ -543,7 +553,10 @@ EF05 把普通 data read 与可持久化证据分开：只有调用者显式发�
 - Snapshot owner 只消费 immutable `AccountFacts`、`PositionExposure`、`OrderHistory` projection 与 selected `FxObservation`，生成 `SnapshotCaptureResult = Captured | Partial | Unavailable | Invalid`；snapshot 是 query projection，不是 execution authority。
 - FX owner 只产生带 pair/rate/source/observedAt/receivedAt/asOf/quality/coverage/revision 的 `FxObservation`。同币种 `Identity` 是合法 value；跨币种 `Confirmed | Estimated | Stale | UnknownFx | Unavailable` 不能被静默提升。
 - Valuation owner 是 pure reducer/projection：live valuation 可只是 transient/read-only projection，输出带 AccountScope、InstrumentId、currency/multiplier、source lineage、coverage/freshness 的 `AccountValuation`；只有显式 capture/decision-evidence 才由 writer 原子提交 selected evidence 与 projection metadata。它不能产生 reservation/approval/dispatch。
+- 持续估值按主书§5.4.3形成读取闭环：账户currency revision进入纯step，旧pair失效；step通过绑定的输入构造返回`FxLookupRequested`工作与等待关系，解释器执行精确FX Query，再把关联的`FxObservation`或失败回注同一step。工作保存输入revision、pair/scope/asOf和request identity；迟到EUR结果不能满足当前JPY等待。该读工作不是对外Data，更不是交易意图；仅持久恢复承诺需要相应checkpoint/工作记录。
 - OrderSync owner 的 decoder/provider 先产生 raw `OrderObservation`、`FillEvent` ExternalFact；writer 验证后才产生 `OrderObservationRecorded`、`FillEventRecorded`、`ReconciliationEvent`。它不能生成 `DispatchStarted`、`PermissionGranted`、`OrderSubmitted` 或任何 financial dispatch。稳定 fill identity 可以是 native execution id 或 declaration-certified equivalent provider identity；没有稳定 identity 的状态只能是 unresolved/unknown，不能合成 fill。
+
+Capture/OrderSync的公开管理入口由主书§7.4的Observation owner声明产生，保留其独立接纳、最终结果及阶段失败；不是在交易Controlled下塞空Recipe。目录发现不取得Observation写权，普通行情Pull仍不自动变成capture。
 
 ### EF05 事件/消息表
 
@@ -611,6 +624,19 @@ sequenceDiagram
     Snap->>View: SnapshotCaptureResult(Captured|Partial|Unavailable|Invalid)
     Note over Snap,View: Snapshot/FX/OrderSync 不产生 DispatchStarted、reservation、approval 或 financial dispatch
 
+    opt 存活账户Feed修订currency为JPY
+        Data-->>Val: Account correction（旧EUR匹配失效）
+        Val->>Val: pure step构造JPY/USD读取工作及等待关系
+        Val->>FX: 解释声明Query（pair、asOf、account revision、request identity）
+        FX-->>Val: 关联FxObservation或typed failure
+        alt 当前等待关系仍匹配
+            Val->>Val: pure step消费结果并重建valuation revision
+            Val-->>View: 当前调用的派生结果及lineage
+        else 旧请求迟到或输入已再次修订
+            Val->>Val: 不推进当前分支；按声明保留历史/诊断
+        end
+    end
+
     Data-->>Order: late Fill(source revision newer than cancel)
     Order->>Writer: RecordFill + RecordReconciliation commands(correction lineage)
     Writer->>Writer: 原子提交 FillEventRecorded、ReconciliationRecorded 与 decision projection
@@ -664,7 +690,7 @@ sequenceDiagram
 1. `Prepare` 是纯 compiler/decision；不调用 SDK、不启动 Promise、不消费 execution reservation。
 2. `Approve`（或已验证的 delegated approval）才可能在 writer 当前 progressive state 上绑定 approval、reservation、job/outbox 与 receipt；`RequestSubmission` 只请求资格/进入批准路径，不能绑定 approval。
 3. fresh `Start` 才能提交 immutable attempt/`DispatchStarted` 并签发 process-bound、one-use `DispatchGrant`；重复/query Start 只返回 `AlreadyStarted`。
-4. `DispatchStarted` 后的 response loss、crash、timeout、lease expiry 必须由 writer 读取已有 observation/criterion 决定：证据不足时进入 `OutcomeUnknown`/`RecoveryRequired`，已有可靠 criterion 时只追加 transport-loss 诊断并保留结论；普通同步、listing、投影不能创建第二 attempt。
+4. `DispatchStarted` 后的 response loss、crash、timeout、lease expiry 必须由 writer 分别读取业务 criterion、attempt 的原生证据与恢复责任：尝试当前状态已有充分证据时保留原结论；否则进入 `OutcomeUnknown`/`RecoveryRequired`，但不因此推翻已经成立的业务目标。criterion 满足不独自决定控制终态；普通同步、listing、投影不能创建第二 attempt。
 5. reservation 只有在 no-effects/terminal/recovery-owner handoff 有具名证据时才能释放。
 
 ### 设计依据与旧行为证据
@@ -688,8 +714,8 @@ sequenceDiagram
 接纳与准备是两个阶段：
 
 1. writer 在短事务内提交 `Event(A, IntentAccepted, A.intent)`、intent revision、receipt 和 `PrepareWork`。`A.intent` 是 recipe 的 intent slot；receipt 只在 commit 后返回。
-2. trusted Read Interpreter 在 writer 外按 prepared work 读取 provider/data facts，并运行纯 compiler 与 declaration-bound guards。它不改变 UTA authority，也不把网络调用放进 writer。
-3. interpreter 以 `RecordPrepared`（带 plan digest、prepared payload、fact/evaluator evidence、expected intent revision）回到 writer。writer 只做版本/CAS、binding/slot 校验与原子记录；成功时提交 `Event(A, PlanPrepared, A.prepared)`。版本已变化时返回 stale result，要求按当前 intent 重新读 facts/prepare，不能覆盖新 revision。
+2. trusted Read Interpreter 在 writer 外按 prepared work 读取 provider/data facts，并运行纯 compiler 与 declaration-bound guards，得到候选准备值和 evidence。它不改变 UTA authority、不消费 execution reservation，也不把网络调用放进 writer。
+3. interpreter 以 `RecordPrepared`（带 plan digest、prepared payload、fact/evaluator evidence、expected intent revision）回到 writer。writer 核验版本/CAS、binding/slot/digest 及继承依据后原子保存 `Event(A, PlanPrepared, A.prepared)`，不将候选 guard 通过解释为当前风险准入。版本或依据已变化时返回 stale result，不能覆盖新 revision；后续准入仍消费第6.4节的当前状态 barrier。
 4. `RequestSubmission` 只是请求检查资格/进入批准路径；它不是 `Approve`。只有匹配 plan digest、scope、expiry 与 policy 的真实 approver 命令，才可提交 ApprovalBinding。没有 approver witness 时，writer 提交/返回 `AwaitingApproval` control result，不产生 `ApprovalBound`。
 
 ### 6.2 输入类型、producer/consumer 与控制事件
@@ -754,8 +780,9 @@ sequenceDiagram
       Writer-->>Caller: AwaitingApproval
     else matching Approve(actor, policy, expiry)
       Approver->>Writer: Approve(planDigest, scope, policy, expiry)
-      Writer->>Store: CAS plan + ApprovalBinding
-      alt expiry/digest/revision/reservation冲突
+      Writer->>Store: 读取当前plan、policy、共享额度及完整声明read-set
+      Writer->>Writer: 以当前local state重算guard或核验等价precondition
+      alt expiry/digest/revision/依据/风险precondition冲突
         Writer->>Store: ApprovalRejected/Expired(control schema)
         Writer-->>Approver: typed control failure
       else valid approval
@@ -773,7 +800,8 @@ sequenceDiagram
 - 同一 `commandId + canonical payload + principal/scope` 的 `SubmitIntent` 重试返回同一接纳 receipt；相同身份但不同 binding、scope、revision 或 input digest 返回 `IdempotencyConflict`。
 - caller 不能把 `price/position/balance/permission/source generation` 填进 command 作为事实。Read Interpreter 必须从已认证 provider/data scope 取 facts，并带 source identity、generation、as-of 和 completeness；网络错误在 writer 外成为 typed failure。
 - `RecordPrepared` 是独立版本 CAS。writer commit 后 intent 已经变成新 revision 时，迟到 prepared 只能得到 stale/conflict；不能拿旧 facts 覆盖新 plan，也不能回到 caller 重新批准旧摘要。
-- guard 评估顺序属于声明；前 guard 的 cooldown、风险占用或 evaluator 状态不能在后 guard reject 时泄漏。候选 evidence 可随 failure/prepared 保存，但 execution reservation 只能在有效 approval 的原子写集中消费。
+- guard 顺序属于声明；前 guard 的 cooldown、风险占用或 evaluator 状态不能在后 guard reject 时泄漏。上图展示 approval-bound 消费政策；若规则声明在 `DispatchStarted` 消费，则将对应 barrier 和消费写集放到 EF07 的 Start 决定。两者都须以当前 local state 重算同一纯 evaluator 或核验完整的等价 read-set，原子消费共享范围内的 reservation/状态；只比较各自 intent revision 不足以防止重复占额。远端事实仍由 writer 外取得，事务内核验声明的来源、freshness、版本及失效条件，不宣称远端原子性。
+- barrier 冲突后重新读取、重新决定，不能直接重放旧 Prepared 的 guard 结论。失败不授予该步新 reservation/job/grant 或成功准入 receipt，但允许 typed rejection/等待状态及先前意图的查询记录；消费触点和 release/expiry/retry 由声明定义。
 - writer storage commit 失败时不能返回成功 receipt、不能创建 job、不能向 provider dispatch。`PrepareFailure` 不等于 `ApprovalRejected`；两者分别由 prepare interpreter 与 control writer 解释。
 - `RequestSubmission` 仅产生 `AwaitingApproval` 或进入已授权 approver 的控制路径；任何“命中了规则”的 ExternalFact、AI text 或 UI button 都不替代 `Approve`。
 - `ApprovalBinding` 过期、review `Keep`、CLI 退出只冻结控制；尚未 started 时可显式 `Retire/Discard` 并释放未执行 reservation，started 后转 EF07 observation/recovery。
@@ -784,24 +812,24 @@ sequenceDiagram
 
 ### 7.1 Dispatch identity、recipe payload 与 control schema
 
-EF07 的 `Start` 不是外部 approver/caller 直接调用的公开入口。批准后的 `DispatchPlanned` control event 由 scheduler/私有 worker 消费；scheduler 或 worker 向 writer 请求 `Start`，writer 在当前 approval binding、job lease/epoch、scope 与 expected control revision 上做 CAS。成功后 writer 先提交 `Control<A.binding, scope, DispatchStarted>`，再向同一个私有 worker 交付一次性 grant。
+EF07 的 `Start` 不是外部 approver/caller 直接调用的公开入口。批准后的 `DispatchPlanned` control event 由 scheduler/私有 worker 消费；scheduler 或 worker 向 writer 请求 `Start`，writer 在当前 approval binding、job lease/epoch、scope 与 expected control revision 上做 CAS。若工作来自 deferred control，还须在同一决定中消费其仍有效的激活依据，不能只检查与 review 失效无关的 job revision。成功后 writer 先提交 `Control<A.binding, scope, DispatchStarted>`，再向同一个私有 worker 交付一次性 grant。
 
 表中区分三类东西：A recipe 的 `intent/prepared/ack/observation` 只承载相应 declaration slot；`Control<A.binding, scope, ...>` 是内核控制 schema 关联 A，不伪造原 recipe 不存在的 slot；`ExternalFact<A, ack|observation>` 是 Provider 产生的原始事实。原始事实被 writer 接纳后，才产生 committed `AckRecorded`/`ObservationRecorded`。
 
 | 事件/工作说明 | producer / consumer | source-vs-target state | 顺序、唯一性与失败 |
 |---|---|---|---|
 | `Control<A.binding, scope, DispatchPlanned>` | UTA writer / scheduler | plan ready、尚未发送 | 可重建 queue；不能作为 send 证据；scheduler lease 不是 grant。 |
-| `Start` command | scheduler/private worker / UTA writer | queued plan + job lease/epoch | writer 只在当前 approval binding、scope 与 expected revision 校验后决定是否提交 started transition。 |
+| `Start` command | scheduler/private worker / UTA writer | queued plan + job lease/epoch | writer 同一决定检查当前批准、scope、expected revision 及该工作实际依赖的控制依据；已失效依据不得产生新 started transition。 |
 | `Control<A.binding, scope, DispatchStarted>` | UTA writer / private worker、recovery owner | `NotStarted -> Started`，AccountScope + attempt | fresh CAS 一次；同一 plan revision 一个 attempt owner；重复 Start 只有 `AlreadyStarted`。 |
 | `Work<A,start>` `DispatchGrant` | writer / private worker interpreter | process-bound ephemeral | writer commit 后才交付；一次消费，不持久化、不由 query 重建。 |
 | `ExternalFact<A,ack>` raw `Ack`/`KnownRejection` | Provider（raw fact producer）-> private worker receives / writer | native response boundary | worker 只能把原始证据带回 writer；不能自行提交 UTA 状态。 |
 | `Control<A.binding, scope, AckRecorded>` carrying `A.ack` | UTA writer / control query、audit | attempt aggregate | 仅 writer 在 `RecordAck` CAS 后提交；ack 不是 fill/cancel/finality。 |
 | `ExternalFact<A,observation>` raw `Fill`/`Working`/`Cancel` | Provider（raw observation producer）-> observer receives / writer | native identity + source revision | 可先于 ack 到达，保留 source sequence/identity。 |
 | `Control<A.binding, scope, ObservationRecorded>` carrying `A.observation` | UTA writer / criterion/recovery | attempt + native identity | 仅 writer 提交；不覆盖较新的 observation，不因迟到 ack 回退。 |
-| `Control<A.binding, scope, OutcomeUnknown>` | UTA writer / recovery owner | started but boundary uncertain | 只有现有 observation/criterion 不足以决定时才成立；保留 reservation/conflict owner。 |
+| `Control<A.binding, scope, OutcomeUnknown>` | UTA writer / recovery owner | started but boundary uncertain | 该尝试的现有原生证据不足以确定当前结果；可与已满足的状态目标并存，保留 reservation/conflict owner。 |
 | `HistoryResolveWork` / resolver result | writer / scoped history resolver | known native/client identity | WorkDescription 与 ExternalFact 分开；`Found`、`AbsentWithEvidence`、`Partial/Unavailable`、`Ambiguous`、`Malformed` 分开，空 listing 不是 absence。 |
-| `Control<A.binding, scope, CriterionSatisfied/Rejected>` | UTA writer after typed evidence / audit/control query | criterion state | kernel control event；只在声明 success evidence 满足后终态，不能由旧 `OrderState` 投影直接 settlement。 |
-| `Control<A.binding, scope, RecordTransportLoss>` | UTA writer / recovery query | response channel lost | 必须先读取已有 committed observations/criterion；已有充分证据时保持终态，不无条件降级为 Unknown。 |
+| `Control<A.binding, scope, CriterionSatisfied/Rejected>` | UTA writer after typed evidence / audit/control query | criterion state | 更新业务判据；控制结案另检查本次尝试的解析、未决工作与责任结清/原子移交，不能由旧 `OrderState` 或这个判据事件直接 settlement。 |
+| `Control<A.binding, scope, RecordTransportLoss>` | UTA writer / recovery query | response channel lost | 先读取已有 committed observations、criterion 与 attempt 状态；保留已有充分证据支持的 working/终态，不无条件降级为 Unknown；业务目标满足也不消去尚未解析的尝试。 |
 
 ### 7.2 发送与先到观察时序
 
@@ -828,7 +856,12 @@ sequenceDiagram
       Observer->>Writer: RecordObservation(A.observation, native identity, source revision)
       Writer->>Store: ObservationRecorded(A.observation)
       alt observation已满足criterion
-        Writer->>Store: CriterionSatisfied（不等待Ack）
+        Writer->>Store: CriterionSatisfied（业务目标，不等待Ack）
+        alt attempt与控制责任满足结案条件
+          Writer->>Store: 提交控制终态及解析或原子移交证据
+        else 目标满足但尝试或责任未解决
+          Writer->>Store: 保留criterion；Observe/Recovery work与相应reservation
+        end
       else 仍需更多证据
         Writer->>Store: 创建Observe/HistoryResolve work
       end
@@ -840,9 +873,9 @@ sequenceDiagram
     alt response channel loss / process crash / timeout
       Worker-->>Writer: RecordTransportLoss(attempt identity)
       Writer->>Store: 读取已有ObservationRecorded/Criterion与attempt state
-      alt 已有充分observation/criterion
-        Writer->>Store: RecordTransportLoss（保留Criterion/Exposure，不降级）
-      else evidence不足
+      alt attempt当前状态已有充分原生证据
+        Writer->>Store: RecordTransportLoss（保留已知状态及Criterion/Exposure）
+      else 尚不能确定attempt结果
         Writer->>Store: OutcomeUnknown + RecoveryCase + HistoryResolveWork/outbox + 保留reservation
         Store-->>Writer: committed
         Writer->>Observer: scoped lookup/history request（仅在work已commit后）
@@ -856,7 +889,7 @@ sequenceDiagram
 ### 7.3 先到观察、运输损失和旧解释器
 
 1. **fill 先于 submit ack**：raw `FillObservation` 由 Provider 产生，经 observer 送给 writer 后提交 `ObservationRecorded(A.observation)`；后到 raw ack 只能提交 `AckRecorded(A.ack)`，不能把已观察的 fill 回退为 `Submitted`。
-2. **criterion 先于 ack 通道损失**：如果 writer 已经提交足够 observation 并记录 criterion，随后 worker 报告 response/ack channel loss，只记录 `RecordTransportLoss`/diagnostic 并保留现有 criterion、exposure 与 recovery lineage；不能无条件补写 `OutcomeUnknown`。只有现有证据不足时才进入 Unknown。
+2. **criterion 先于 ack 通道损失**：writer 保留已成立的业务判据，再独立读取该尝试的原生证据。已有充分证据支持 working 或终态时，通道损失只追加 `RecordTransportLoss`，不将它退回 Unknown。只有状态目标满足、仍不知道本次尝试结果时，则保留该目标结果，同时继续 Unknown/recovery。是否控制结案还需本控制的未决责任已结清或原子移交。
 3. **unknown 与 not-found 分离**：`GET` 超时、分页不完整、旧 clientId 不可见、listing 不是完整 namespace，都只能产生 `Unknown/Partial/Unavailable`。只有 provider declared 的 complete absence evidence，且发送窗口/identity 条件满足，才可结案为未产生效果。
 4. **解释器不可用**：`DispatchStarted` 或 Unknown 后，使用计划保存的 provider instance/capability revision/schema digest/interpretation identity；当前目录删除或新版本加载失败时为 `RecoveryRequired`，不能用当前 compiler reprepare 或新 salt 发送。
 5. **当前旧行为的警示**：`TradingGit.push` 的 remote callback 在 snapshot/persist 之前执行（`TradingGit.ts:141-179`）；legacy 明确要求缺 `DispatchStarted` marker 不能被当成 no-start（`LCORE-JOURNAL-OUTBOX`、`LTX-JOURNAL`）。
@@ -946,19 +979,19 @@ sequenceDiagram
       alt response loss or unknown
         Worker-->>Writer: RecordTransportLoss(mutation attempt)
         Writer->>Store: 读取既有observations/criteria后决定
-        alt 已有充分criterion
-          Writer->>Store: RecordTransportLoss（保留该criterion与exposure）
-        else evidence不足
+        alt attempt当前状态已有充分原生证据
+          Writer->>Store: RecordTransportLoss（保留既有状态、criterion与exposure）
+        else 尚不能确定attempt结果
           Writer->>Store: OutcomeUnknown + RecoveryRequired + 保留reservation
           Writer->>Recovery: scoped lookup/position reconciliation（原attempt identity）
         end
       else mutation-specific evidence
         alt Cancel + NoFurtherWorking
-          Writer->>Store: CancelCriterionSatisfied；释放cancel reservation，保留既有fill/exposure ledger
+          Writer->>Store: CancelCriterionSatisfied；核对attempt解析与责任后释放相应reservation，保留fill/exposure
         else Replace + declared replacement criterion
-          Writer->>Store: ReplaceCriterionSatisfied；按amendment evidence收口
+          Writer->>Store: ReplaceCriterionSatisfied；按amendment解析与责任条件结案或继续recovery
         else Close + declared close/exposure criterion
-          Writer->>Store: CloseCriterionSatisfied；按close evidence收口
+          Writer->>Store: CloseCriterionSatisfied；另按attempt解析与责任条件结案或继续recovery
         else evidence不足或仍working
           Writer->>Store: 保留相应reservation，进入observe/recovery
         end
@@ -973,6 +1006,7 @@ sequenceDiagram
 - **mutation criterion 不互换**：Cancel 的 `NoFurtherWorking` 不是 flat exposure；Replace 必须满足 amendment/provider-version criterion，Close 必须满足 declared close/exposure criterion。部分成交后的 cancel 可以收口已发出的剩余工作，但既有成交、敞口与费用继续由 Exposure/Accounting 记录，不能因 cancel=NoFurtherWorking 擦除。
 - **replace 是新 revision**：旧 plan/approval 不被原地修改；新 amendment 的 before-image、provider version、scope 与 criterion 独立绑定。迟到的旧 revision 观察只能以 lineage 写入，不可覆盖新的 control state。
 - **close 先做 scoped exposure preflight**：当前 UTA 的 `_assertCloseQuantityWithinPosition` 读取最新 position 并拒绝超过 available quantity，这是 legacy 行为锚点；目标协议将其提升为 typed `ExposureEvidence` + writer CAS，不把未验证的 venue `reduceOnly`、atomic close 或 inverse order 当作 host 保证。
+- **状态目标不是成交归因**：同范围长仓由10变6，可能是本次Close减4，也可能是其他参与者减4。本关联的状态目标可以满足，而要求本次执行归因的判据仍缺证据；两者都不能授权盲重发。原attempt仍可能产生后续效果时，保存已满足的目标与未解决尝试，继续恢复，不让状态投影释放责任。
 - **unknown 不释放锁**：post-start unknown、部分成交、listing gap、position unavailable 都保留 recovery owner。cancel attempt 的 `NoFurtherWorking` 只可释放该 mutation 的 reservation；未解决 exposure lock/敞口账不能因此释放。只有 conclusive no-effect/terminal evidence 或明确的 recovery handoff 才能释放相应责任。
 - **普通同步隔离**：账户 snapshot/order listing 是 observation source；`SyncReconcile` 可以帮助 resolve 已存在 unknown，但不能创建 cancel/close attempt，也不能把 `OrderState` 的字符串 status 直接折叠成 terminal。
 
@@ -987,7 +1021,7 @@ Batch 只是在 UTA 控制上下文中的 policy coordinator，不是新增通�
 | policy variant | 子项提交与终态 | 失败、补偿与 reservation |
 |---|---|---|
 | `IndependentBatch` | coordinator 先提交 `Control<Batch, BatchRegistered>`，随后每个 child 分别走 `SubmitIntent -> IntentAccepted -> Prepare -> Approve/awaiting -> Start`；一个 child 的 commit、approval 或 rejection 不和另一个 child 绑成全组原子事务。 | 一个 child 成功不回滚其他 child；已知拒绝按每 child policy 处理；未开始 child 可退休并释放其未执行 reservation；Unknown child 仍由自身 recovery owner 处理。 |
-| `AllOrCompensate` | `Control<Batch, GroupPolicyBound>` 先声明本地组约束、成员集合、失败策略和允许的 compensation grade；child 仍有独立 recipe/receipt，但只有满足 group constraint 后才允许整组进入 dispatch。 | 如果 policy 要求自动补偿，`None` 不是可接受 grade，接纳时拒绝；已成交不能抹去；compensation 是新受控 recipe，有自己的 approval、attempt、Unknown、observation。 |
+| `AllOrCompensate` | `Control<Batch, GroupPolicyBound>`冻结成员集合、各成员目标/保证及证据、组目标、失败/Unknown与释放政策；child保持独立recipe/receipt，满足组约束后才进入dispatch。 | 所需自动补偿保证缺失（包括相应成员None）时接纳失败；等级不取min/max。补偿为新受控recipe，原成交不抹去；见主书§10.4成员保证构造。 |
 | `VenueNativeAtomic` | 只有 provider/作用域/操作组合存在 `NativeConformanceRecord` 时，才把 native group request 交给该 provider leaf；group result 仍按 provider exact ack/observation slot 解码。 | 未验证原子语义时，**requested policy** 返回 `ConformanceRequired/Unavailable`，不把它当作结构缺失；调用者可明确改选 `IndependentBatch` 或 `AllOrCompensate`，不能因“同一批 request”宣称 atomic。 |
 
 #### 9.1.1 组合事件、slot 与 producer
@@ -996,14 +1030,14 @@ Batch 只是在 UTA 控制上下文中的 policy coordinator，不是新增通�
 |---|---|---|---|
 | `SubmitBatch` command | 已认证 caller / Batch Policy Coordinator | `BatchId`、成员 command identities、policy | 不携带成员 Provider facts；只注册组关系并按 policy 分派 child commands。 |
 | `Control<Batch, BatchRegistered>` | UTA writer / coordinator、progress reader | batch membership + policy revision | 成员关系与 policy control 在 writer 提交；不代表任何 child 已 prepared/approved。 |
-| `Control<Batch, GroupPolicyBound>` | UTA writer / coordinator | AllOrCompensate 的 required members、failure policy、compensation grade | 只在本地组约束可验证时提交；`None` 在要求自动补偿时拒绝。 |
+| `Control<Batch, GroupPolicyBound>` | UTA writer / coordinator | required members、每成员target/claim及证据引用、group target、failure/Unknown/release policy、policy revision | 纯bindGroupPolicy核对保证/目标/证据与组输入构造；writer冻结本次关联，缺保证不降级接纳。准入不伪造未来ExposureEvidence。 |
 | `E<A,intent>` / `E<A,prepared>` child events | 各 child writer / 各 child prepare/approval owner | 每个 child 的 recipe binding、scope、plan digest | IndependentBatch 各自接纳/receipt；AllOrCompensate 也保留成员独立 revision，不伪造 group payload。 |
-| `Control<Batch, ChildProgress>` | UTA writer / coordinator | child status、ack/observation/criterion lineage | 由 writer 按 child committed event 更新；未知/部分失败保留，不把 batch summary 当 native fact。 |
+| `Control<Batch, ChildProgress>` | UTA writer / coordinator | child criterion、attempt resolution、ExposureEvidence（含coverage/uncertainty）、reservation disposition及恢复责任引用 | 各成员按自身绑定消费者从committed evidence形成多轴product；coordinator消费它推进组状态，不把batch summary当native fact或成功布尔值。 |
 | `Control<Batch, GroupReady>` | UTA writer / child control readers | AllOrCompensate group gate | 所需 child 的独立 approval/reservation 满足后提交；再允许 scheduler 分配各 child attempt。 |
 | `Control<Batch, BatchCompensationRequired>` | UTA writer / compensation owner | actual exposure + failed child criterion | 只按 observed exposure 创建新的 compensation work；不能直接调用旧 inverse。 |
-| `E<C,compensation>` prepared payload / compensation work | trusted compensation compiler/interpreter -> writer | compensation recipe 的自身 prepared/attempt input | work/slot 由 interpreter 构造；committed control 仍须由 writer 校验并提交，不直接写 batch authority。 |
-| `Control<Batch, CompensationProgress>` | UTA writer / batch coordinator | compensation attempt/observation | compensation 另有 approval、DispatchStarted、Unknown 与观察；原 child reservation 在确认前保留。 |
-| `Control<Batch, GroupSatisfied/RecoveryRequired>` | UTA writer / audit/projection | batch terminal or recovery ownership | 逐 child evidence 完成或交给 recovery owner；Git/projection 写入失败不能重发 child。 |
+| `CompensationCandidate<A,C>` work description | A的补偿规划及目标输入构造 / UTA writer | A.CompensationPlan、所选C.binding、C.Intent及原敞口/责任引用 | 按主书§10.4固定或动态构造C.Intent；这不是C.Prepared，更不是C自身的compensation槽。writer接纳后由C自己的prepare产生`E<C,prepared>`，保留独立批准/恢复。 |
+| `Control<Batch, CompensationProgress>` | UTA writer / batch coordinator | C的目标化criterion、attempt resolution、ExposureEvidence、reservation/recovery及原成员责任引用 | 按冻结保证/残余政策消费；C有独立approval、Start、Unknown和观察，目标满足不自动释放原责任。 |
+| `Control<Batch, GroupSatisfied/RecoveryRequired>` | UTA writer / audit/projection | batch terminal or recovery ownership | 按组政策满足目标且成员责任已结清或原子移交，才可结案；移交保留未决attempt与风险。Git/projection 写入失败不能重发 child。 |
 
 ### 9.2 组合时序与故障分支
 
@@ -1062,8 +1096,9 @@ sequenceDiagram
     Coordinator->>Writer: RecordBatchProgress(success/rejected/Unknown)
     Writer->>Store: ChildProgress（成功、拒绝、Unknown分别保留）
   else AllOrCompensate
-    Coordinator->>Writer: BindGroupPolicy(compensation grade, failure policy)
-    alt policy要求compensation但grade=None
+    Coordinator->>Writer: BindGroupPolicy(member targets/claims/evidence, group target, failure policy)
+    Writer->>Writer: 核对目标保证相容及组输入构造，冻结policy关联
+    alt 所需保证缺失、证据不足或目标/构造不相容
       Writer->>Store: GroupPolicyRejected（不创建child dispatch）
       Writer-->>Coordinator: typed policy failure
     else group policy有效
@@ -1090,8 +1125,10 @@ sequenceDiagram
       end
       alt child failure or actual exposure violates group criterion
         Writer->>Store: BatchCompensationRequired + exposure snapshot
-        Writer->>Comp: new compensation intent/plan request（独立C recipe）
-        Comp->>Writer: SubmitIntent(C) + PrepareWork
+        Writer->>Comp: 原成员Prepared、ExposureEvidence及Policy引用
+        Comp->>Comp: planCompensation后按声明选C并构造C.Intent
+        Note over Comp,Writer: 缺合法输入构造或等级证据则失败/恢复，不提交C\nC不是A的Prepared或旧grant
+        Comp->>Writer: SubmitIntent(C.binding, C.Intent, 原责任引用)
         Writer->>Store: C IntentAccepted + receipt + PrepareWork
         Comp->>Writer: RecordPrepared(C.prepared, expectedVersion)
         Writer->>Store: C PlanPrepared（writer CAS）
@@ -1105,8 +1142,8 @@ sequenceDiagram
         CompWorker->>Writer: RecordAck/Observation(C)
         Writer->>Store: CompensationProgress + exposure snapshot
         Writer->>Store: 只按已观测敞口更新BatchProgress
-      else all child criteria satisfied
-        Writer->>Store: GroupSatisfied（保留每 child evidence）
+      else 所有child判据满足且各责任具备结清或原子移交证据
+        Writer->>Store: GroupSatisfied（保留child判据、attempt解析与责任移交证据）
       end
     end
   else VenueNativeAtomic
@@ -1133,6 +1170,7 @@ sequenceDiagram
 - **native conformance 是 policy availability，不是结构缺失**：没有证据不能执行 `VenueNativeAtomic` 这一个 policy；仍可在明确 policy 变更后走 non-atomic child flows。父 ack 不代表子 leg fill，group complete 也必须由 provider exact observation slot 解释。
 - **reservation 释放按责任归属**：未开始且 conclusive no-effect 的 child 可释放；started/unknown child 由 observation/recovery owner 持有。projection、Git export、batch summary 不改变权威状态。
 - **已知拒绝与 Unknown 分开**：`ContinueOnKnownRejection` 只能处理 typed known rejection；Unknown 必须走 recovery/observe-before-retry，不得由 catch continuation 偷换为拒绝或继续发送。
+- **补偿消费多轴成员证据**：A partial 4/6、B started Unknown 时，保留 A 的已知4与B的未知敞口；没有允许不确定性下补偿的明确政策及充分证据，先 recovery，不把B当零。即使B后来证实无效果，仍须处理A可能继续成交的责任，再构造独立补偿Recipe。业务criterion满足不替代attempt解析、敞口约束及责任解决/移交；见主书§10.4的成员构造。
 
 <a id="ef10"></a>
 
@@ -1141,6 +1179,10 @@ sequenceDiagram
 ### 10.1 Deferred relation、事实与控制事件
 
 `DeferredInvocation` 关联一个未开始 `IntentRevision`、一个 live activation owner、source binding 集合、纯 predicate 版本、checkpoint schema、future boundary、expiry、冻结 disposition 与 decision channel。它是“何时把受控意图交给下一种处置”的关系，不是新的 Order 类型。
+
+同一操作数如何产生初态、普通进展、支持依赖、请求/回复与历史消费者，见[主书11.1.1](../uta-capability-runtime-design.md#deferred-construction)。C/E 的 schema 不生成业务初态或语义依赖；P 提供这些纯构造，deferUntil 保存并解释同一关联。NoActivation 只是不提出激活，不证明谓词 false；正常成员积累或未知结果可以保留在 checkpoint，不自动成为 Gap。
+
+同D还构造激活生命周期消费者：FutureBoundary是本epoch的未来起点，expiry/可信终点另由声明的Clock或S完成/barrier输入触发。持续未命中但到达截止时，按冻结政策SuspendControl、CloseWithoutDispatch或EscalateDecision，不伪造Candidate/Gap。Close需writer在同一决定核验not-started、当前epoch/版本并提交owner retirement与原因；Start先赢则保留attempt/恢复。只到本地deadline不证明整个市场历史无命中；子流Completed也不自动结束组合S。
 
 这里把 source/channel 输入和 UTA committed event 分开：Source/Data owner 产生 `ExternalFact`（data item、correction、retraction、gap）；Alice/Agent 产生 `ApplyDecision` command。`CorrectionApplied`、`RetractionApplied`、`CheckpointAdvanced`、`ReviewRequestCreated`、`DecisionApplied` 等 committed DomainEvent 的 producer 只能是 UTA writer；它们的 payload 带 source ref、evidence ref 或 response command 的关联，但不把 source/channel 当作本地提交者。
 
@@ -1152,15 +1194,15 @@ sequenceDiagram
 | `Control<Deferred, ActivationCandidate>` | UTA writer / disposition evaluator | selected evidence，尚未授权 dispatch | 只能由 writer 在 checkpoint/evidence 同事务中提交；source fact 不能直接产生。 |
 | `ExternalFact<source, Gap/Correction/Retraction>` | Source/Data owner / deferred writer | continuity、selected evidence 或 baseline 被指向修订 | 这是输入事实；不能直接称作 `CheckpointInvalidated` 或 `CorrectionApplied`。 |
 | `Control<Deferred, ActivationGap/CheckpointInvalidated>` | UTA writer / control query | baseline/finality 不足 | 提交冻结、重建 baseline 或请求决定；不得默认 Candidate/命中。 |
-| `Control<Deferred, CorrectionApplied/RetractionApplied>` | UTA writer / recovery/disposition | selected evidence/checkpoint 被修订 | 携带 source/evidence lineage；writer 依据依赖决定 fence 未发送工作，不是 Source 直接写 DomainEvent。 |
+| `Control<Deferred, CorrectionApplied/RetractionApplied>` | UTA writer / recovery/disposition | 当前 checkpoint 或历史选中依据受修订影响 | writer 沿已保存支持查找 request、submission 与 attempt 责任，原子 fence 未开始后继；不要求当前谓词命中，不由 Source 直接提交。 |
 | `Control<Deferred, ReviewRequestCreated>` + outbox | UTA writer / authenticated Alice bridge | `RequestDecision` disposition | checkpoint、evidence、control revision、ReviewRequest identity 与 outbox 在同一 commit；只有 commit 后才 send/retry。 |
 | `ApplyDecision` command | Alice/Agent channel / UTA writer | current control revision + intent revision + epoch | channel 只提交 allowed response；迟到/未认证响应不改变状态。 |
 | `Control<Deferred, DecisionApplied>` | UTA writer / Alice receipt projection | Keep/Rearm/Revise/Discard/RequestSubmission result | writer 验证 request、主体、版本、epoch、expiry 后 CAS；只能一个结果赢。 |
 | `Control<Deferred, ActivationRearmed>` | UTA writer / new activation owner | old owner retired -> new epoch/future boundary | 旧 owner retirement 与新 epoch registration 在同一事务；任何时刻按 `intentRevision` 只有一个 live owner。 |
 | `Control<Deferred, IntentRevised>` | UTA writer / EF06 prepare path | new intent revision | 重新 prepare/approval；不能原地改已批准/已开始 plan。 |
 | `Control<Deferred, IntentRetired>` | UTA writer / audit | only not-started | 释放 deferred control/未执行 reservation；已 started/unknown 不得伪装撤销。 |
-| `ApplySubmission` command | authorized control channel / UTA writer | candidate -> normal prepare/approval | source fact、AI text、`RequestSubmission` 都不是交易许可；command 只开启 EF06 接纳。 |
-| `Control<Deferred, SubmissionRequested>` | UTA writer / EF06 entry | candidate -> normal prepare/approval | committed control event 只保存因果关联，提交后重新走 EF06，不直接 dispatch。 |
+| `ApplySubmission` command | authorized control channel / UTA writer | 已接纳 intent 的 candidate/control -> normal prepare/approval | 仅建立原意图的内部控制后继，延续原候选依据；不再次 SubmitIntent，不授予交易许可。 |
+| `Control<Deferred, SubmissionRequested>` | UTA writer / EF06 entry | 原 intent 的 control handle -> normal prepare/approval | handle、依据关联、工作与 receipt 同一决定产生；EF06 从此 handle 解析原 A/intent，不能将激活证据冒充准备事实。 |
 
 ### 10.2 checkpoint、gap、correction 与 Alice outbox 时序
 
@@ -1174,10 +1216,10 @@ sequenceDiagram
   participant Agent as Responsible Agent
   participant EF06 as Prepare/Approval Boundary
 
-  Source-->>Writer: ExternalFact Data/Correction/Retraction/Gap(sourceId, generation, cursor)
+  Source-->>Writer: 普通进展 ExternalFact Data/Gap(sourceId, generation, cursor)
   Writer->>Writer: 校验source binding、event identity、current intentRevision、future boundary
   Writer->>Predicate: advance(checkpoint, sourceFact, futureBoundary)
-  alt NoActivation（含必要的false checkpoint）
+  alt NoActivation（含baseline初始化或业务未定checkpoint）
     Predicate-->>Writer: checkpoint + NoActivation
     Writer->>Store: 原子提交CheckpointAdvanced + consumed source identity
     Store-->>Writer: committed
@@ -1207,7 +1249,7 @@ sequenceDiagram
     alt disposition=SeekAuthorizedExecution
       Writer->>Store: 原子提交CheckpointAdvanced + ActivationCandidate + SubmissionRequested
       Store-->>Writer: committed
-      Writer->>EF06: 进入SubmitIntent/Prepare/Approval/guard/reservation（不直接dispatch）
+      Writer->>EF06: 原意图的PrepareSubmission及依据关联（不再次SubmitIntent）
     else disposition=RequestDecision
       Writer->>Store: 原子提交CheckpointAdvanced + ActivationCandidate + ReviewRequestCreated + outbox
       Store-->>Writer: committed
@@ -1222,9 +1264,9 @@ sequenceDiagram
       Store-->>Writer: committed
     end
   end
-  opt Correction/Retraction指向已选证据
-    Source-->>Writer: ExternalFact correction/retraction(selectedEvidenceId)
-    Writer->>Writer: 依据intent state与已冻结disposition选择可恢复延续
+  opt 独立修订入口（不先经过普通future boundary或再次命中筛选）
+    Source-->>Writer: 已认证Correction/Retraction(targetRef, revision)
+    Writer->>Writer: 沿支持关系查checkpoint和历史决定后继并检查当前控制状态
     alt 尚未DispatchStarted且需要RequestDecision
       Writer->>Store: 原子提交CorrectionApplied/RetractionApplied + lineage checkpoint + fence未发送工作 + ReviewRequestCreated + outbox
       Store-->>Writer: committed
@@ -1244,11 +1286,24 @@ sequenceDiagram
 
 - **边沿语义**：predicate 必须声明“每个命中”“false→true 边沿”“持续窗口”等具体算法。边沿需要 baseline 与 continuity；`false@10` 后 `Gap` 再收到 `true@12` 不能证明穿越。`Gap` 进入 freeze、重建可信 baseline 或请求决定，绝不自动生成命中。
 - **nonmatching 也可能要保存**：如果非命中事实改变 baseline、watermark 或窗口，`CheckpointAdvanced` 仍需持久化足够的 bounded state；不保存全量行情，但必须能重放决定。
-- **Correction/Retraction 不重新投机命中**：通过 source event identity/evidence dependency 找到已选证据与 checkpoint。未发送 candidate/review 被 fence 后请求新决定；已经 `DispatchStarted` 或 Unknown 的事实不能被数据修订撤销。
-- **一个 intentRevision 一个 live owner**：唯一性不能只靠 `(intentRevision, activationEpoch)`，否则 epoch 0 与 epoch 1 可同时 live。writer 必须在同一 CAS/事务中退休旧 owner、关闭旧 epoch 的可写权、再注册新 epoch/future boundary；所有新 source event 先检查 `intentRevision` 的当前 owner。旧 owner 的迟到 event 只能成为诊断/被拒绝 observation，不能覆盖新 revision。
+- **Correction/Retraction 不重新投机命中**：P 声明充分但允许保守的支持关系。当前 checkpoint 与历史 selected evidence 各有支持；writer 查找所有仍有责任的后继，未开始 candidate/review/submission 同事务被 fence，已开始/Unknown 保留原 attempt。无重算依据时等待可信边界重建，不强求 replay 或自动重激活历史候选。
+- **一个 intentRevision 一个 live owner**：writer 在同一 CAS/事务中退休旧 owner、关闭旧 epoch 的可写权，再由同一 P 构造新 epoch/boundary/checkpoint。旧 owner 的直接迟到状态写被拒绝；真实来源的历史 correction 则由当前权威沿 target 查旧责任，不能因旧 epoch 或早于新 boundary 而全部丢弃，也不能覆盖无关新 checkpoint。
 - **Disposition ADT**：`RequestDecision`（其中 `ReturnToAgent` 是一个配置实例）、`SeekAuthorizedExecution`、`CloseWithoutDispatch`。Candidate 三者都必须有明确分支；`Keep` 产生可查询 suspended handle；`Rearm` 产生新 epoch/future boundary；`Revise` 产生新 intent revision；`Discard` 仅退休未发送 intent；`RequestSubmission` 重新进入 EF06。
 - **到期竞争与 EF11 交接**：response、request expiry、no-reply、delivery-unavailable 与 Keep retention 是不同 clocks。timeout 与 response 针对同一 request/control revision/intentRevision/epoch 做 writer CAS；胜者写入 `DecisionApplied` 与必要 outbox，败者得到 stale/conflict。Alice admission、session/reconstructed delivery 的细节由 EF11 展开，但不能省略这里的 CAS 或把 UI 到达顺序当授权。
 - **outbox 先 commit 后 send/retry**：checkpoint、selected evidence、control result、ReviewRequest identity 与 outbox 必须同事务 commit；发送失败只更新 delivery/retry control，不回滚已提交 checkpoint，也不能直接启动执行。UTA 拥有 checkpoint、review request、outbox、activation owner、control receipt；Alice 拥有 stable admission、Workspace/Session/headless attribution、Issue/Inbox projection。
+
+### 10.3.1 激活依据穿过回复、准备与 Start
+
+跨流构造及条件证明见[主书11.5](../uta-capability-runtime-design.md#activation-control-consumption)。这里的顺序指 UTA writer commit，不是 UI 到达或原生发生时间。
+
+| 时序 | 被消费的共同状态 | 结果 |
+|---|---|---|
+| Correction 后旧 RequestSubmission | 原 request 已失效/关闭可回复权 | stale/conflict；没有新 handle |
+| RequestSubmission 后 Correction，Prepare 仍在工作 | handle 保存原依据；修订查到该后继并原子 fence | 原 receipt 仍是历史接纳；迟到 RecordPrepared 不成为可执行准备值 |
+| Prepare/Approval 后 Correction，Start 尚未提交 | Start 检查与修订同域的依据/控制状态 | 拒绝旧 job，不发 grant；不可只更新 review 而让旧 job 通过 |
+| DispatchStarted 后 Correction | 原 attempt 已开始且仍负责任 | 保留尝试，追加修订及观察/恢复；不保证尚未发生的 native call 能被撤回 |
+
+重启重建原 D、支持关系和已提交 request/outbox，不重新跑 predicate 生成重复请求。当前 C 可以重建，仍被旧 submission/attempt 引用的支持不能随 Rearm 清除。只有已认证来源边界才能恢复连续性；普通订阅不因此写全量交易 WAL。
 
 ### 10.4 当前实现证据与未实现声明
 
@@ -1342,7 +1397,7 @@ EF11 从 EF10 activation owner 已完成的提交开始：EF10 writer 已经把�
 - UTA owns：已提交 `DecisionRequested` 的 outbox 交接、未发送 intent、review revision、expiry、outbox、Keep/Rearm/Revise/Discard/RequestSubmission 的 CAS。
 - Alice owns：`WorkspaceResolution`、Session/Inbox admission、稳定 execution/task/session 引用、worker ownership、delivery receipt、agent reply transport。Alice 不拥有交易批准。
 - Workspace resolution 必须是 `Exact{workspaceId,resumeId,sessionRecordId,registryRevision}` 或 `Reconstructed{workspaceId,resumeId,sourceResumeRegistry/catalogRevision}`。两者都是证据；`Reconstructed` 必须标明 source 和 resolution mode，不得猜一个默认 workspace。无法找到 durable identity 则 `Unresolved`，outbox 保留，不生成 worker。
-- `RequestSubmission` 只是对已接纳 intent 的控制请求，不是批准，也不是 worker 直接下单。UTA 先提交 EF06 控制边界的 admission/handle；EF06 再重新验证 prepare/authorize、私有一次性 grant 和 writer 状态。若已经过 DispatchStarted/Unknown，只能 observation/recovery，不能用旧 review reply 逆转。
+- `RequestSubmission` 是对已接纳 intent 的控制请求，不是再次 SubmitIntent、批准或 worker 直接下单。UTA 从已提交请求解析原 A/IntentRevision、epoch 与 checkpoint/证据依据，在同一决定中消费回复、建立原意图 control handle 并延续依据；EF06 从 handle 取得真实准备事实，RecordPrepared、批准/排程与 Start 持续检查依据有效性。若已 DispatchStarted/Unknown，只能 observation/recovery，旧 reply 不得逆转。完整次序推导见[主书11.5](../uta-capability-runtime-design.md#activation-control-consumption)。
 - Activity journal、Inbox activity 或 worker log 只记录已经发生的 Alice/产品事实；不能被 UTA 当成 admission receipt，也不能反向启动 agent。
 
 ### EF11.2 目标类型与持久化边界
@@ -1355,6 +1410,7 @@ EF11 从 EF10 activation owner 已完成的提交开始：EF10 writer 已经把�
 | `ReviewRequest<C>` | deferred continuation/reply slot + `ReturnToAgent` policy | `requestId`, `reviewId`, `decisionRevision`, `activationEpoch`, `intentRevision`, `evidenceRefs`, `expiresAt`, `currentExpectedState`; 只描述该 revision/occasion 的未发送计划 | UTA decision writer 从已提交 request materialize；不重新评估 predicate |
 | `WorkspaceResolution` | Alice `WorkDescription`/identity slot | `Exact\|Reconstructed\|Unresolved`；resolution 不能改写 UTA `intentRevision` | Alice workspace registry/catalog read |
 | `WorkspaceAdmission` | Alice admission state ADT / `WorkDescription` receipt | `Pending{outboxId,reviewId}`、`Admitted{admissionId,executionRef{executionId,taskId,sessionId},workspaceId,resumeId,sessionRecordId,admissionRevision,resolution}` 或 `Rejected{reason}`；Admitted 不使用可选 `taskId?`；重复 `outboxId` 返回原记录 | Alice Workspace/Session/Inbox writer 提交 `Admitted` 后，spawn 与 receipt 独立进行 |
+| `WorkspaceExecution` / reply交接 | Alice admission派生的执行及回复关系 | 每项关联admission/executionRef；执行区分Unclaimed、Claimed、Started、Terminal、Unknown并带相应证据；reply轴独立为未产生、待交接或已有UTA receipt，不要求Terminal一定有reply | Alice execution owner先commit claim再spawn，启动/终态/未知分别记录；lease到期交恢复者，不证明no-start；详见主书§11.4 |
 | `ReviewReply<C>` | Alice `Command`，由同一 deferred continuation 的 reply slot 派生 | `requestId`, `reviewId`, `activationEpoch`, `replyCommandKey`, `payloadDigest`, `principal`, `expectedIntentRevision`, `currentExpectedState`, one of `KeepSuspended\|Rearm\|Revise\|Discard\|RequestSubmission`, actor/provenance | UTA decision writer CAS |
 | `SubmissionControlReceipt<C>` | EF06 control admission / `WorkDescription` receipt | `controlHandleId`, `reviewId`, `intentRevision`, `ef06AdmissionRevision`, `state=Admitted`; 不携 provider Ack/Unknown，不等于 approval | UTA writer commit 后发出；后续状态由 typed status/stream 提供 |
 | `ExpiryFact` | `ExternalFact` clock slot | 只表达 observed deadline；不能直接结束 review | UTA writer 与 reply 竞争，胜者 commit |
@@ -1396,13 +1452,21 @@ sequenceDiagram
         S->>S: CAS idempotency by outboxId/reviewId
         S->>S: COMMIT WorkspaceAdmission.Admitted{admissionId,executionId,taskId,sessionId,...}
         par Worker branch after admission commit
+            S->>S: COMMIT execution claim（同admission/executionRef及owner）
             S->>W: Spawn/Resume with stable executionId/taskId/sessionId
-            W-->>S: Worker owns conversation； no broker handle
+            alt 有绑定的启动证据
+                W-->>S: RecordStarted（不是完成或UTA回复receipt）
+            else 明确启动失败
+                S->>S: RecordTerminalFailure（可无reply）
+            else crash或启动回执不确定
+                S->>S: Unknown并保留恢复责任，不盲重启
+            end
         and Receipt branch after admission commit
             S-->>A: AdmissionReceipt{admissionId,executionRef,resolution}
             A-->>O: AdmissionAck{outboxId,admissionId}
             O->>O: Record delivery receipt when transport returns
         end
+        opt 收到可认证ReplyFrame（worker不必已退出）
         W->>A: ReplyFrame{requestId,reviewId,activationEpoch,replyCommandKey,payloadDigest,principal,decision}
         A->>U: ReplyCommand + admission provenance
         U->>U: CAS requestId/reviewId + activationEpoch + replyCommandKey/digest + expected intent/state + expiry
@@ -1419,17 +1483,17 @@ sequenceDiagram
             U->>U: COMMIT DecisionDiscarded； release unsent resources
             U-->>A: ReplyReceipt{accepted=Discard}
         else RequestSubmission is accepted as a control request
-            U->>U: COMMIT SubmissionAdmitted{controlHandleId,requestId,reviewId,intentRevision,activationEpoch}
+            U->>U: COMMIT 回复消费及SubmissionAdmitted并延续原request依据和PrepareSubmission工作
             U-->>A: SubmissionControlReceipt{controlHandleId,state=Admitted}
-            U->>P: EF06 PrepareSubmission{controlHandleId,requestId,intentRevision,activationEpoch}
-            P->>P: Read current plan/recipe and validApprover； verify principal, policy, currentExpectedState and catalog
+            U->>P: EF06 PrepareSubmission（原intent关联的controlHandle及激活依据）
+            P->>P: 解析原A/intent并读真实准备事实；检查当前plan、批准及依据有效性
             alt AwaitingApproval or stale/invalid control state
                 P->>P: COMMIT SubmissionAwaitingApproval|SubmissionRejected{controlHandleId,reason}
                 P-->>A: TypedControlStatus{controlHandleId,state=AwaitingApproval|Rejected}
             else Fresh start authorized
                 P->>T: ScheduleFreshStart{controlHandleId,requestId,intentRevision}
                 T-->>P: FreshStart{attemptId,generation,planDigest}
-                P->>P: COMMIT DispatchStarted{dispatchId,attemptId,generation} before native call
+                P->>P: 原子复核仍有效依据及批准并COMMIT DispatchStarted，先于native call
                 P->>I: OneUseDispatchGrant{attemptId,generation,grantId}
                 I->>V: NativeCall{attemptId,exactBoundRecipe}
                 V-->>I: NativeAck|RawObservation|TransportUncertainty
@@ -1437,6 +1501,7 @@ sequenceDiagram
                 P->>P: COMMIT EffectEvidence + TypedStatus{Ack|Working|Partial|Final|Rejected|Unknown}
                 P-->>A: TypedStatusFrame{controlHandleId,attemptId,status}
             end
+        end
         end
     end
 
@@ -1459,6 +1524,7 @@ sequenceDiagram
         else Not admitted
             S->>S: One CAS insert and COMMIT stable admission
             par Spawn and receipt remain independent
+                S->>S: 同executionRef的claim CAS；已claim先恢复查询
                 S->>W: Spawn/Resume from stable executionRef
                 S-->>A: Return AdmissionReceipt
             end
@@ -1477,6 +1543,8 @@ sequenceDiagram
 7. **Keep 与到期**：Keep 只能冻结/延期并保留未发送 intent；不得隐式 approve。expiry 与 reply 竞争由 UTA writer CAS 决定，失败方是可见 diagnostic。`Discard` 只允许未 DispatchStarted 的 intent；Unknown/已发送状态禁止 discard 假装未发。
 8. **RequestSubmission 结果**：UTA 返回的 `SubmissionControlReceipt` 只表示控制请求已提交并得到 handle，不是 approval，也不包含 provider Ack/Unknown。EF06/07 不查找或重构旧 grant：它读取当前可验证 approver/plan/state，AwaitingApproval 只返回 typed control status；fresh start 后由 scheduler 返回 attempt，writer commit `DispatchStarted`，private interpreter 持一次性 grant 调 native，raw facts/ack 经过 interpreter 记录回 writer，最终 provider 结果由 typed status/stream 提供。possible-send 断连先进入 observation/recovery。
 9. **投递失败**：`DeliveryUnavailable`、`WorkspaceUnresolved`、`AdmissionStorageUnavailable` 只阻断 Alice delivery；不创建 broker job。超过 expiry 后由 UTA expiry policy 关闭 review，但保留 delivery/late-reply evidence。Alice product activity append failure 不回滚已持久化 admission。
+10. **接纳后的执行责任**：Admitted不等于worker启动/完成。Alice维护同admission/executionRef的claim、启动、终态或Unknown证据；reply交接独立，失败可无reply、运行中可已回复。已claim但启动未知时查询/观察；新尝试需positive no-start及旧launch owner不能迟到spawn的证据/栅栏，不能用lease到期或marker缺失盲重启。
+11. **expiry与retention**：UTA expiry只关闭旧reply推进资格，不删除Alice执行责任；确认失效的未claim工作可不再启动，已claim/started仍需结案。网络未知时只查询/重投同reply key/digest，stale已确定后不换key复活。终态且交接结清可压缩留身份/摘要/出处；未决/Unknown必须保留或显式交持久恢复owner，日志清理不清空责任。跨owner状态观察不构成原子启动截止或进程exactly-once。
 
 ---
 
@@ -1487,6 +1555,8 @@ sequenceDiagram
 ### EF12.1 目标和边界
 
 Alice 的配置 owner 负责配置记录、密文/secret reference、`configRevision` 与用户的 expected-revision CAS；UTA 负责把某个 revision 应用到运行时、建立 `ConnectionGeneration`、发现 provider catalog，并报告 `Ready|Unavailable`。配置 revision、connection generation、catalog revision、policy revision 是不同身份，不能因 URL 可达或 process health 合并。
+
+两侧公开配置/管理命令各按主书§7.4从自己的owner声明派生描述、输入parser、路由及结果消费者。host聚合目录不合并Alice与UTA写权；ConfigApply不是Order Recipe，也不借Pull隐藏配置写。ConfigSaved与ConfigApplied仍是两个提交事实，跨边界失败沿原关联查询/恢复。
 
 - Alice 不把 secret bytes 放进 HTTP body、event envelope、outbox、plan、log 或 product activity；只持久化 `SecretRef`/sealed binding 的 opaque id、scope、digest、rotation revision。
 - Config apply 分为两个边界：runtime interpreter 在 writer 事务外解析 `SecretRef`、取得 credential binding、打开连接并发现 catalog，随后提交带证据的 `RuntimeBindingEvidence`；lifecycle writer 只验证该证据并记录 `ConfigApplied|ConfigApplyRejected`。writer 事务不得读取 secret、访问网络、打开连接或把 interpreter 的临时对象当作提交状态。
@@ -1628,7 +1698,7 @@ sequenceDiagram
 
 EF13 用四个互不替代的通道描述 Mock、account-scoped what-if、live acceptance 与 evidence：
 
-1. **Mock admin stimulus**：开发/测试 actor 发送 simulator capability 的 `Command`，送入 mark、tick、fill、cancel、deposit、withdraw、external trade。Mock owner 先按 fixture scope、actor/policy、command key、expected state revision 验证并提交状态变化；只有状态变化提交后，才由 Mock observation/fact owner 派生 `MockFillFact` 等事实。它可改变 Mock state，但不生成 UTA approval、reservation、dispatch 或金融 receipt。
+1. **Mock admin stimulus**：开发/测试actor调用主书§7.4中simulator owner的管理声明，发送mark、tick、fill、cancel、deposit、withdraw、external trade。目录只聚合该声明并派生输入/输出/parser/owner路由，不把此写操作安装成Pull或金融Controlled。Mock owner先按fixture scope、actor/policy、command key、expected state revision验证并提交；提交后才由Mock fact owner派生`MockFillFact`等事实。它改变Mock state，但不生成UTA approval、reservation、dispatch或金融receipt。
 2. **Account-scoped price preview**：`PricePreviewPull` 是有限的 Query/data capability，适用于 Mock 与非 Mock account。它保留 `PriceChangeInput[]`/tagged price changes、symbol/Instrument selector、account scope、owned marks、as-of/snapshot 与 Decimal current/simulated/summary；symbol-level underlying change 明确排除 derivative rows，`all` 使用每个 position 自有 mark。它不产生 job、lock、compensation 或交易批准，也不要求把 transient result 写进 committed event log。
 3. **UTA financial control**：真正 Alice-origin effect 必须走 capability leaf 的 prepare→authorize→private grant interpreter/EF06-07→writer→`DispatchStarted`→provider→observation/recovery；即使 provider 是 Mock，也不能从 admin route 旁路或让 writer 直接调用 provider。
 4. **Live evidence**：paper/live adapter 或 S7 外部订单把 actor/provenance/native identity/observation 写入 redacted evidence sink；evidence 是诊断/事实投影，不能证明 UTA dispatch，也不能成为下一次交易批准。

@@ -280,7 +280,7 @@ flowchart LR
 
 Provider 可以新增自己的 `OptionChain`、`FundingRate`、`OrderBook` 或原生订单条款。内核不需要理解所有业务字段，只需理解它们所属的控制协议。
 
-相反，`Pull | Push | Controlled`、`Accepted | Rejected`、`Completed | Failed | Cancelled` 等内核选择是闭合的。增加一种内核选择会改变调度或安全语义，必须使所有相关解释器产生类型错误，而不能作为任意字符串插件绕过控制。
+相反，数据/金融业务调用的 `Pull | Push | Controlled`、决定的 `Accepted | Rejected`、流的 `Completed | Failed | Cancelled` 等协议选择是闭合的。它们分别约束对应的解释面，不声称所有配置、capture或simulator管理命令都属于交易Recipe。管理面按第7.4节保留各owner的独立声明及提交契约；不能把管理写伪装成Query或借管理命令绕过交易批准。增加一种协议选择会改变调度或安全语义，必须使相关解释器穷尽更新，不能以任意字符串插件绕过控制。
 
 <a id="a2"></a>
 
@@ -305,6 +305,10 @@ Zod 4 是本仓库的 schema/type-inference 实现基础。目标不是接受任
 例如“limit 定价必须携带 limitPrice”必须由同一构造器生成字段依赖描述和 evaluator 绑定。换掉 `.superRefine` 回调却不更新声明摘要不是合法修订。扩展对象必须把原约束沿基础投影提升到扩展值；只展开 `.shape` 会丢失对象约束，因此不能作为通用扩展实现。
 
 外部 Provider 可使用可移植的约束表达式或已安装、版本匹配的 evaluator。加载端缺少 evaluator 时，该契约不可调用；不能宣称已通过语义验证。摘要保证选中了哪份实现，不证明任意实现正确，更不证明其他语言的回调等价。需要读取市场或账户才能判断的条件属于 prepare/decision，不冒充纯 schema 校验。
+
+**共同来源不是语义反射。** 能由结构表达的关系，直接进入同一积、和及约束构造。例如某个 Provider 的 pricing 选择可由 market 分支与必须携带 price 的 limit 分支构成，parser 和公开输入描述同时从该结构产生，不另写一份字段依赖清单。这不是所有 Provider 的全局定价政策。
+
+不能由结构表达的纯规则，则由一个具名 Constraint 定义同时持有配置、失败、值投影、作者说明及实现绑定；能力引用这一个定义，不在 validator 与 CLI 出口分别重写规则。说明可以由作者写在该定义中，不能声称从任意回调自动推导出了业务含义。安装产物/实现身份及显式配置使加载端能够选择同一实现；摘要识别代码与配置，不证明纯度、跨语言等价或业务正确性。构造必须区分这些保证，不能将它们都称为“schema 自动派生”。
 
 ### 4.2 静态已知与运行时发现
 
@@ -345,6 +349,8 @@ constrain(Unit<A>, Constraint<A,C,E>, C): Unit<A subject to constraint>
 ```
 
 `extend` 要求字段不相交，或由调用者明确选择一个保留的扩展命名空间。冲突字段在静态已知时编译失败，在动态构造时注册失败；不允许后值覆盖前值。基础投影必须总定义，保留原字段值与原约束。对于相容、不相交且约束绑定相同的扩展，分组不改变最终语义；这不意味着具有不同字段归属或原生效果的 Provider 可以任意交换。
+
+约束保持有正面的构造：设基础值为 B，扩展值为 B × X，基础投影为 pi。对基础约束 C 及配置 c，扩展后的校验调用同一 `C.evaluate(pi(value), c)`；其描述保留 C 的身份、配置与失败关联，并由扩展构造关联这条输入投影。它不是另写一个“看起来相同”的扩展校验器。新增的跨 B/X 规则可以作为另一项约束加入，但不替换原 C。只展开字段 shape 既没有构造这条校验，也没有证明它被保留。
 
 `sum` 表达真正的选择，例如 quantity 与 notional；`extend` 表达同时存在的条款。不能把三种 size、四种 pricing、五种 session 手写成六十种订单，也不能把所有字段都设成 optional 留给字符串错误处理。
 
@@ -397,6 +403,86 @@ P 可以描述依赖输入、来源或 scope 的要求关系。每个实际叶�
 
 流组合还需声明 ordering、buffer bound、overflow、replay 和 cancel ownership。按到达时间合并不能冒充交易所全序。丢弃更新必须通过 gap 或可验证的最新值策略表达；不能静默改变统计语义。一个订阅者释放，只释放其拥有的引用；最后一个拥有者退出才关闭共享连接。
 
+<a id="declaration-construction"></a>
+
+#### 5.4.1 固定后继怎样从共同操作数构造
+
+先给出后继定义已知、请求值依赖前段结果的一种正面构造。它复用 Query、输入适配和 schema 组合，不要求新的工作流语言：
+
+```text
+D0 : Query<I,A,E0,R0,P0>
+D1 : Query<J,B,E1,R1,P1>
+M  : Adapter<I × A,J,Em>
+```
+
+作者提供 D0、D1 及 M 的一个声明关联。M 持有纯输入转换、显式配置、输入/结果/失败关联和版本化实现身份；其结果关联指向 D1 的输入，而不只是另一个字段同形的 J。组合构造器只接收这三个操作数，不再另收一个可自由返回其他 Query 的 k 或另一份最终结果 schema。
+
+| 消费者 | 从共同操作数产生的内容 |
+|---|---|
+| 类型与边界 parser | 输入取 D0 的 I，成功取 D1 的 B；失败保持 E0、Em、E1 及发生阶段/原槽位关联。M 的结果进入 D1 的输入校验 |
+| 公开描述 | 引用 D0、D1、M 的关联与修订，计算上述输入/结果/失败和组合关系；不维护独立 CLI 参数表 |
+| 解释闭包 | 调用保存的 D0；成功后以 I 与 A 运行保存的 M；仅在 M 成功后调用保存的 D1 |
+| 服务与权限 | 静态 R 为 R0 与 R1 的联合；纯 M 不凭空增加服务或权限。描述保留 P0 和 M 成功产生 J 后适用的 P1，实际叶子仍分别验证当前许可 |
+
+可以直接由构造器生成这一闭包，不必先建立一个通用 AST。共同操作数排除了“描述引用 D1，却由另一个自由 k 选择 D2”的结构性错配；它不证明 D0、M、D1 的业务代码正确。只限制 callback 的返回类型，而把描述放在另一条可独立维护的路径上，没有给出这项构造。
+
+同来源 Instrument/Candle 是该构造的一个实例。外层输入可以是选择请求与 WindowInput 的积；D0 通过声明的选择政策产生一个来源内 InstrumentRef，或返回相应失败；M 从这个引用和外层 WindowInput 构造 D1 的请求。双方引用同一个 WindowInput 声明，不另抄窗口约束。非平凡的单位或窗口变换另用明确的 Adapter，并保留转换失败；组合不承诺自动求出任意业务函数的输入前像。
+
+同源性还需要共享的来源实例/原生标识命名空间关系，以及后继输入边界对所选引用与 D1 接受范围的核对。两个操作数保存在同一个对象、或两个值有相同 TS 字段，都不是这项证明。Instrument 与 Candle 的 CapabilityId 不同，也不能要求其完整 binding 相等。来源当前失去支持或权限是 D1 解释时的失败；纯 M 不能在没有额外输入事实时自行查询并判定可用性。
+
+修改共享 Unit 后，引用它的页/输入构造、parser、类型和描述消费同一新声明；handler 仍须真正产生满足它的值，不会由 schema 凭空计算出新增字段。替换同型 M 实现则可能不改变结构类型，却改变业务行为：必须改变对应实现绑定/摘要，不能以保留一个版本字符串证明没有漂移。这区分了结构派生、实现关联和语义正确性，而不是把三者交给一句“保持一致”。
+
+若最终业务计算同时需要 A 与 B，后继闭包必须保留前段 A，而不是只留下 D1 的 B。设版本化纯转换 F 消费 `I × A × B` 并产生 V 或 Ef，其输入声明直接引用这三个原槽位，成功/失败由 F 的同一声明给出。解释依次执行 D0、M、D1，最后以原 I、已得 A 和 B 调用保存的 F；公开成功取 V，失败保留 E0、Em、E1、Ef。这个构造只是值依赖的函数组合，不要求把中间值注册为新能力，也不要求复制 A 的 DTO。F 若需要新的 IO，就不再是纯投影，应把那项计算及其要求显式接入。
+
+本构造不覆盖前段结果选择不同后继定义的所有情况。那需要保留所选定义及输入构造的关联；认证动态结果本身不会生成所选定义所需的输入。
+
+#### 5.4.2 动态后继怎样取得输入，而不是只认证输出
+
+运行时选择得到的是具体定义 d 及其 binding，不是一个只供展示的 schema。能够在一次调用内完成后继的程序，还必须具有一项适用于 d 的输入构造关系：它消费原始输入、前段结果及实际配置，产生 d 的 input，或返回构造阶段的失败。该关系可以绑定一个精确定义，也可以属于经过兼容性检查的参数化声明族；不要求给每个实例复制一个 adapter。
+
+声明者因此需要提供选择政策、后继的允许范围、输入构造及其实现关联。解释器保存选中的 d，以适用的构造产生请求，在 d 的 input 槽位解析，再核对当前许可并调用 d 的解释实现。成功与领域失败按同一个 d 的对应槽位认证。选择失败、没有适用构造、构造自身失败、输入违约和解释失败保留阶段差异；没有 adapter 时不能在失败中伪造一个 adapter 版本，也不能把主机构造失败塞进尚未调用的 d 的领域失败。
+
+例如外层已经取得同源 Instrument、窗口与 interval，而新发现的 Candle 叶子还要求 `session`。该 schema 能检查一个已给出的 session，却不能替业务选择它。这里有三种由消费需要决定的合法契约：
+
+| 外层承诺 | 缺少 session 时的构造与消费 |
+|---|---|
+| 一次调用，已绑定选择政策 | adapter 消费真实配置或已声明的政策结果，构造完整请求；政策与实现身份进入关联，不由字段默认值偷偷代替 |
+| 一次调用，允许构造失败 | 返回带所选 binding 的主机构造失败，不执行后继；外层成功仍可保持所选结果的动态关联 |
+| 调用者拥有这项选择 | 第一阶段返回实际 binding 与输入描述；调用者提供请求，第二阶段复核 binding、input 与当前许可后执行 |
+
+动态 schema 本身不强迫 staged selection，也不赋予主机替调用者决定业务输入的权力。需要读取目录、账户或政策服务才能完成选择时，这项读取是显式计算，保留自己的失败和服务要求；纯 Adapter 只消费已经提供的事实。
+
+**修订怎样传播。** 固定引用旧 binding 的新调用不会静默改用新定义；它按目录规则得到过期绑定。重新选择后，旧输入构造若不能产生新增必填字段，程序显式失败、取得新的合法构造，或按已声明的两阶段契约交回调用者。稳定声明族可以容纳新的相容成员，其外层结构未必改变，但本次选择的 binding、描述和构造适用性必须反映真实成员。若改变的是外层自己的承诺，则修订外层定义。不能把“信封结构没变”说成返回的关联没有变化。
+
+**资源关联也有正面的安装边界。** 对外部进程，主机静态依赖的是已有精确类型的 transport、目录、权限及 Scope 服务；被选 Provider 的原生资源由它的安装与解释协议负责，运行时描述中的服务名称不会在 TypeScript 中凭空生成 Context 类型。对本地定义，安装者要么明确提供原生 R 后导出闭合的解释入口，要么让尚未提供的 R 继续出现在消费程序中。两者都保留初始化、可用性与调用失败，不能靠读取依赖字符串或把 handler 塞进无类型 resolver 声称 R 已消解。服务已提供也仍不等于 P 已授权。
+
+输出进入已知 Candle 消费函数时，仍需要第4.2节的总投影或带失败转换。输入构造、输出认证与语义投影是三条分别有前提的关系；补齐其中一条不会自动证明另外两条。现有外国进程样例仅展示显式调用输入与结果认证，不充当这套动态输入构造已经实现的证据。
+
+#### 5.4.3 有状态数据算子怎样构造
+
+filter、window、join 不是仅给结果泛型换一个名字。每个算子 O 的操作数包括已绑定的子计算、精确输入/输出单元、纯业务函数、状态初值、来源/派生身份关系，以及 coverage、修订、缺侧、失败和关闭政策。由这同一关联构造纯推进 `step_O(state, input) = Next(state, emissions) | Failed(reason)`；input 是按子 binding 解码的帧，或声明的边界/时间事实。计时器、订阅与输出交付由解释器负责，纯 step 不偷读时钟或网络。emissions 可以为空、多项数据或声明的控制结果；schema 能校验它们，却不能替作者选择 predicate、窗口函数、join key 或 aggregate。
+
+| 操作数与状态 | 具体构造和消费 | 修订、缺口与终止 |
+|---|---|---|
+| filter 的 predicate、成员判定与输出身份关联 | 解码值交给 predicate；命中才派生输出，保留其来源引用和足够的修订依赖 | 未命中变命中产生新 item；命中变未命中撤回已有输出；持续命中修订已有输出。被过滤不等于来源没有 gap |
+| window 的分配函数、成员/累积状态、结果函数与关闭政策 | 每个输入按声明进入窗口；纯 reducer 形成结果；watermark、snapshot barrier 或显式 deadline 事实交给关闭决定 | 修订可能移动成员、重算或使结果失效；没有可逆 reducer 不强造 inverse。deadline 只支持声明的 Partial；窗口关闭不结束外层调用 |
+| join 的精确键/时间关系、候选及输出对身份、缺侧/基数政策 | 子值进入相应候选关系；满足 join 关系时，由绑定的结果函数构造积值及双侧 lineage | 缺 FX/账户等成员不补零；成员键或币种改变时撤回/失效旧匹配，再按新关系构造；时间不相容保留 Partial/待定/Unavailable 等声明结果 |
+| merge 的带来源和、成员位置和生命周期 | 交错交付各子结果，保留各源合法顺序；子终态进入成员状态，由外层政策决定后继 | 不制造跨源全序；部分结果政策显式保留失败成员，关闭的成员不复活；外层只选择一次终态 |
+
+这四种计算共享声明、纯状态推进与解释边界，不共享业务判断。filter/window/join 的状态表示只需充分支持其承诺：可保留必要成员，也可消费来源提供的完整 replacement 或合法重建证据；证据不足时显式失效/Unavailable，不强制保存所有历史、不凭空假定 replay。修订关系按来源契约解释，不假定 revision 全序或把 generation 当业务修订。
+
+**有限构造。** Candle c1.close=99、c2.close=101，过滤条件 close≥100：先只输出 c2；可信 Correction 把 c1 改为100，产生此前不存在的派生 item，而非指向不存在 target 的 Correction；把 c2 改为99，产生针对已有输出的 Retraction。业务若改为 vwap≥100，必须消费 rich Candle 的相应单元，这不是基础过滤的透明替换。
+
+News 的两源窗口可采用独立失败的 merge：F2 失败形成成员失败证据，F1 继续；声明的 processing deadline 关闭一个窗口，输出带 F2 缺口的 Partial，不伪造来源 finality，也不关闭仍存活的 F1 attachment。外层尚开放时，late policy 可形成该窗口的新 revision；外层终止后不能再向这次 invocation 发 Correction。持久投影可由仍有效的 owner 或新的调用继续修订同一稳定投影身份，旧 delivery 生命周期不因此复活。
+
+账户/FX join 是同一构造的特化：100 USD 与80 EUR 在合法的 EUR/USD=1.1 观察下产生188 USD；FX修订为1.12时得到189.6 USD，旧输出保留修订关系。缺FX不产生零估值，账户币种改为JPY也不能继续匹配EUR/USD；输入构造按新币种发起显式后继读取。该值只有在声明的质量、范围和时间关系成立时有效，不声称跨账户原子快照或交易授权。
+
+解释器只释放 O 拥有的 attachment；共享原生资源按剩余 owner 管理。恢复所需 checkpoint 关联子输入位置、来源代际、O修订、输出提交位置及支持修订的状态/重建证据。这里复用已有 schema 与流/资源规则，不要求新增公共 DSL 或让所有普通流持久化。
+
+**持续输入与后继读取的闭环。** 有些step需要新的事实才能继续：它可返回声明的读取工作及等待状态，而非在纯函数里做IO。该工作与对外emissions分开，由§5.4.1/2的后继构造产生精确Query binding/input及自己的失败、R/P；解释器执行Query，将关联结果或失败作为后继输入回注同一operator。工作记录关联发起时的输入revision、scope、pair和本次请求身份；只有仍与当前等待关系相容的结果才能推进当前输出。普通运行状态不因此必须进交易WAL；若承诺持久恢复，则checkpoint/工作接纳须保留这条因果关系。
+
+例如存活账户Feed把币种从EUR修订为JPY：step使旧EUR估值匹配失效，依据新币种、asOf及source policy构造JPY/USD读取并进入等待。解释器返回已绑定的FX结果，step复核pair、输入依赖和请求身份后重建估值；迟到的旧EUR/USD结果不能推进JPY分支，可依声明保留为历史事实。缺输入构造、权限或FX证据各保留自己的失败，不自动重读全部账户、创建交易意图或更换projection owner。这是已有值依赖构造与流状态消费的组合，不是一项新的公共workflow机制。
+
 ### 5.5 受控效果与延后激活
 
 ```text
@@ -439,6 +525,27 @@ sequenceInterpretations : I -> Effect<Receipt<Association>, Eq + Ec + Ea, Rq + R
 | 延后执行 | 意图版本、checkpoint、策略、授权边界 | 命中行情条件即直接发送订单 |
 
 这些不是额外业务流程，而是每个新能力都必须保持的代数边界。
+
+### 5.7 组合保证由什么推导，而不是由多少例子支持
+
+本章的共同结构是**带声明的计算与声明相容的消费者**，不是一个容纳所有业务的结果容器。一个构造成立须同时给出三类前提：操作数各自履行原契约；连接处的值/失败/范围关联合法；算子明确保留或改变哪些可观察行为。类型只保证其中已经编码的关系，不能证明 Provider 说了真话或业务函数选择了正确政策。
+
+可以对有限构造作结构归纳，而不要求运行时保存通用程序 AST：
+
+| 构造情形 | 归纳步骤与保证 |
+|---|---|
+| 已安装叶子 | 定义、输入/成功/失败槽位与解释入口是同一关联；在安装/边界校验和实现履约前提下，消费结果属于该叶子，不产生其他叶子的许可 |
+| 输入适配与输出投影 | 纯转换的输入引用原槽位，成功进入目标槽位，失败保留转换阶段。因转换不执行额外 IO，叶子调用没有被复制；单位、信息损失和业务含义仍由转换契约负责 |
+| 固定后继 | 前段失败则无后段调用；前段成功得到 A，M 成功得到合法 J 才调用保存的 D1。由两叶子及 M 的前提，得到正确的最终成功关联或带阶段的失败；P 在实际叶子复核，R 不因前段成功自动消失 |
+| 动态后继 | 先取得具体 d，再检查适用输入构造，并在同一消解作用域内调用和认证 d。归纳假设针对被选 d 的完整关联，不针对一个想象的静态全集；缺构造/解释器时保留失败，不补造结果 |
+| 读取积与流组合 | 每个成员的值、失败与来源关联先成立；组合消费自己的 join/ordering/terminal 政策后产生新关联。只能继承成员真实提供的质量，再显式降低或增加组合失败，不能由积类型推出同一时刻或共同完整性 |
+| 受控接纳及延后激活 | 复用输入构造，但进入各自的持久决定/解释协议；不能把 Query 的归纳结论跨用成外部写入原子性。其提交与恢复保持义务分别见第9–11章 |
+
+以叶子为起点，每次只由上述构造产生新关联，可以归纳得到任意有限、合法构造的**关联保持**。它不是“所有未来业务都可表达”的证明：新的业务可能要求尚不存在的控制或观察方式；那时须论证新增构造，而不是让未知 variant 穿过旧控制机。
+
+**相同结果类型不意味着计算可互换。** 比较 `f` 与 `g` 前须约定观察面：值、阶段失败、叶子调用次序、来源、权限拒绝、终态与资源释放中的哪些属于承诺。纯 identity 投影可保持业务值，却仍可能形成新的派生 binding；若目录身份可观察，就不能称整个能力完全相同。顺序后继只有在构造纯、相同输入被保留、叶子执行次序及其 Scope/失败消费不变时，重新分组才保持相应执行观察；并行读取、提前授权、扩大捕获失败或改变取消范围均超出这个保证。稳定实现身份用于重绑同一函数，不证明两个函数相等。
+
+业务特化的合法空间由此明确：作者可以改变 M/F、谓词、join、风险政策或成功判据，并得到新行为；共享构造继续保持类型、边界与权威，不要求新行为与旧行为透明。需要透明替换时另满足第16.5节的条件律，不能把开放扩展与任意替换混成一项保证。
 
 <a id="chapter-6"></a>
 
@@ -513,6 +620,7 @@ CLI 从过滤后的最终目录派生命名空间、帮助、输入 schema、成
 | subscribe | request identity、binding、input document、flow policy | 有拥有者的流及终止结果 |
 | credit / cancel | subscription identity、generation、额度或取消原因 | 流控制确认，不代表取消订单 |
 | status / respond | 已持久化的控制句柄及响应 schema | 对该句柄的版本化决定与 receipt |
+| manage / management-status | owner管理关联、command key、精确输入、scope与expected revision | owner定义的结果/receipt及阶段失败；不返回交易grant，不混入业务Query |
 
 CLI 可以把叶子渲染成自然命令层级，但 canonical 调用仍携带 binding 和精确 JSON 输入。复杂联合输入不强行拆成一套模糊 flags。帮助、AI 描述、HTTP 和本地 CLI 不另建 `CLI_EXPORTS` 业务列表。
 
@@ -525,6 +633,22 @@ CLI 可以把叶子渲染成自然命令层级，但 canonical 调用仍携带 b
 REST、Java Gateway、Python SDK、WebSocket、ABI/EIP-712 或本地 C++ 库的内部实现由 Provider 选择。UTA 不要求它们继承同一个类或使用同一种语言。需要凭据的子进程属于受信任 UTA 执行树，可由 UTA 按最小范围注入；只有 UTA 的控制写入者拥有批准、尝试和 outbox 权威。这个边界不是对恶意第三方可执行文件的安全沙箱。
 
 包载入失败只影响依赖该包的能力。无券商配置时，Alice 的 Workspace、非交易数据与 Chat 继续工作；不能让一个原生 SDK 加载失败拖垮全部数据能力。
+
+### 7.4 按 owner 分属的管理声明
+
+Mock fixture刺激、显式证据capture及配置apply是有写入后果的命令，既不是只读Query，也不因此需要订单Prepared、交易批准和补偿。它们各自由已有owner协议解释：Mock state、Observation capture、Alice配置及UTA lifecycle。host可聚合这些管理描述供discover/describe与CLI展示，但不因聚合取得写权。目录显式标识业务调用面或管理面，不能把任意管理handler安装成Pull。
+
+每个管理family由同一安装关联持有owner身份、协议/修订、目标scope、精确输入/成功/预期失败schema、R/P及版本条件，并关联其纯decide/evolve、声明工作与owner解释入口。构造器消费这一关联，派生管理描述、帮助、parser、owner路由和结果/receipt消费者；不是再维护一张可任意搭配的action→callback导出表。各owner可有自己的有限command ADT，新增业务参数仍由该family声明及消费者承接，不让公共目录枚举所有管理动作。共享的是声明和解释的关联规则，不是统一管理事务机。
+
+调用者先取得获准的管理关联，再构造它的精确输入。实际管理入口复核当前binding、owner、scope及权限，纯决定在给定state/facts/time上提出候选；只有相应owner按自身提交协议接纳后才返回成功receipt。需要后继IO时先产生工作，解释后的结果回到该owner决定；它不隐含跨owner原子性。成功、等待、工作失败和传输丢失后的查询/重试由该family精确声明，不能统一成HTTP成功即全部完成。解消内部R也不删除P。
+
+| 已有管理实例 | 同一声明怎样被消费 | 权威边界 |
+|---|---|---|
+| Mock stimulus | simulator安装声明生成精确刺激输入；决定消费fixture state、scope及expected revision；fixture writer提交后回AdminReceipt，再派生Mock facts | 只改变模拟环境，不产生UTA金融receipt/grant；未安装simulator声明时不出现该管理入口 |
+| 显式capture/同步 | Observation owner先接纳request，解释已绑定Query取得事实，再决定并提交selected evidence及capture/sync结果 | 不将live读取全写WAL，不把捕获证据当交易批准；请求接纳与最终Captured不同 |
+| 配置apply | Alice配置owner接纳revision，UTA lifecycle解释取得RuntimeBindingEvidence，再由其提交apply结果 | Alice配置保存不等于UTA已apply；秘密只在受信解释边界解引用，不进入公共载荷 |
+
+普通Effect程序可以显式顺序调用这些入口，但Query组合不得隐藏管理写；若公开组合，须保留其管理协议身份、失败、权限和owner提交条件。当前设计只承诺这些已研究管理family的构造，不据此宣称任意未来Provider非金融写都无需扩展协议。需要新的控制承诺时，应研究该协议及其与现有组合的关系，而不是添加一个无语义的“任意命令”逃生口。
 
 <a id="a4"></a>
 
@@ -586,9 +710,9 @@ Terminal = Completed | Failed | Cancelled
 | 关联 | 需要持久保存的内容 |
 |---|---|
 | 身份 | 意图修订、Provider 实例、账户/子账户范围、能力 binding |
-| 解释 | 编译器、原生 codec、观察器、补偿器、谓词所需版本与 artifact identity |
+| 解释 | 编译器、原生 codec、观察器、补偿器、predicate、criterion 与尝试解析实现所需版本及 artifact identity |
 | 输入与推导 | 精确原始输入、纯转换身份、数量/价格/舍入结果、所用来源事实 |
-| 语义 | 成功判据、期限、前置条件、允许补偿等级、交易策略 |
+| 语义 | 成功判据、尝试解析与责任结案条件、期限、前置条件、允许补偿等级、交易策略 |
 | 授权 | 批准者、策略版本、作用域、有效期，以及明确尚未批准状态 |
 | 原生恢复 | client/native lookup 身份、已冻结 nonce/salt/deadline、精确请求表示 |
 | 控制 | 预期状态版本、reservation、attempt、decision/outbox 关联 |
@@ -677,6 +801,8 @@ start(A.Prepared, DispatchGrant<A.Binding,A.Plan,A.Attempt>)
 observe(A.Prepared, A.AttemptEvidence)
   : Effect<A.Observation, A.ObserveFailure, A.ObserveServices>
 decideCriterion(A.Prepared, A.ObservationHistory): A.CriterionDecision
+decideResolution(A.Prepared, A.AttemptEvidence, A.ObservationHistory)
+  : A.ResolutionDecision
 planCompensation(A.Prepared, A.ExposureEvidence, A.Policy)
   : Result<A.CompensationPlan, A.CompensationFailure>
 ```
@@ -686,6 +812,25 @@ planCompensation(A.Prepared, A.ExposureEvidence, A.Policy)
 这里的 `A` 是同一 RecipeAssociation；每个点号成员由该定义的 schema/服务/权限关联投影，不是调用者自由填入的泛型。read-facts 获取、prepare、dispatch、observe、compensate 各有其服务与失败；公开控制结果保留这些阶段的区分。接纳成功只能证明 intent 已持久保存，后续领域失败从绑定的 control query/stream 返回，不能被通用 AdmissionFailure 吞掉。
 
 权限有两层：一般调用权限证明主体可访问该能力与范围；交易批准证明特定计划、判据、期限和风险被授权。数据 entitlement 不是交易批准，来源事件不是任何一种权限。委托自动执行可以成为明确的授权策略，但必须绑定范围、版本、期限和风险约束，不能由“命中了规则”推导。
+
+<a id="controlled-construction"></a>
+
+#### 10.1.1 同一个关联怎样生成控制消费者
+
+`withTransaction(A, policy, admission)` 保存的操作数就是私有 A、控制政策和接纳契约，不另接收一份可以任意搭配的 action/payload map。A 持有各槽位声明、转换与原生解释实现、业务判据和解析原生尝试的关系。公共机制由这些操作数作有限的积与和构造：
+
+| 产生的边界 | 共同构造与实际消费者 |
+|---|---|
+| 提交与 receipt | 提交的协议身份字段与 A.Intent 组成输入；parser 引用 A.Intent，接纳失败来自 admission。writer 保存该意图修订后才产生绑定 A 的 receipt，不能把后续 prepare/dispatch 失败塞进已成功的接纳结果 |
+| 持久事件与计划 | 有限控制信封关联 A.binding、scope、意图/计划/attempt 身份；需要 payload 的事件引用相应 A 槽位。Prepared 编码与编译器身份来自 A，不另造一个全业务 Prepared 并集 |
+| 状态、观察与阶段失败 | 按内核阶段构造合法的结果分支，其中原生 ack、observation、判据证据和失败引用 A 的对应槽位。尚未开始的分支没有虚构 attempt；已开始分支不能遗漏尝试解析与恢复责任 |
+| 运行中的消费者 | 生成的 prepare、observe、criterion、resolution 闭包调用保存的 A 函数，并使用同一 A 的 parser/codec。私有 start 闭包另要求 writer 发出的精确一次 grant；公开 receipt/status 不能反向取出它 |
+
+因此统一的是外层控制形状、关联检查和提交规律，业务函数仍解释本叶子的 Prepared/Observation。新原生条款进入 A 的声明与函数，派生消费者随之改变；不是要求核心添加一个认识该条款的 switch。AdmissionContract 的服务/失败与 A 的后续阶段也不混为一套自由泛型。
+
+重启后不存在原来的闭包。历史 resolver 先按记录中的完整 binding、实现身份与槽位找回 A，再用 A 的 codec 检查所存 Prepared 和观察，最后重建消费这些值的观察、criterion 与 resolution 函数。静态已知 A 的调用者取得其精确结果；运行时才知道 A 的通用调用者保留绑定槽位的文档，在同一解析作用域内消费或经合法投影进入已知单元，不能把某个历史 A 断言成当前 A。
+
+历史解释器缺失时，存储仍可保留原编码和不敏感的控制身份，但不能因此宣称已经取得可交给业务函数的值。已开始的工作保持 RecoveryRequired；当前版本不得重新编译、重算数量或重新发送。仅有可读 schema 也不等于旧 criterion/resolution 实现可用。历史观察入口可以继续存在而不重新开放旧版接纳和 start。
 
 ### 10.2 准备、批准与状态演进
 
@@ -699,10 +844,10 @@ stateDiagram-v2
   Prepared --> Retired: 尚未开始时明确退休
   Ready --> DispatchStarted: 原子持久开始身份与许可
   DispatchStarted --> Observing: 收到 ack 或结果未知
-  Observing --> Satisfied: 原生证据满足明确判据
+  Observing --> Satisfied: 判据满足且该控制的尝试与责任可结清
   Observing --> ConclusivelyRejected: 证据证明未产生效果
   Observing --> Recovering: 存在残余或未知敞口
-  Recovering --> Satisfied: 后续证据解决目标
+  Recovering --> Satisfied: 判据满足且尝试已解析或责任已原子移交
   Recovering --> Compensating: 策略允许且补偿可接纳
   Compensating --> Recovering: 保存补偿后实际敞口
   Retired --> [*]
@@ -711,6 +856,12 @@ stateDiagram-v2
 ```
 
 此图描述内核阶段。具体 Recipe 的 observation 仍由自身 schema 定义。`acknowledged`、`working`、部分成交、成交、撤单确认、替换与敞口恢复不可互换。提交成功的 receipt 不宣称订单成交；撤单接口返回成功也不证明没有已成交仓位。
+
+**业务判据与控制结案是两个消费结果。** `decideCriterion` 回答目标是否被所选证据满足；`decideResolution` 按 A 声明的原生关联与证据条件回答尝试结果是否已解析。内核还要核对本控制拥有的未决工作、reservation 和恢复责任。只有目标满足，而且这些责任已按冻结策略结清或已原子移交给明确的持久恢复拥有者，才可走到图中的终态 Satisfied。移交保留原 attempt 的 Unknown、风险和关联，不把它记作已成交，也不释放仍由恢复方承担的约束。
+
+例如初始长仓为10，准备减4，重启后同范围的可信新观察为6。A 成交4、另一参与者未交易，与 A 未成交、另一参与者减4，可以产生同一观察。若冻结判据是“当前长仓不高于6”，它可以满足；若是“证据证明 A 减少至少4”，尚不能满足。前一种情况下也必须继续解析 A：它仍可能在观察之后产生效果。公共状态因此可以同时报告业务判据满足和 attempt 待恢复；不能用一项成功谓词、schema 通过或关联摘要把后者消去。
+
+这不要求所有 Close 使用同一种判据，也不要求所有业务持仓归零才能结案。它要求保留本次效果的因果与责任边界：当前数据值不是原生执行归因，业务目标满足不是重发许可，后来的 ack 通道损失也不能推翻已经由充分证据成立的结果。批次和补偿按各成员的这两项结果消费，不能只聚合 criterion 的布尔值。
 
 批准冻结的不是一句“允许交易”，而是计划摘要、授权主体、范围、成功判据、容许补偿、时限和策略版本。prepare 之后的实质修改形成新意图/计划修订，旧批准不能沿用。发送前对明确可变的前置条件复核；变化违反批准范围则停止，而不是偷偷修改请求使其通过。
 
@@ -734,15 +885,37 @@ stateDiagram-v2
 
 补偿本身也是受控 Recipe，有自己的批准边界、attempt、Unknown 与观察。不能把一次反向下单当作必然成功的清理函数。组合计划接纳时就明确可接受等级，不等失败后临时把 Exact 降成 Economic。
 
+**补偿目标和输入的构造。** `A.CompensationPlan` 不是已经准备好的 `C.Prepared`，也不是一张任意command对象。若目标C固定，补偿声明关联§5.4.1式的输入适配器，消费A的Prepared、ExposureEvidence、Policy所产生的计划及显式配置，构造精确C.Intent或构造失败。若目标C需动态选择，则按§5.4.2同时声明允许的目标关联、选择政策与适用的输入构造；所选C的新增必填参数不能由schema猜出。需要更多事实时先描述显式读取，缺合法构造或补偿等级证据时返回对应失败/不可用，不发送。
+
+writer接纳的是绑定所选C的精确新意图；C再从自身声明取得ReadFacts、prepare、许可/批准、criterion、resolution及历史恢复消费者，不继承A的批准、Prepared或发送grant。保留A的敞口/责任和C的因果引用，使C的观察能推进原补偿责任；C自身若失败或Unknown，仍由其独立attempt及owner处理。这复用已有输入构造与Controlled关系，不为补偿再造一套执行器。
+
+**异构保证如何被组政策消费。** 等级标签须关联它保证的目标、作用域、证据及允许残余；只有在同一目标和证据域内，才能使用已经证明的蕴含关系，不能跨成员取字符串min/max作为组准入。组声明同时保存每个required member的保证要求与实际可用claim、输入构造、组目标/结果函数、Unknown政策及释放/移交关系。`bindGroupPolicy`消费这些关联：逐成员核对目标和证据相容，再核对组函数所需的单位、scope、时间和成员投影能否构造；缺保证、缺构造或不允许的未知分支返回typed policy failure，不降级后继续。writer冻结本次选择、依据和policy revision。这里的准入证据证明可用能力及保证前提，不要求发送前就拥有未来成交；失败后规划补偿还须读取实际ExposureEvidence并重验前提。
+
+A的Exact保证覆盖A指定状态，B只有不能恢复其指定状态的Economic保证时，要求逐成员StateRestoring的组在B处拒绝；若另一个明确组目标只要求带单位/时间和容差的经济敞口恢复，且两者均有相应证据，同一成员组合可以接纳，但不得称为原状态已恢复。Independent可以保留None；要求为某成员可能敞口自动补偿的AllOrCompensate不能接纳该成员的None。后来证实某次尝试无效果，只说明该分支不需要补偿，不反向证明准入时拥有补偿保证。
+
+补偿后的`advanceGroup`继续消费冻结目标/保证、原成员和C各自的criterion、resolution、exposure及责任。C目标满足而原尝试仍Unknown，不能仅凭反向命令或Ack释放原lock；达到声明目标、残余符合政策且全部相关责任已解决或原子移交后才可结案。已开始后原保证失效进入RecoveryRequired/CompensationUnavailable，不改写旧policy。另有授权的较窄恢复目标可以成为新的受控关联，但保留原承诺未满足及其责任，不以新目标回填旧组成功。
+
 **两成员推演。** 设 A、B 的 Order 扩展、Prepared、Ack 与 Observation 各自不同。程序取得 `Receipt<A>` 后构造 B 的接纳命令，只建立本地接纳的因果顺序；B 可以被接纳时 A 仍未开始，也不能用这个 receipt 满足“等待 A 成交”的条件。若业务需要后一种依赖，须消费 A 的已声明 criterion/observation，并按其持久控制协议等待。只在调用进程里顺序执行也不保证进程退出后 B 最终被接纳。
 
 A 开始后先收到 fill、后收到 ack 时，先按同一 attempt/native identity 保存填充观察，late ack 只补充关联事实，不使已知填充回退。此时 B 若被可靠地拒绝，A 的成交和敞口仍存在；B 若在开始后结果未知，则保留 B 的恢复责任，不能将其当作零效果。IndependentBatch 按各自结果推进；AllOrCompensate 根据实际已知敞口、允许等级和风险策略构造新的补偿 Recipe，补偿也可能失败或 Unknown；VenueNativeAtomic 则需要该作用域和操作组合的原生证据。共享的是每个成员的关联、决定与解释规则，不是一个 `JoinedOrder` 或共同成功布尔值。
 
 业务作者通过精确 observation 消费函数定义成交、撤销或经济目标，通过补偿规划函数消费 ExposureEvidence 并构造另一受控关联。核心不用识别 A 的 postOnly 或 B 的原生条款；它必须保留这些函数与 Prepared/Observation/Policy 的绑定，不能用收到 ack、错误字符串或 Promise 结束替代业务判据。
 
+**成员到 coordinator 的构造。** 每个已绑定成员 Aᵢ 用自己的 `decideCriterion(Prepared, ObservationHistory)`、`decideResolution(Prepared, AttemptEvidence, ObservationHistory)` 与 exposure reducer，形成业务目标、尝试解析、带 coverage/uncertainty 的敞口三个独立结果；再关联其 reservation disposition、attempt 与 recovery owner。`ChildProgress` 是这些结果和证据引用的 product，不把异构 Observation 强制转成同一载荷，也不压成 success boolean。coordinator 的纯 `advanceGroup(groupState, policy, memberProgress)` 消费该 product，产生候选组控制事件；writer 核验成员版本、组约束和责任归属后提交。观察函数提供业务含义，coordinator 只解释政策要求的门槛。
+
+若 A 已成交 4/6 而 B 开始后 Unknown，A 的已知敞口是 4，B 的敞口未知而非零。Independent 保留两者独立进度；AllOrCompensate 在没有明确允许不确定性下补偿的政策及充分证据时先保留恢复责任，不能直接逆向下单。即使后来确认 B 无效果，A 仍可能继续成交，故补偿 planner 还须消费 A 的未决尝试与敞口责任；仅看到 4 不能证明补偿安全。新的补偿关联依次准备、批准、开始、观察，并按声明等级判定，不重用原 attempt。业务目标满足也不自动清除成员解析/敞口责任；组的结案必须核对这些责任已解决或原子移交。
+
 ### 10.5 Guard、同步和 reservation
 
 旧 guard 的限制含义保留，但把状态更新变成纯决定与同事务 reservation。多个订单不能各自读取相同可用额度后重复占用。跨账户或共享额度有明确范围与一致的锁顺序；普通行情查询不进入账户锁。
+
+规则由同一业务关联给出适用性、`Intent/ReadFacts` 的精确投影、writer-owned local state 依赖、显式时间、typed issue 及消费触点。纯 evaluator 在这些操作数上返回不适用、通过证据或业务拒绝；缺必要估值或目标身份不能伪装成不适用。通过证据可参与 §9.1 的候选决定与推测演进，却不是额度已占用。后继规则消费同一次决定演进后的状态；后继拒绝时不泄漏前序候选消费。
+
+writer 外的 prepare 只形成 candidate/evidence。规则声明的消费触点（例如 approval/queue 或 DispatchStarted）必须在同一提交决定内读取当前 local state，重新执行同一纯 evaluator，或核验等价且覆盖全部依赖的版本化 precondition；共享额度、policy、reservation 和必要事实依赖不能只用各自 intent revision 代替。事务冲突后重新读取和决定，不能盲重放旧 candidate。网络读取仍在 writer 外；事务内只验证声明的来源、版本、freshness 与失效条件，不声称锁住远端账户。
+
+例如已有占用 40、上限 100，两个 prepare 各提议占用 60。共享 conflict scope 的 writer 先提交一项后，后一项必须基于已有占用 100 再决定，因容量不足或版本冲突而不能获得第二份 reservation。此推导依赖完整 read-set、共享范围内可串行化的提交、所有本地占用均受该 authority 管理及冲突后重算；它不证明 venue 余额不会被外部 actor 改变。
+
+消费触点把相应 consumption/reservation、控制投影和该步必要的 work/outbox、成功 receipt 原子提交。失败不授予该步新的 reservation、执行 job 或 grant，也不返回成功准入 receipt；先前已提交的意图仍可存在，命令可以返回或保存 typed rejection/等待状态。cooldown 在 approval 消费与在 Start 消费均可表达，但触点、release/expiry/retry 必须由规则声明，不能由某一事件流例子固定成通用默认。
 
 同步读取、发现外部订单、重建成交/仓位、余额 reconciliation 是原生事实导入与状态演进，不是伪造一次新用户订单。事实不足时保留时间、coverage、来源与不确定性。同步失败不能擦除先前 ack，也不能把未知仓位归零后释放 reservation。
 
@@ -758,6 +931,27 @@ A 开始后先收到 fill、后收到 ack 时，先按同一 attempt/native iden
 
 一个等待订单可以使用 Candle；另一个能力可以使用 NewsGroup。只要它们满足相同的 source/predicate/evidence/control 关联，就使用同一个激活协议，无需新增一个业务状态机。
 
+<a id="deferred-construction"></a>
+
+#### 11.1.1 同一组操作数怎样构造激活与后继消费者
+
+以 D 记第5.5节产生的 deferred 关联，不增设公共 SDK。作者提供：原受控 A 的已接纳意图引用；来源计算 S 及其请求/范围/交付契约；谓词 P 的 checkpoint C、证据 E、纯进展函数、初始/rearm 状态构造与支持证据选择；continuation 的处置、责任渠道和精确响应分支。P 的配置、函数和槽位绑定为一个声明。C 的 schema 只能验证给定状态，不能凭空构造初态、计算 baseline 或识别业务依赖。
+
+| 同一操作数 | 构造出的实际消费者 |
+|---|---|
+| S 的 item/control/revision 槽位与 binding | 来源解析与普通进展/修订分流；不能制造来源未声明的 correction |
+| P 的 C/E 声明、初始化与 advance | 初次注册/rearm 的状态构造、普通进展闭包、C/E parser 和持久编码；闭包调用保存的 P，不识别 Candle/News 字段 |
+| P 的支持选择与已认证来源引用 | 当前 checkpoint 和已选证据的支持关系、修订目标查找及失效写集；不是另一份独立维护的依赖清单 |
+| D、已提交 C/E 引用与控制原因 | 决定请求及outbox：命中引用E；缺口引用来源/连续性；修订引用旧依据/目标；尚无请求的等待截止或渠道升级引用当前C、截止/渠道事实及冻结政策；已有请求的升级另引用前次请求。非命中原因不伪造E，首次请求不伪造前次request |
+| A 与 continuation 的响应声明 | 回复 parser、分支消费者及 receipt；Revise 引用 A 的输入，RequestSubmission 延续原意图，不取得私有 dispatch |
+| D 的完整绑定、配置、槽位与实现身份 | 历史解码与消费者重建；已有请求恢复原身份交付，不再运行 predicate 重新制造命中 |
+
+原意图引用不是永久的 NotStarted 证明：注册、回复与后继推进仍由 writer 检查当前状态。初始化/rearm 构造失败属于声明的接纳失败；需要读取来源边界时先在解释层取得真实事实，纯构造不能自行读取网络或时钟。缺少历史 P/continuation 时保留原记录和责任，冻结不能合法解释的推进，不换用当前同形 schema。
+
+**未命中的等待也有生命周期。** D同时保存激活有效期、可信终点的判定关系及到期处置。FutureBoundary表示本epoch允许消费的未来起点，不冒充expiry或市场终点；终点可由显式Clock事实或S声明的完成/barrier提供。由同一D构造生命周期消费者，消费这些事实与当前C/控制状态，按冻结政策保持等待、SuspendControl、CloseWithoutDispatch或EscalateDecision；不把它塞进普通advance的Candidate/Gap。子流完成是否构成S结束仍由组合政策决定。
+
+例如“本交易时段截止前出现crossing，否则关闭等待”，96、98均未命中，随后可信截止事实到达：writer核验当前epoch/版本与未开始状态，将激活owner退休，并按声明关闭未发送意图，保存截止原因而不伪造命中E。只有本地deadline而无完整来源barrier时，也可按政策停止继续等待，但不声称已经证明整个市场历史从未命中。生命周期关闭与回复/Start竞争同一控制决定；Start先提交则不得退休成未发送，只保留相应观察/恢复责任。等待到期、请求回复到期和批准到期各自有消费者，不能等不存在的ReviewRequest过期才结束未命中等待。
+
 ### 11.2 checkpoint 是决定证据的一部分
 
 ```text
@@ -765,13 +959,23 @@ advance(Checkpoint, SourceFact, FutureBoundary)
   : { checkpoint: Checkpoint, outcome: NoActivation | Candidate<Evidence> | Gap }
 ```
 
+该关系用于普通来源进展，不包办整个 deferred 生命周期。`NoActivation` 仅表示本步不提出激活，不证明业务谓词为 false；初始化、窗口积累或尚未形成 quorum 可以保留未定的 C。`Gap` 表示声明所需连续性或证据关系受损，不是所有业务未知的统称。部分 NewsGroup 中已有两个可信匹配可以满足声明的二取三判据；只有一个匹配且其余尚未到达时，可以 `NoActivation` 并保留 Partial/未定成员，不能默认为 Gap、false 或 Complete。
+
 predicate 明确自己的触发语义：每个符合条件的新事实、从 false 到 true 的边沿、持续窗口或其他已声明算法。实现身份、配置、单位、来源和 checkpoint 版本一起冻结。它不能隐式读取全局“最后价格”。
 
 边沿判断需要 baseline 与连续性。false@10 之后断流，再收到 true@12，不能凭空证明穿越；Gap 使所需 baseline 失效，策略选择等待新可信边界、请求决定或关闭。非命中的事实如果改变必要 checkpoint，也必须持久化。无需保存全量行情，只保存足以重放决定的有界状态与选中证据。
 
 事件身份/epoch 去重、checkpoint 更新、意图状态变化及下一 outbox 在一个 writer transaction 中提交。同一意图版本只有一个 live activation owner；组合多个来源时在该 owner 内计算，防止多个等待者各自“花掉”同一意图。
 
-Correction/Retraction 的处理不依赖当前谓词再次命中。它们通过证据依赖关系找到已选证据和 checkpoint：未发送的工作被栅栏化并请求新决定；已发送或 Unknown 的事实保留，不能用数据修订撤销外部现实。
+Correction/Retraction 进入独立的依赖消费者，不要求当前谓词再次命中。P 为 C 与 E 给出有限可表示的支持引用或来源范围；支持可以保守覆盖，不能遗漏会改变所承诺判断/后继状态的依据。writer 沿持久支持关系查找修订目标的后继 checkpoint、request、submission 与恢复责任，对未开始的工作栅栏化并按冻结政策请求决定或重建，对已开始/Unknown 保留原尝试。类型与摘要约束引用归属和实现身份，不证明任意业务函数的支持充分性。
+
+当前 checkpoint 的未来计算支持与历史选中证据的控制责任支持分开。例如阈值100，事实依次为96、98、101，crossing 的选中依据包含98与101及连续性；把98修订成101使原 crossing 依据失效，却未必改变当前仅保存最后值101的 checkpoint。Rearm 可以初始化新 C，但不能删除旧请求已派生 submission/attempt 的证据关系。普通数据的 epoch/future-boundary 栅栏不屏蔽历史 correction 的目标查询；它只影响确有支持关系的节点，不无条件覆盖新 epoch。
+
+保守支持集可能多冻结一些本来仍成立的决定，这项可用性代价须被政策接受。没有可验证 replay、足够历史或重算关系时，失效并等待可信边界重建是合法结果，不要求逆函数，也不自动把历史 crossing 移到较早位置再次激活。有限 checkpoint 不能以定长缓存为由丢弃仍被控制责任引用的支持；需要无界历史的算法必须另有归档/范围契约，不能冒充有界状态。
+
+**支持充分性的可检验含义。** 对P声称支持的修订域，若只改变支持集合之外的事实，所承诺的判断、证据和后继控制资格应保持不变；否则该支持选择违反契约。组合消费者的支持包含其实际消费的前序支持与新增事实依赖，直至仍负责任的request/submission/attempt；不能只保存最终值的直接引用。这个条件不要求自动分析任意函数。声明者可以给出业务推导、明确的保守来源范围，或仅提供更窄的修订保证；不能证明必要支持且又无法保守覆盖时，不接纳声称可修订的激活关系，已存在但失去证据的责任进入失效/恢复。
+
+例如crossing的支持必须包含决定前后阈值关系及连续性的baseline和当前观测；最新价格投影只依赖最后值不代表crossing也如此。二取三判据可保守关联当前窗口全部成员及成员集合修订，重算其命中数/未定成员；无需把所有未来新闻变成历史支持。改变支持之外的事实而改变候选，就是具体反例；schema合法和测试通过都不能消除未覆盖的反例域。这给出扩展实现需要履行的语义义务，而不是对任意业务函数完备性的既成证明。
 
 ### 11.3 disposition 是冻结策略，不是默认执行
 
@@ -785,7 +989,7 @@ RequestDecision 产生精确请求，包含 intent/plan revision、来源与 pre
 | Rearm | 新 activation epoch、新 future boundary，复核意图与来源 | 不重新消费旧匹配事件，不继承失效 baseline |
 | Revise | 新 IntentRevision，重新准备必要计划与授权 | 不原地修改已批准/已开始计划 |
 | Discard | 仅对尚未发送意图作本地退休 | 不把已发送订单伪装成已撤销 |
-| RequestSubmission | 提交到普通 prepare/approval/dispatch 边界 | 决策文字或来源事件本身不是交易许可 |
+| RequestSubmission | 消费原请求并建立原意图的内部控制句柄，进入普通 prepare/approval/start 边界 | 不再次 SubmitIntent；决策文字或激活依据不是交易许可 |
 
 响应必须匹配 request、控制版本、intent revision、epoch、主体与有效期。迟到响应返回 stale/conflict 并提供当前可用句柄；不能作用到同路径的新意图。Keep 后如何恢复是一条明确的 handle 操作，而不能只把订单留在聊天上下文，依赖后续聊天重新发现。
 
@@ -797,6 +1001,14 @@ UTA 拥有 decision request、outbox、控制版本和消费 receipt。Alice 拥
 
 Alice 在启动 worker 前持久接纳稳定 request key。UTA 重试同一 outbox 时，Alice 查询或复用同一 admission，不再生成任意新 Agent。调用丢失响应时也依据该 key 查状态。当前进程内 headless 去重不足以实现此契约，必须在实施中补上持久 admission，而不是把 EventLog listener 当任务总线。
 
+**接纳后的责任有自己的消费关系。** Alice从同一admission中的executionRef及其交付政策构造可查询的执行记录和恢复消费者，先原子取得worker claim，再尝试spawn/resume。执行状态区分尚未claim、已claim、已有启动证据、已有终态证据及证据不足的Unknown；每一项都关联原admission/execution、owner及其证据。claim lease到期把责任交给恢复者，不证明旧启动者已死或从未spawn。Admitted而未claim时可恢复claim；已claim但无启动回执时先查询同一执行，不能仅凭marker缺失/进程列表暂空创建第二worker。新的尝试还需确认旧launch owner不能迟到启动，并按显式重试政策保留原尝试出处；不能声称进程exactly-once。
+
+worker结果与回复交接是独立轴：失败可以没有reply，仍运行的worker也可以已产生回复。Alice分别保存执行证据与`NoReply | PendingReply | UtaReceipt`等本交接所需状态；发送的是同一reply key/digest，网络未知时查询/重投原回复，已得到stale/expired时不换key复活旧决定。worker完成不证明UTA接受，UTA接受也不证明worker已退出，更不证明Broker已成交。
+
+UTA outbox取得Alice admission receipt，只结束该段交付责任；UTA仍负责request有效性和回复决定，Alice仍负责已接纳execution。UTA expiry先提交时，迟到回复失效；未claim工作可在确认失效后不再启动，已claim/started不能倒写成未发生。跨owner没有原子启动截止保证，双方读取与提交间仍有竞态，但UTA最终CAS不接受过期回复。Alice保留completion/Unknown及迟到回复证据，可按自身政策完成或显式停止worker。
+
+request expiry、worker claim lease和execution retention各由自己的owner消费。保留期不能删除未决责任：终态且交接已结案的记录可压缩为可查询的身份/摘要/结果/出处；Unknown、可能已启动或回复交接仍未知时，继续保留或明确交给持久recovery/archive owner。日志清理不把执行改成未发生。实际存储耐久、启动/退出证据、跨owner可达性和公平调度仍是实现前提，设计不承诺永久断网下最终交付。
+
 exact 会话不可恢复时，reconstructed 路径必须明确保留来源材料与身份，并按已配置责任渠道交付；不能伪装成原会话已经收到。Inbox 是人可见投影，不是交易批准权威；Issue/schedule 的现有权威不迁入 UTA。
 
 ```mermaid
@@ -806,7 +1018,7 @@ sequenceDiagram
   participant Alice as Alice 持久决策接纳
   participant Agent as Workspace Agent
   Source->>UTA: 带来源 连续性 修订的事实
-  UTA->>UTA: advance 并原子保存 checkpoint 与 decision outbox
+  UTA->>UTA: 分流进展与依赖修订并原子保存 checkpoint 和决定依据
   UTA->>Alice: 稳定 requestKey 与精确决定契约
   Alice->>Alice: 先持久接纳再启动或复用会话
   Alice->>Agent: 交付 evidence 与允许响应 schema
@@ -814,6 +1026,25 @@ sequenceDiagram
   UTA->>UTA: 检查主体 版本 有效期 并保存 receipt
   UTA-->>Alice: 当前 control handle 与状态
 ```
+
+<a id="activation-control-consumption"></a>
+
+### 11.5 激活依据怎样继续约束准备与 Start
+
+RequestSubmission 按 D 的回复槽位解析，再从已提交请求找回原 A、IntentRevision、epoch、checkpoint/证据及当前控制版本；不相信回复复制来的事实。writer 在同一决定中消费响应、建立原意图的 submission handle、延续该请求的依据关系，并保存必要 PrepareSubmission 工作及 receipt。SeekAuthorizedExecution 从已提交候选使用同一内部控制构造，不经外部 SubmitIntent；普通无 deferred 来源的接纳无需伪造这项依据。
+
+prepare 从 handle 解析原意图并取得 A 真正需要的当前事实。激活证据说明为何进入控制，不自动成为余额、价格或权限事实。未批准意图可以依据新事实形成准备计划；替换已形成的不可变计划须显式退休/形成新修订，修改业务输入须 Revise，不能漂移原 plan digest 或沿用旧批准。只要工作源自该激活依据，RecordPrepared、批准/排程和 Start 就持续消费它的有效状态；不能在取得控制 receipt 后丢掉关联。
+
+UTA 的激活、决定与效果控制共用第9.4节的 writer 提交域。依据失效及受影响未开始工作的状态变化属于同一权威写集，Start 的依据检查与 DispatchStarted 也在同一决定内。Alice admission 仍是独立持久边界，不加入 UTA 事务。
+
+| 本地提交次序 | 由共同消费关系推出的结果 |
+|---|---|
+| 修订先于回复 | 旧请求依据失效且可回复权关闭；旧回复即使 schema 合法仍 stale/conflict，不创建 submission |
+| 回复先于修订，准备未提交 | handle 已继承依据；修订栅栏化 handle。已在 writer 外进行的读取不必能撤回，但迟到 RecordPrepared 不得成为当前可执行计划；原接纳 receipt 保持历史事实 |
+| 准备/批准先于修订，Start 未提交 | 修订关闭相应工作的推进资格；Start 消费同一依据/控制版本而被拒绝，不发 grant。只改 review revision 而不影响 job 的条件是不成立的实现 |
+| Start 先于修订 | 原 attempt 已存在；修订只追加失效因果及观察/恢复责任，不退回未开始。即使 native call 尚未发生，已取得 grant 仍可能执行，不能承诺物理不发送 |
+
+这是对同一提交域中的次序分类：任意旧依据的后继 Start，要么在失效之前已成立，要么因实际消费失效状态而不能成立。由初态与每次决定保持该条件，可归纳得到“已失效依据不能取得新的 Start”；不能推出 UTA 尚未收到的原生修订已被处理，或修订提交后物理世界不再发生写入。两个互不相关的 CAS、相同字段或消息先后都不足以替代这项关系。
 
 <a id="chapter-12"></a>
 
@@ -912,6 +1143,30 @@ false baseline 可以在非命中时持久化；连续的新事实构成 crossin
 
 需要执行时，RequestSubmission 仍进入普通 prepare/approval/start 边界。若原意图已经可能发出，用户或 Agent 不能用 Discard 抹掉原生订单；只能选择该能力声明的观察、撤销或恢复控制。由此，行情、订单与 Agent 决策可以组合，同时各自的事实、权限和持久拥有者仍然清楚。
 
+### 13.4 Close 怎样经过同一控制构造并在重启后消费
+
+以一个支持精确数量减仓的 Close 叶子为例，作者声明该来源内目标、账户/子账户范围、数量单位、ReadFacts、Prepared、原生观察和判据。当前 UTA 在 staging 时解析子账户，并在 dispatch 前对显式数量再读仓位、拒绝缺仓或超量（`services/uta/src/domain/trading/UnifiedTradingAccount.ts:180–205,565–595,742–766`）；这给出了必须解释的业务行为，不是新控制关系已经实现的证明。
+
+本例的准备输入为减2，声明事实是目标长仓5。纯 prepare 消费事实后冻结精确原生条款、所用数量/舍入、范围、判据与恢复身份；批准绑定这份计划，不绑定一个稍后重新读取即可变化的数量。若另一叶子支持 All，其“全部”的计算时点与原生含义必须由该叶子明确：本地事实上的全部数量、原生 full-close 指令和全账户 flatten 不能因字段省略而等同。某叶子只支持其中一种，输入和解释便只承诺那一种。
+
+第10.1节的构造从这同一 A 产生提交 parser、receipt、计划编码与后续状态消费者。writer 接纳意图、保存准备结果与匹配批准，随后先持久 DispatchStarted，再允许私有解释器执行。本例在开始边界后进程丢失；重启通过原 A 找回 Prepared、原生查找身份、观察器和旧判据，不重新生成请求。当前仓位变为3可以成为合法观察，但是否证明本次减2完成，取决于被冻结的是状态目标还是本次尝试的因果判据。缺少后者所需证据时，保留 Unknown 与恢复拥有者；错误 binding/slot 则在进入该消费者之前就拒绝。
+
+发送前的再读检查只能证明检查时看到的关系。本地 writer CAS 不约束其他交易者；没有原生条件写、可验证栅栏或其他相应证据时，不能将它提升为“绝不反向开仓”的保证。叶子可以声明较窄的 check-before-submit 承诺及剩余竞态风险，或只在具备更强原生契约时承诺条件式减仓。这个差异属于 A 的条款与证据，不通过添加全局 Broker 分支解决。
+
+### 13.5 账户值与 FX 怎样成为同一个只读消费程序
+
+当前快照保留 `account.baseCurrency` 和 `netLiquidation`，但 `/snapshots/equity-curve` 按分钟存入裸数值，使用 `Number(v) || 0` 求和、补入前值，并将异常折叠为空 points（`services/uta/src/domain/trading/snapshot/types.ts:14–28`；`services/uta/src/http/routes-trading.ts:632–694`）。builder 的 timestamp 是读取之后生成的本地 capture 时间（`services/uta/src/domain/trading/snapshot/builder.ts:21–47`），不能由新 Adapter 改名为已经证明的原生 as-of。这些旧差异必须被保留或明确修正，不能只给它们一个新的 Snapshot 名称。
+
+一种目标程序由作者选择请求账户集合、估值币种、时间/缺侧政策，以及账户读取 D0、FX 读取 D1、输入转换 M 和最终纯计算 F。账户值 Unit 同时关联金额、币种、范围和观测证据；D0 的输出使用它，不另抄一套“聚合账户”字段。M 从实际选中账户值导出所需货币对、时间和 FX 来源，产生 D1 的精确请求。同币种使用明确的 identity 换算；若全部是同币种，可在已声明的选择中跳过外部 FX 读取。
+
+解释器保留 D0 的 A，执行 M 和所需 D1 得到 B，再调用 `F(request, A, B)`。F 的输入积引用原 A/B 槽位，按单位相容的 FX 证据换算，再在请求账户范围内归并同币种金额；其失败与输出结构仍由同一 F 声明派生。公共机制只做第5.4节的构造与解释，不需要知道 EUR 或某个 Broker，也不需要建立交易批准、receipt 或 outbox。
+
+本例明确选择“请求范围内各账户都具备适用值和 FX 才给出完整估值；不隐式 carry-forward”。时间政策说明使用 capture 时间还是有证据的来源时间、如何取桶内值，以及接受什么 FX 时效/质量。缺来源时间、必要 coverage 或可用的修订顺序时，按该政策给出不可回答或部分结果，不用 connection generation、本地时间或非空数组补造证明。只消费 netLiquidation 的程序也不因无关 orders 组件缺失而自动失败；但旧 builder 已经整体失败时，新消费者不能凭空取回那个值。
+
+有限例子的金额和行情均为假定前提：选中 A 为100 USD、B为80 EUR，两者的范围和时间证据满足所选政策。第一轮 EUR/USD 缺失，输出保留缺口，不提供“总净值100”或把B计作0。后来同一请求取得适用的1.10 USD/EUR，F 得到B为88 USD、总计188 USD，并保留两项账户证据与 FX 修订。改变的是输入事实和派生结果，不是核心算子。若B的有效修订把币种改成另一种货币，M重新构造对应货币对，旧EUR/USD不能因数值仍可相乘就被沿用。
+
+这些点可以仅作为一次 Query 的结果。需要持久曲线时，才按显式 capture/projection 契约保存选中来源、FX 和计算版本，后续修订重新计算受影响的点并保留 lineage。跨账户时间政策和 FX join 不宣称原子账户快照；将“缺失即不可完整估值”换成有界前值或允许估算，会改变该业务程序的可观察承诺，但仍使用同一组组合规则。
+
 <a id="a8"></a>
 
 ## 14. 单一权威迁移与旧能力承接
@@ -964,7 +1219,7 @@ false baseline 可以在非命中时持久化；连续的新事实构成 crossin
 
 设计的证明义务分为两类：主机必须维持的关联与控制规律；依赖具体 Provider 才能成立的原生保证。实现可以通过局部反例检验前者，不能据此推断后者。
 
-### 15.1 已执行的从属证据
+### 15.1 历史归档中的从属证据
 
 本设计附带[可复现实验归档](uta-capability-runtime-design/verification-evidence.tar.gz)。归档保存声明样例、独立 Python Provider、SQLite 控制程序、执行驱动、锁定依赖、完整输出和隔离状态；不连接真实 Broker，不读取用户交易账户或凭据。
 
@@ -1016,6 +1271,12 @@ python3 run-control-evidence.py
 真实 Provider 的原生幂等、完整查询/absence、重放窗口、原子组、最终成交、修订和补偿等级，继续由[逐项问题](uta-capability-runtime-design/legacy-bindings.md)规定的具体证据边界约束。没有完成这些实测，不得声称新运行时已经可以交易、迁移或部署。
 
 初版中英架构与完整逐项调查保持独立且完整。本设计的价值在于给出能承接那些具体能力的统一关系；哈希、条目覆盖、编译或局部场景都不能替代对这些关系的实现和原生验证。
+
+### 15.4 当前构造研究与形式论证
+
+[本轮研究与裁决](uta-capability-runtime-design/current-research.md)记录先小范围检验、Main限缩外推、再扩大到数据算子、纯规则与组协调、原意图控制、管理声明和旧承接的过程。正文中的构造及条件推导不是上述历史样例的自动推论；历史执行没有冒称本轮重跑。
+
+本轮实际使用Z3 5.1.0对固定意图修订、共同激活依据和单writer关系作符号归纳：初态与14种转移保持性均为unsat反例查询；错误的独立job CAS模型产生可达反例。Main直接运行同一SMT义务，完整输出与研究者记录一致。这个证明支持失效依据不能取得新的Start、普通恢复不重新颁发grant；同时存在Start先提交、Correction随后、native call最后发生的合法轨迹。证据记录给出规格、复现和全部限制；不证明实际存储、依赖充分性、真实Provider、授权风险、活性或Alice交付，也不替代整套设计的正面验收。
 
 <a id="event-flows"></a>
 
@@ -1162,6 +1423,8 @@ merge 消费子流终态，而不把左源 Completed 原样发布为整个组合
 
 外层在拥有者存活且可完成协议时只选择一个 Terminal；进程崩溃可能只有 EOF，没有机会补造终态。部分结果策略决定仍开放的成员如何继续，以及何时关闭组合；外层 Failed 后不能再发 Completed。窗口可以按声明的处理时间 deadline 产生 Partial 结果，但不能据此升级为来源 watermark 或原生 finality。窗口和交易组合会改变事件结构，却不会因为 payload 恰好多了一个字段而换一套控制实现。
 
+第5.4.3节给出了这些算子的操作数、纯推进及具体消费。`SnapshotEnd`、单窗口 `WindowClosed` 和外层 Terminal 是三个不同边界；终止不可逆约束的是该 invocation，不禁止持久投影通过合法的其他调用继续修订。后继修订必须重新满足其输入、来源和责任契约，不能借持久投影身份绕过已经关闭的流。
+
 因此，新增算子先给出它解释什么计算、消费哪些观察、怎样推进自身状态及拥有资源，再声明需要满足哪一条保持关系。透明投影、带过滤的派生计算和改变终态的组合可以复用构造规则，但不能共享一句没有前提的“行为相同”。
 
 ### 16.6 用异常时序检验边界
@@ -1225,7 +1488,7 @@ npm ci --ignore-scripts --no-audit --no-fund
 node verify-evidence.mjs
 ```
 
-执行器依次运行严格类型检查、8个静态反例、Python/CLI/新 reader、三种持久关系损坏、五组 merge 场景和图解析。每次创建独立的 `verification-run-*` 命令日志目录；`specimen/event-evidence/` 保存本轮输入、持久文件与读取结果。完整 stderr 保留，不能通过隐藏诊断替代修复。
+该历史归档的执行器依次运行严格类型检查、8个静态反例、Python/CLI/新 reader、三种持久关系损坏、五组 merge 场景和图解析。每次创建独立的 `verification-run-*` 命令日志目录；`specimen/event-evidence/` 保存对应执行的输入、持久文件与读取结果。完整 stderr 保留，不能通过隐藏诊断替代修复。
 
 同一归档已在独立目录解压，仅使用归档 lockfile 重新安装依赖并完整运行上述执行器；7个命令全部成功。新运行生成的主 NDJSON、reader 结果与边界拒绝记录和首次验证逐字节相同，不依赖原 authoring 目录的依赖或状态。
 
@@ -1234,8 +1497,8 @@ node verify-evidence.mjs
 EF01–EF14 都是本设计的目标动态语义；局部样例不是这些生产上下文的完整实现。特别是：
 
 - EF01–EF02 的真实安装、动态目录、entitlement 与权限认证，仍需对应 Provider/运行时入口。
-- EF03–EF04 的原生 Push、credit/replay、共享连接释放、buffer overflow、R/P 联合及完整 filter/window/join，不由有限 producer 与两成员 merge 证明。透明关系要求的释放责任也尚未在本轮跨进程 feed 样例中实现。
+- EF03–EF04 的原生 Push、credit/replay、共享连接释放、buffer overflow、R/P 联合及完整 filter/window/join，不由有限 producer 与两成员 merge 证明。透明关系要求的释放责任也未在该历史跨进程 feed 样例中实现。
 - EF05 的真实 FX、估值、账户账、snapshot 与同步，以及 EF06–EF10 的完整批准、风险、发送、补偿和激活协议，需要各自完整状态实现。第15章的 SQLite/独立 venue 实验保留其原有窄证明范围。
-- EF11–EF14 的 Alice 持久接纳与 exact/reconstructed 会话、真实 config/secret apply、Mock admin 接入、产品活动投影和迁移切换，本轮只有设计、源码对照与可解析时序，不声称已经运行。
+- EF11–EF14 的 Alice 持久接纳与 exact/reconstructed 会话、真实 config/secret apply、Mock admin 接入、产品活动投影和迁移切换，现有证据只有设计、源码对照与时序，不声称已经运行。
 
 扩展值能通过基础控制流，并不替某个 Provider 证明 finality、完整查询、原生幂等或补偿保证。设计中这些边界必须明确；实现完成时还必须分别触发真实入口并核对最终状态。

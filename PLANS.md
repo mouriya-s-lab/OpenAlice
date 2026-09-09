@@ -29,7 +29,7 @@ the durable truth after it changes. Git history is the archive.
 
 ## Active
 
-- [[plans/uta-core-design-research.md]] — UTA 候选核心设计已整合：由渐进调查形成后继构造、解释与消费关系，并保留逐项裁决及可复现实验证据；`docs/uta-effect-runtime-architecture` 保持维护者审阅 hold，不以模板、覆盖计数或局部样例冒称实现完成。
+- [[plans/uta-core-design-research.md]] — UTA核心抽象候选已完成声明/组合、业务特化、事件消费与恢复责任的研究验收；Markdown/Mermaid解析及证据归档解包、形式义务复跑已核验。形式证明和原生会话依据的非阻碍禁令分别记录范围。`docs/uta-effect-runtime-architecture`保留至维护者接受；无生产实现或合并授权。
 
 - [[plans/unified-page-topbar.md]] — Unifies navigator and content toolbars
   across the UI, with fixed page actions and content-owned sidebar restoration.
