@@ -1,4 +1,4 @@
-<!-- Generated navigation only by scripts/uta-effect-runtime-solutions.mjs. Per-entry investigation remains in each group. -->
+<!-- Per-entry investigation remains in each group. -->
 
 # UTA 新旧能力逐项调查
 
@@ -10,7 +10,7 @@
 |---|---|
 | 各组 `analyses.json` / `entries.md` | 调整后的逐项对照全文：源码依据、旧行为、问题、保留行为和未决问题 |
 | [原始问题](question-inputs.json) | 每个问题的原文；候选设计作出的决定仍须在完整架构中复核 |
-| [ownership.json](ownership.json) · [coverage.json](coverage.json) | 来源归属和结构核对；数量、`designed`、`accepted`、哈希一致均不证明架构正确 |
+| [ownership.json](ownership.json) | 来源归属核对；数量、哈希一致均不证明架构正确 |
 
 ## 逐组完整对照
 
@@ -49,4 +49,3 @@
 - 各组 entries.md 的 openQuestions 与 preservedBehavior 必须一起阅读。
 - 原始调查记录内引用的 `docs/uta-effect-runtime-detailed-design.md`、`plans/uta-effect-runtime-design.md` 及 `D13`—`D17` 等候选章节编号属于已撤销的总设计与会话计划。它们不作为当前设计入口，也不能把这些历史引用自动绑定到将来的同名文档或编号。恢复归档保留了被引用版本；本目录的调查原文不因恢复操作被重写。
 - 调查对应的初版架构提交为 `a5f23756531cc552b7e12b6d655ae1ffbcd28b64`。原始中英正文保持不变；本索引不覆盖原设计。
-- 生成器只据已有输入生成导航、可读对照和结构元数据，不生成实质解决方案。重新设计必须逐项处理已有调查，而不是用生成成功或评审标签代替判断。

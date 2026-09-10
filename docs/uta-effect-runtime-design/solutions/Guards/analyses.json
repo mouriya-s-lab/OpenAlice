@@ -305,7 +305,6 @@
       "sourceEvidence": [
         "services/uta/src/domain/trading/guards/types.ts:4-9: GuardContext contains only readonly legacy operation, Position array, and AccountInfo object.",
         "services/uta/src/domain/trading/guards/guard-pipeline.ts:20-27: the pipeline fetches positions/account and constructs the context immediately before checks.",
-        "docs/uta-effect-runtime-design/solutions/composition-contract.md#k08 and integration-decisions.md (C04/C08/C12): controlled-effect preparation requires a revision/identity, immutable facts, freshness checks, authorization, and writer-owned admission without broker mutation.",
         "services/uta/src/domain/trading/UnifiedTradingAccount.ts:549-563: keyless accounts cannot stage and readOnly accounts cannot mutate, so authorization must be explicit before executable admission."
       ],
       "currentBehavior": "GuardContext is read-only at the TypeScript surface but is assembled from live broker reads for each operation and lacks transaction identity/revision, AccountScope, before-images, capability evidence, observation sequence/asOf, market session, policy version, or compensation facts.",
@@ -320,8 +319,7 @@
       "id": "MAP-38E91ECD6A",
       "sourceEvidence": [
         "services/uta/src/domain/trading/guards/types.ts:11-15: OperationGuard has only a string name and check(ctx) returning string|null or Promise<string|null>.",
-        "services/uta/src/domain/trading/guards/guard-pipeline.ts:28-35: the pipeline awaits each guard and turns a non-null string into a generic error object before dispatch.",
-        "docs/uta-effect-runtime-design/solutions/composition-contract.md#k03, #k07, #k08: declaration schemas are the source of typed boundaries, while pure assessment remains separate from provider IO and transaction authority."
+        "services/uta/src/domain/trading/guards/guard-pipeline.ts:28-35: the pipeline awaits each guard and turns a non-null string into a generic error object before dispatch."
       ],
       "currentBehavior": "The interface permits synchronous or asynchronous arbitrary checks, with nullable strings as both allow and reject. It carries no action applicability, required observations, typed success facts, failure payload, rule version, or indication whether an async check performed side effects.",
       "problem": "Promises in a domain guard can hide broker/DB/clock effects and make deterministic preparation impossible. String/null erases rejection categories and prevents exhaustive mapping to ValidationFailed, CapabilityUnavailable, PreconditionFailed, or configuration errors.",

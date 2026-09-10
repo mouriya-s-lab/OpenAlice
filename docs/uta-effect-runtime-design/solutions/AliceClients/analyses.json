@@ -5,9 +5,6 @@
       "id": "MAP-139EBB287C",
       "sourceEvidence": [
         "packages/uta-protocol/src/client/UTAClient.ts:1-11: module says createUTAClient is a low-level helper, normalizes errors to JS Error, and defers endpoint validation/WireBrokerError round-trip.",
-        "docs/uta-effect-runtime-design/solutions/composition-contract.md:K02/K07: transport credential resolution, authenticated principal, actor/policy authority, and provider tree remain separate; loopback and body actor claims are not authority.",
-        "docs/uta-effect-runtime-design/solutions/composition-contract.md:K03/K07/K11: the shared descriptor/error boundary is schema-validated and redacted; provider/native errors remain exact and unverified.",
-        "docs/uta-effect-runtime-design/solutions/integration-decisions.md:C09: Alice HTTP v1 fixes Authorization: Bearer <resolved credential> and X-Request-ID, with local opaque CredentialRef and no wire TransportPrincipal.",
         "Historical ten-route proposal at audit commit a5f23756531cc552b7e12b6d655ae1ffbcd28b64; the current route target is descriptor-bound under K01/K02/K06, not a fixed route list."
       ],
       "currentBehavior": "The package documents a generic HTTP helper and promises only Error-shaped failures; endpoint-specific codecs and typed downstream errors are explicitly future work.",
@@ -21,10 +18,7 @@
     {
       "id": "MAP-A4FE5AF865",
       "sourceEvidence": [
-        "packages/uta-protocol/src/client/UTAClient.ts:13-20: UTAClientOptions contains baseUrl, optional fetch override, and optional timeoutMs defaulting to 15000.",
-        "docs/uta-effect-runtime-design/solutions/composition-contract.md:K02/K07: transport credentials and authenticated principal are separate from actor/policy authority; body claims and loopback do not authorize a capability.",
-        "docs/uta-effect-runtime-design/solutions/composition-contract.md:K02/K03: credential references and capability schemas remain distinct, and transport carries only validated views.",
-        "docs/uta-effect-runtime-design/solutions/integration-decisions.md:C09/C11: Alice uses the fixed service-credential profile, exposes Promise<Result<Output, Failure>> plus AbortSignal, and does not serialize TransportPrincipal."
+        "packages/uta-protocol/src/client/UTAClient.ts:13-20: UTAClientOptions contains baseUrl, optional fetch override, and optional timeoutMs defaulting to 15000."
       ],
       "currentBehavior": "Client construction normalizes only URL/fetch/timeout configuration; it has no transport principal, correlation context, or separate actor/policy/capability authorization input.",
       "problem": "A timeout is merely an AbortController side effect and cannot be distinguished from an authenticated transport failure; the same options also tempt callers to treat client configuration as trading authority.",
@@ -37,9 +31,7 @@
       "id": "MAP-A458F81B6D",
       "sourceEvidence": [
         "packages/uta-protocol/src/client/UTAClient.ts:22-29: UTAClient exports arbitrary request<T>, get/post/put/delete<T> methods with unknown defaults.",
-        "Historical ten-route proposal at audit commit a5f23756531cc552b7e12b6d655ae1ffbcd28b64; the current route target is descriptor-bound under K01/K02/K06, not a fixed route list.",
-        "docs/uta-effect-runtime-design/solutions/composition-contract.md:K01/K02/K06/K07: named projections and CLI/help are derived from provider leaves, while native protocol and provider trees remain open.",
-        "docs/uta-effect-runtime-design/solutions/integration-decisions.md:C11: public boundary failures use the fixed local transport variants and remote wrappers without a global provider/action error map."
+        "Historical ten-route proposal at audit commit a5f23756531cc552b7e12b6d655ae1ffbcd28b64; the current route target is descriptor-bound under K01/K02/K06, not a fixed route list."
       ],
       "currentBehavior": "Any caller can supply any HTTP verb/path/body and obtain a compile-time cast to T; the interface does not enumerate public routes or distinguish command from query responses.",
       "problem": "Generic methods erase route identity and permit broker-native or malformed payloads to cross the process boundary, so changing T does not add runtime safety.",
@@ -51,9 +43,7 @@
     {
       "id": "MAP-06118417F5",
       "sourceEvidence": [
-        "packages/uta-protocol/src/client/UTAClient.ts:31-35: RequestOpts has body?: unknown, raw string/number/undefined params, and optional AbortSignal.",
-        "docs/uta-effect-runtime-design/solutions/composition-contract.md:K03/K05/K07: boundary controls are private, declared leaf schemas own public inputs, and interruption/deadline/error handling remains typed without turning data transport into a transaction.",
-        "docs/uta-effect-runtime-design/solutions/integration-decisions.md:C11: public transport is Promise<Result<Output, Failure>> plus AbortSignal, push is AsyncIterable, and local failure variants are fixed."
+        "packages/uta-protocol/src/client/UTAClient.ts:31-35: RequestOpts has body?: unknown, raw string/number/undefined params, and optional AbortSignal."
       ],
       "currentBehavior": "RequestOpts accepts arbitrary JSON and stringifies every query value; AbortSignal is the only structured control input.",
       "problem": "Unknown body/query records allow invalid commands, unbounded parameters and accidental native objects; no typed distinction exists between query admission and command payload.",
@@ -65,10 +55,7 @@
     {
       "id": "MAP-7E1806AFC4",
       "sourceEvidence": [
-        "packages/uta-protocol/src/client/UTAClient.ts:37-46: UTAHttpError stores status, unknown body and a message string, with no failure-envelope decode.",
-        "docs/uta-effect-runtime-design/solutions/composition-contract.md:K03/K07/K11: failure decoding preserves provider fields, unknown/native evidence, and metadata-only redaction.",
-        "docs/uta-effect-runtime-design/solutions/composition-contract.md:K05/K07/K08: query failures and controlled-effect failures remain separate; HTTP status alone does not establish a transaction outcome.",
-        "docs/uta-effect-runtime-design/solutions/integration-decisions.md:C11: local boundary failures are Cancelled/DeadlineExceeded/TransportUnavailable/ProtocolViolation, remote errors retain named boundary or leaf-domain variants, and timeout cannot assert rejection."
+        "packages/uta-protocol/src/client/UTAClient.ts:37-46: UTAHttpError stores status, unknown body and a message string, with no failure-envelope decode."
       ],
       "currentBehavior": "Non-2xx responses become a JavaScript Error subclass; callers can inspect status/body but cannot exhaustively distinguish validation, auth, conflict, storage, or broker outcomes.",
       "problem": "The message-based error path collapses expected domain failures and encourages callers to match text, losing structured evidence.",
@@ -81,8 +68,6 @@
       "id": "MAP-22C9C06082",
       "sourceEvidence": [
         "packages/uta-protocol/src/client/UTAClient.ts:48-61: createUTAClient strips one trailing slash and buildUrl accepts arbitrary paths and String-converted query entries.",
-        "docs/uta-effect-runtime-design/solutions/composition-contract.md:K02/K07: authentication is a provisioned transport boundary, not loopback or a body actor claim.",
-        "docs/uta-effect-runtime-design/solutions/integration-decisions.md:C09: Alice HTTP v1 fixes Authorization: Bearer <resolved credential> and X-Request-ID; CredentialRef is local opaque and no TransportPrincipal is serialized.",
         "Historical ten-route proposal at audit commit a5f23756531cc552b7e12b6d655ae1ffbcd28b64; the current route target is descriptor-bound under K01/K02/K06."
       ],
       "currentBehavior": "The helper correctly normalizes a base URL and supports injected/global fetch, but URL construction is open-ended and silently stringifies unvalidated values.",
@@ -95,9 +80,7 @@
     {
       "id": "MAP-8C22894ED4",
       "sourceEvidence": [
-        "packages/uta-protocol/src/client/UTAClient.ts:63-88: request JSON-stringifies body, creates a timeout AbortController, parses text via safeJSON, extracts only an error field on non-2xx, and casts successful body to T.",
-        "docs/uta-effect-runtime-design/solutions/composition-contract.md:K03/K05/K07/K08: decode declared transport/provider schemas before application code; data transport is non-transactional, while controlled effects retain send-boundary recovery.",
-        "docs/uta-effect-runtime-design/solutions/integration-decisions.md:C11: public Alice HTTP is Promise<Result<Output, Failure>> plus AbortSignal, push is AsyncIterable, and caller cancellation must compose with the internal deadline."
+        "packages/uta-protocol/src/client/UTAClient.ts:63-88: request JSON-stringifies body, creates a timeout AbortController, parses text via safeJSON, extracts only an error field on non-2xx, and casts successful body to T."
       ],
       "currentBehavior": "The implementation performs real HTTP and clears its timer, but successful bodies are unchecked and non-2xx errors are reduced to a string field; caller abort signals replace the internally timed signal.",
       "problem": "A structurally wrong success body becomes trusted domain data; malformed JSON is accepted as a string; timeout/abort and response loss do not carry typed transport/protocol context.",
@@ -109,8 +92,7 @@
     {
       "id": "MAP-7A38B02DED",
       "sourceEvidence": [
-        "packages/uta-protocol/src/client/UTAClient.ts:90-99: get/post/put/delete closures forward arbitrary paths and unknown bodies into request.",
-        "docs/uta-effect-runtime-design/solutions/integration-decisions.md:C11: the public Alice boundary uses typed Promise results and the fixed local transport/remote error variants rather than an untyped raw helper."
+        "packages/uta-protocol/src/client/UTAClient.ts:90-99: get/post/put/delete closures forward arbitrary paths and unknown bodies into request."
       ],
       "currentBehavior": "The convenience surface duplicates the generic escape hatch and is the route most adapters use to bypass any future route validation.",
       "problem": "Leaving these exports while adding typed methods preserves an alternate untyped authority and makes migration incomplete.",
@@ -122,11 +104,7 @@
     {
       "id": "MAP-E56045946F",
       "sourceEvidence": [
-        "packages/uta-protocol/src/client/UTAClient.ts:101-103: safeJSON returns parsed unknown JSON or the original response text after JSON.parse failure.",
-        "docs/uta-effect-runtime-design/solutions/composition-contract.md:K03/K07/K11: failure envelopes and diagnostics are schema-validated, provider-specific where declared, and metadata-only redacted.",
-        "docs/uta-effect-runtime-design/solutions/composition-contract.md:K03/K07/K11: raw response bodies and native payloads do not cross the domain or observability boundary; violation evidence is bounded.",
-        "docs/uta-effect-runtime-design/solutions/composition-contract.md:K03/K07/K11: malformed output is a protocol/evidence failure, not a retained response text or domain value.",
-        "docs/uta-effect-runtime-design/solutions/integration-decisions.md:C11: ProtocolViolation evidence fields and limits are fixed; no raw body, headers, parameter values, native message, or raw-body digest may be retained."
+        "packages/uta-protocol/src/client/UTAClient.ts:101-103: safeJSON returns parsed unknown JSON or the original response text after JSON.parse failure."
       ],
       "currentBehavior": "Malformed response text is deliberately returned as an unknown value, allowing error handling to proceed with a string body.",
       "problem": "This silently treats protocol corruption as an acceptable payload and prevents callers from distinguishing syntax failure from a valid domain response.",
@@ -866,8 +844,7 @@
     {
       "id": "MAP-1103449DFC",
       "sourceEvidence": [
-        "src/services/uta-client/UTAManagerSDK.ts:21-26: imports generic UTAClient, UTASummary, AggregatedEquity, and ContractSearchHit wire types.",
-        "docs/uta-effect-runtime-design/solutions/integration-decisions.md:C11: manager-bound public calls use the fixed local transport/remote boundary variants rather than an untyped generic failure channel."
+        "src/services/uta-client/UTAManagerSDK.ts:21-26: imports generic UTAClient, UTASummary, AggregatedEquity, and ContractSearchHit wire types."
       ],
       "currentBehavior": "Manager methods rely on compile-time shared wire shapes through generic client calls.",
       "problem": "No runtime decoder, branded identity, scope/completeness, projection revision, or typed QueryFailure is guaranteed.",

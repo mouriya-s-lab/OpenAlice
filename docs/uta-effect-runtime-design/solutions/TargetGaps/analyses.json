@@ -25,8 +25,7 @@
       "id": "NOTE-2-2",
       "sourceEvidence": [
         "services/uta/src/domain/trading/order-sync-poller.ts:53-98: timer scans healthy accounts and invokes sync with no durable job identity",
-        "services/uta/src/domain/trading/git/TradingGit.ts:141-155: operation errors become rejected results and there is no compensation phase",
-        "composition-contract.md K08/K10; transaction-contract.md §7-8: proposed recovery classification and dependency-reverse compensation"
+        "services/uta/src/domain/trading/git/TradingGit.ts:141-155: operation errors become rejected results and there is no compensation phase"
       ],
       "currentBehavior": "The poller can discover fills but cannot resume a persisted abort or distinguish an already-sent compensating mutation after restart.",
       "problem": "A compensator built as a callback or finalizer loses both its applied-effect basis and its dispatch identity; retry can open an additional economic position.",
@@ -40,7 +39,6 @@
       "id": "NOTE-4-1",
       "sourceEvidence": [
         "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 920-951): bounded writer queue, take/drain group commit and post-commit Deferred",
-        "composition-contract.md K01/K03/K08; transaction-contract.md §6: closed effect commands, grouped failures and cancellation boundary",
         "services/uta/src/domain/trading/git/TradingGit.ts:171-179: persistence occurs after memory commit/head mutation"
       ],
       "currentBehavior": "Current execution has a per-instance inflight boolean, not a bounded process-wide durable admission service.",
@@ -55,8 +53,7 @@
       "id": "NOTE-4-2",
       "sourceEvidence": [
         "services/uta/src/domain/trading/git/TradingGit.ts:61-116: stagingArea/pendingHash are mutable memory state",
-        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 307-308): STM is limited to proposal views",
-        "transaction-contract.md §3: prepare binds revision and retires only unexecuted plans"
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 307-308): STM is limited to proposal views"
       ],
       "currentBehavior": "Staging mutates an array and commit derives a hash from current operations/time, but neither edit nor prepare is journal-backed.",
       "problem": "Making a TRef snapshot authoritative after prepare would let cache eviction or restart invalidate a plan without a durable revision transition.",
@@ -70,7 +67,6 @@
       "id": "NOTE-5-1",
       "sourceEvidence": [
         "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 317-355): baseline Decision only admits nonempty-event success and state has twelve variants",
-        "transaction-contract.md §5: transition table includes prepared retirement and terminal observations",
         "services/uta/src/domain/trading/git/TradingGit.ts:141-184: booleans/rejected strings collapse execution outcomes"
       ],
       "currentBehavior": "A pushed batch gathers heterogeneous results without a replayable transaction-state event transition model.",
@@ -84,9 +80,7 @@
     {
       "id": "NOTE-5-2",
       "sourceEvidence": [
-        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 403-412 and 1014-1018): lock release constrained by durable state; baseline lock row includes lease expiry",
-        "transaction-contract.md §3: proposes safe unexecuted plan retirement",
-        "transaction-contract.md §6-7: dispatch fencing and hierarchical conflicts"
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 403-412 and 1014-1018): lock release constrained by durable state; baseline lock row includes lease expiry"
       ],
       "currentBehavior": "No durable lock owner exists; inflightWrite is a process-local wallet guard.",
       "problem": "Treating LogicalLock.lease_expires_at like a worker lease would release economic exclusion while a remote mutation is unknown. Merely naming RecoveryRequired cannot safely allow conflicting new trades.",
@@ -115,7 +109,6 @@
       "id": "NOTE-5-4",
       "sourceEvidence": [
         "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 432-444): function-bearing compensation union and explicit cancel-replace loss",
-        "transaction-contract.md §4: separates serializable compensation assessment/intent from runtime compiler",
         "services/uta/src/domain/trading/UnifiedTradingAccount.ts:180-196: direct mutation dispatcher has no applied-state-specific undo contract",
         "Alpaca provider design: client identity/observation are separate; server idempotency, child-group and close semantics remain conformance evidence",
         "CcxtCore provider design: Unknown is RecoveryRequired; native idempotency evidence remains insufficient",
@@ -137,8 +130,7 @@
       "id": "NOTE-5-5",
       "sourceEvidence": [
         "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 446-456): three policies do not imply grouping atomicity",
-        "services/uta/src/domain/trading/git/TradingGit.ts:141-155: legacy loop continues after each known failure",
-        "transaction-contract.md §8: policy table requires an explicit stop/continue choice and selects ContinueOnKnownRejection for legacy translation"
+        "services/uta/src/domain/trading/git/TradingGit.ts:141-155: legacy loop continues after each known failure"
       ],
       "currentBehavior": "Legacy push executes each operation even when an earlier one rejects. It does not undo successful siblings.",
       "problem": "An implicit stop default would silently change the existing behavior. AllOrCompensate and native atomicity also need admission-time group membership and capability evidence rather than a group label.",
@@ -173,7 +165,6 @@
       "id": "NOTE-7-2",
       "sourceEvidence": [
         "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 953-1043): nine baseline tables omit receipt/epoch/schema association constraints",
-        "transaction-contract.md §9: receipt and multi-key relation extensions leave concrete constraints to implementation",
         "services/uta/src/domain/trading/git-persistence.ts:28-47: persisted JSON currently has no schema decode or relational validation"
       ],
       "currentBehavior": "JSON history has no FK/version uniqueness guaranteeing a job belongs to its exact prepared step or compensation direction.",
@@ -188,7 +179,6 @@
       "id": "NOTE-8-1",
       "sourceEvidence": [
         "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 1065-1078): Account/Exposure/Order/Connection conflict keys",
-        "transaction-contract.md §6: hierarchical all-key acquisition and connection-budget distinction",
         "services/uta/src/domain/trading/UnifiedTradingAccount.ts:665-688,784-790: sub-account is omitted or only message-stamped"
       ],
       "currentBehavior": "Wallet-wide memory guards do not identify order/exposure conflicts or persist explicit sub-account scope.",
@@ -203,7 +193,6 @@
       "id": "NOTE-8-2",
       "sourceEvidence": [
         "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 1080-1092 and 1264-1291): lease transaction and insufficient DispatchPlanned-only sequence",
-        "transaction-contract.md §7: explicit started boundary and stale-worker limitation",
         "services/uta/src/domain/trading/git/TradingGit.ts:119-125: finally only clears a memory guard"
       ],
       "currentBehavior": "No durable boundary distinguishes a claimed but unsent operation from a broker-accepted operation whose response was lost.",
@@ -233,8 +222,7 @@
       "id": "NOTE-8-4",
       "sourceEvidence": [
         "services/uta/src/domain/trading/UnifiedTradingAccount.ts:572-595: close amount rereads positions but has no version/freshness binding",
-        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 1108-1117): preconditions include ExposureSnapshot and BuyingPowerAtLeast",
-        "transaction-contract.md §2 and §6: conflicting exposure spelling resolves to ExposureEquals and requires reservations"
+        "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 1108-1117): preconditions include ExposureSnapshot and BuyingPowerAtLeast"
       ],
       "currentBehavior": "Partial close validates the latest quantity against an unversioned broker position before dispatch; other preconditions are not immutable plan inputs.",
       "problem": "External snapshot mismatch cannot safely be swallowed into retry. Two different instruments can each pass the same buying power check unless their unsettled spending is reserved locally.",
@@ -250,7 +238,6 @@
         "services/uta/src/domain/trading/UnifiedTradingAccount.ts:180-205: Promise<unknown> dispatcher and guard pipeline",
         "services/uta/src/domain/trading/brokers/types.ts:1-7: legacy broker types re-export public package",
         "historical architecture evidence pinned at Git a5f23756531cc552b7e12b6d655ae1ffbcd28b64 (former lines 1121-1185): scoped connection, interpreter, outcome and contextual capability requirements",
-        "composition-contract.md K07/K08/K11: deterministic native compilation and native evidence limits",
         "Alpaca provider design: client identity and broker idempotency/child-group evidence remain acceptance facts",
         "CcxtCore provider design: Unknown is RecoveryRequired and native idempotency evidence is not established",
         "CcxtVenues provider design: timeout requires observation and venue coverage; partial listings are not absence",
