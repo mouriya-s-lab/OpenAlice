@@ -2,7 +2,7 @@
 
 本册是[主书](../uta-capability-runtime-design.md)的独立业务承接，不定义另一套核心。共同构造与新抽象事件流由主书§3–5、§8及[动态推导册](event-flows.md)论证；本册说明旧能力的实际输入、解释与消费者如何保留或修正。源码事实、目标选择与来源尚未履约的保证分别表述。没有运行新UTA、Broker或这些目标程序。
 
-[原始逐项调查](../uta-effect-runtime-design/solutions/index.md)中的entries与analyses只保留MAP/NOTE身份、sourceEvidence、currentBehavior及原始问题；旧候选处置不是当前设计裁决。原始问题中的calendar、lease、ReconcileBeforeRetry或目录修订等预设，也必须按当前具体消费者重新论证。
+旧逐项调查已整树归档，不再作为本册输入。原始问题中的calendar、lease、ReconcileBeforeRetry或目录修订等预设，也必须按当前具体消费者重新论证。
 
 ## 账户与本地业务记录
 

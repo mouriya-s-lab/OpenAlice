@@ -12,7 +12,7 @@
 
 - [当前候选主书](../docs/uta-capability-runtime-design.md)：能力关联、组合、交付、控制与新场景。
 - [被维护者整体否定的事件流稿](../docs/uta-capability-runtime-design/event-flows.md)：不再作为设计输入、骨架或验收依据，不择取局部时序继续拼接。原始会话只用于明确禁止重复的行为。
-- [逐项调查](../docs/uta-effect-runtime-design/solutions/index.md)、[承接册](../docs/uta-capability-runtime-design/legacy-accommodation.md)：旧行为与问题的研究输入，不是模型正确性的计数证明。初版架构与原始映射已归档，不再作为阅读依据。
+- [承接册](../docs/uta-capability-runtime-design/legacy-accommodation.md)：旧行为与问题的研究输入，不是模型正确性的计数证明。逐项调查、初版架构与原始映射已归档，不再作为阅读依据。
 - [Owner guide 索引](../docs/README.md)、[开发流程](../docs/development-workflow.md)、[计划契约](../PLANS.md)。
 
 本轮进行设计研究与文档整合。主会话禁止编写代码；subagent 可以编写必要代码，第二档、第三档 subagent 可以在研究任务中用测试验证抽象是否可行，禁止指派纯粹的代码测试任务。机械资料处理、形式验证或必要的抽象可行性验证代码交给获准的 subagent，不启动生产实现、不连接 Broker、不迁移用户状态，不让辅助程序决定抽象。读取现有源码及历史实验记录用于研究实际契约，不将历史执行冒称本轮验证。原设计材料和实验归档保持原身份；候选设计不表示维护者已接受。
