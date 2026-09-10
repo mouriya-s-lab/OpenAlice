@@ -13,7 +13,7 @@ Related guides: [[docs/managed-workspace-runtime.md]],
 [[docs/workspace-lifecycle.md]],
 [[docs/workspace-template-upgrade.md]],
 [[docs/workspace-issues-and-scheduling.md]],
-[[docs/conversation-provenance.md]], [[docs/uta-effect-runtime-architecture.md]],
+[[docs/conversation-provenance.md]],
 and [[docs/market-data-architecture.md]].
 
 ## Runtime Topology
@@ -290,10 +290,10 @@ and excluded from the Workspace repository.
 UTA is the only owner of broker connections and trading writes. The contract
 crosses `@traderalice/uta-protocol` over local HTTP.
 
-The target internal architecture for UTA's transaction, effect, persistence,
-scheduling, broker, and recovery boundaries is defined in
-[UTA Effect Runtime architecture](uta-effect-runtime-architecture.md). That
-guide is a migration target; the paths below describe the current runtime.
+The candidate UTA capability design is described in
+[UTA Capability Runtime 设计书](uta-capability-runtime-design.md). That
+design is not accepted by the maintainer and the runtime has not migrated;
+the paths below describe the current runtime.
 
 Current load-bearing paths:
 

@@ -1,326 +1,97 @@
 {
   "group": "Snapshots",
-  "designBasis": "capability-composition-v1",
   "entries": [
     {
       "id": "MAP-92BA447044",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "The source no-fabrication rule and offline-readable derivative metadata remain required, while the live UTA/IBKR assembly boundary is reframed as provider-declared observation decoding plus a pure data projection; the source SDK import is evidence, not a target-wide dependency.",
-      "contractAnchors": [
-        "K03",
-        "K04",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/builder.ts:1-12: module promises null when data is unavailable and imports IBKR UNSET_DOUBLE, UnifiedTradingAccount, and local snapshot types: builder.ts is explicitly a live-UTA assembler. Its only inputs are a mutable UnifiedTradingAccount and a string-union trigger; the IBKR UNSET_DOUBLE sentinel is interpreted in this layer. There is no sequence, checkpoint, observation provenance, or runtime decoder at the boundary."
       ],
       "currentBehavior": "builder.ts is explicitly a live-UTA assembler. Its only inputs are a mutable UnifiedTradingAccount and a string-union trigger; the IBKR UNSET_DOUBLE sentinel is interpreted in this layer. There is no sequence, checkpoint, observation provenance, or runtime decoder at the boundary.",
       "problem": "The projection boundary depends on a legacy account object and SDK sentinel, so a read can accidentally perform live work and can persist SDK-shaped values without proving the wire schema. Null also conflates expected capability degradation with malformed or unavailable persisted data.",
-      "targetModel": "Define a conceptual, versioned SnapshotView schema and pure SnapshotAssembler. The assembler receives an explicit AccountScope, SnapshotCause, validated Account/Position/Order observations, RuntimeHealth, GitAudit, observedAt/asOf, a provider-native revision when one exists, and a separately assigned local received sequence/checkpoint. IBKR UNSET_DOUBLE and any other native sentinel are decoded by the owning provider codec; this target does not import a universal SDK or expose a broker action handle. Provider-specific fields are exact declared extensions, and this remains a finite data projection.",
-      "pureTransitions": [
-        "decodeSnapshotObservation(raw, declaredSchema) -> Result<SnapshotFacts, SnapshotDecodeFailure>; preserve Native revision separately from local Received sequence and omit only structurally inapplicable fields.",
-        "assembleSnapshot(facts, fence) -> Result<SnapshotView, SnapshotInvariantViolation>; join one explicit scope and report CoherentAt only for a proved common sequence fence, otherwise expose component freshness.",
-        "mapAvailability(health, descriptor) -> Available | Degraded | Unavailable without a nullable or zero-value fallback."
-      ],
-      "effectBoundary": "Provider adapters and the application worker perform broker/Git reads and boundary decoding. SnapshotAssembler is pure and receives clock, sequence, schemas, and observations as values. A persistence/query adapter may write or read the snapshot projection; it does not dispatch, approve, compensate, or acquire order locks.",
-      "durability": "When capture is persisted, record the request, observation identity/payload, provider revision evidence, and local received sequence before acknowledging the projection; update a projection row and its checkpoint atomically in the chosen snapshot writer. Replay can rebuild only recorded observations and cannot infer a broker same-instant view. These are data-retention guarantees, not order WAL/CAS or execution recovery.",
-      "errors": [
-        "SnapshotDecodeFailure(path, schemaVersion) -> retain redacted evidence and leave the prior valid projection/checkpoint visible.",
-        "ScopeMismatch or missing AccountScope -> reject the join and report scope discovery, never guess a wallet.",
-        "ProviderSchemaViolation/native sentinel ambiguity -> unavailable or quarantined observation, not an empty view.",
-        "ProjectionUnavailable -> typed read failure; do not substitute memory, JSONL, or a fabricated snapshot."
-      ],
       "preservedBehavior": [
         "Keep the no-fabrication intent stated in the file header, but represent it as typed outcomes rather than a nullable Promise.",
         "Keep broker-derived derivative metadata available to offline readers, after adapter decoding and redaction.",
         "Do not infer broker/order state from the last Git commit; Git audit is a separate sub-view with its own provenance."
       ],
-      "replacementSteps": [
-        "Define the SnapshotView/SnapshotFacts schema and provider codec boundary, including exact native extensions and separate Native/Received revision evidence.",
-        "Move UNSET_DOUBLE and equivalent sentinel handling out of snapshot assembly; migrate callers from live UnifiedTradingAccount reads to typed observation/query ports.",
-        "Remove direct SDK imports and nullable assembly from the snapshot module after callers use the data contracts; keep the public surface provider-composable."
-      ],
-      "verificationCases": [
-        "A malformed persisted decimal or ambiguous native sentinel yields SnapshotDecodeFailure and leaves the previous projection checkpoint intact.",
-        "Account and position observations in one scope with different local sequences yield MixedFreshness rather than a falsely coherent view; no snapshot path obtains a dispatch capability."
-      ],
       "openQuestions": []
     },
     {
       "id": "MAP-3EA45A1B4F",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "The observable guarantee that disabled/offline accounts do not become zero-valued snapshots is retained; the nullable live-builder contract is reframed into availability and freshness variants so capability existence is not confused with current reachability.",
-      "contractAnchors": [
-        "K02",
-        "K05",
-        "K06",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/builder.ts:13-18: buildSnapshot returns null when uta.disabled or uta.health is offline: Before any query, buildSnapshot checks disabled/offline and returns null. The service interprets that null as skipped work and records reason no-data; there is no distinction between configuration-disabled, connection-offline, and a stale but usable read projection."
       ],
       "currentBehavior": "Before any query, buildSnapshot checks disabled/offline and returns null. The service interprets that null as skipped work and records reason no-data; there is no distinction between configuration-disabled, connection-offline, and a stale but usable read projection.",
       "problem": "A boolean-like null result loses the reason needed for capability policy, UI status, scheduler retry, and audit. It also cannot tell a caller whether serving the last known projection is safe as a stale read or forbidden for a live capture.",
-      "targetModel": "Use a local AccountAvailability union for capture admission: Disabled(reason), Connecting(evidence), Offline(evidence), Degraded(evidence), or Healthy. Keep declared capability identity and runtime availability separate: an unavailable provider data leaf is not a schema deletion, and a stale read projection is a separate query result. SnapshotCapture returns Captured, Skipped(reason), Failed(error), or ObservationUncertain rather than null.",
-      "pureTransitions": [
-        "classifyAvailability(runtimeHealth, declaredDataDescriptor) -> one availability variant with its evidence.",
-        "decideCapture(availability, policy) -> CaptureAllowed or Skip(reason); disabled/offline never synthesize account values.",
-        "classifyReadFailure(error) -> retryable, unavailable, uncertain, or terminal data outcome without interpreting an exception string as a broker rejection."
-      ],
-      "effectBoundary": "The connection/provider adapter supplies health and capability evidence; the pure guard and result mapping perform no network, clock, logging, or persistence effects. A query adapter may serve a stale projection only when an explicit read policy permits it.",
-      "durability": "A skipped or uncertain capture may be recorded with scope, reason, and observed checkpoint, but it creates no snapshot row and no order transaction state. Historical stale data keeps its checkpoint and reason; unavailable storage is never represented as empty history.",
-      "errors": [
-        "Disabled -> explicit Skipped(Disabled) and no live read.",
-        "Offline or Connecting -> NotReady/Unavailable with evidence; retry is a data-observation policy decision.",
-        "ProjectionUnavailable or corrupt data -> typed query failure preserving the last valid checkpoint.",
-        "Degraded -> expose capability availability and freshness rather than claiming Healthy."
-      ],
       "preservedBehavior": [
         "Preserve the current guarantee that offline/disabled accounts do not produce zero-value snapshots.",
         "Preserve optional read-only use of historical data if its freshness is explicit; do not make offline equal to deleted history."
-      ],
-      "replacementSteps": [
-        "Replace Promise<UTASnapshot | null> with the availability/capture result union at the application boundary.",
-        "Move health checks out of the assembler and into data capture admission/query policy.",
-        "Update service, scheduler, HTTP, and fixtures to branch on reason-specific variants and keep declared capability metadata visible separately."
-      ],
-      "verificationCases": [
-        "With Offline health and a prior checkpointed view, capture is Skipped(Offline) while stale read is returned only under an explicit stale-read policy.",
-        "With Connecting health, no broker request is made and the result is NotReady/Unavailable, never Healthy or an empty snapshot."
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-473BE32758",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source reads remain valuable evidence about freshness intent and Git context, but hidden sync, mutable UTA access, and event timing are replaced by explicit provider data observations and a provenance-only trigger so readers do not inherit transaction-effect semantics.",
-      "contractAnchors": [
-        "K05",
-        "K07",
-        "K09",
-        "K11"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/builder.ts:20-31: buildSnapshot best-effort awaits uta.sync, reads pending order IDs from uta.git, then Promise.all fetches account, positions, and filtered orders: Snapshot creation first invokes uta.sync and suppresses every sync rejection. It derives pending IDs from local Git, then concurrently calls live getAccount/getPositions/getOrders. A successful later query can therefore be paired with an unobserved failed sync and with local intent that is not the broker observation."
       ],
       "currentBehavior": "Snapshot creation first invokes uta.sync and suppresses every sync rejection. It derives pending IDs from local Git, then concurrently calls live getAccount/getPositions/getOrders. A successful later query can therefore be paired with an unobserved failed sync and with local intent that is not the broker observation.",
       "problem": "The builder has hidden network and Git side effects, no dispatch/observation identity, no read version fence, and no typed failure. Suppressing sync failure can make order state look current when it is not; concurrent calls have no common as-of boundary.",
-      "targetModel": "Model capture as a finite SnapshotObservation request with separate account, position, and order data reads plus a separate GitAudit read. Synchronization and pending-command lookup are not hidden inside assembly. If a committed trade event is used as a trigger, it supplies provenance and an event identity only; it is not snapshot authority or approval. Native query parameters and response extensions pass through each provider declaration at the fixed UTA-facing boundary.",
-      "pureTransitions": [
-        "mapProviderReads(results) -> ObservationSet with scope, observation identity, observedAt, Native/Received revision evidence, and ListingResult for each order query, preserving ByIds versus Enumeration coverage.",
-        "selectSnapshotFacts(scope, rows, policy) -> Complete, Partial, or Unavailable facts; require a sequence fence for coherence or expose component freshness.",
-        "assembleSnapshot(facts) -> view without calling sync, reading mutable Git intent as broker truth, or deriving order absence from an incomplete listing."
-      ],
-      "effectBoundary": "Broker/provider adapters perform pull IO and decode their native protocol; a capture worker coordinates finite reads, resource limits, and optional durable observation requests. Git audit is a distinct data dependency. The assembler and listing decisions remain pure; no data read enters order approval, compensation, or dispatch.",
-      "durability": "If a post-commit capture request is required, persist its source event identity and request status so process exit cannot lose the requested observation. Persisted observations carry their payload and local sequence; a failed live read is not replayable merely because the request existed. No order WAL or broker idempotency guarantee is implied.",
-      "errors": [
-        "Observation timeout/disconnect -> ObservationUncertain or Partial with the last known component retained, not absent orders.",
-        "Stale observation -> explicit stale result; capture is not marked fresh.",
-        "Provider-declared domain/transport/output error -> preserve its category and evidence at the data boundary.",
-        "ProjectionUnavailable -> typed read failure without a complete fabricated snapshot."
-      ],
       "preservedBehavior": [
         "Retain the practical reason for pre-snapshot synchronization: stale submitted orders must eventually be reconciled before a fresh view is claimed.",
         "Remove best-effort suppression and local Git pending IDs as broker truth; the reconciliation worker now makes freshness visible and durable."
-      ],
-      "replacementSteps": [
-        "Create typed finite observation requests/results and migrate synchronization/read callers to them.",
-        "Delete uta.sync() and pending-order lookup from the pure assembly path; expose Git pending data as GitAudit with provenance.",
-        "Pass checkpointed ObservationSet into assembly and preserve provider-native request/response fields through exact declared extensions."
-      ],
-      "verificationCases": [
-        "If order enumeration times out after account data is read, the prior order projection remains visible with Partial/ObservationUncertain and cannot be called a fresh complete view.",
-        "If component local sequences are 20/20/19, the result exposes MixedFreshness even when wall-clock timestamps match; no retry creates an order effect."
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-2A00814D1F",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source financial precision, derivative metadata, and working-order filtering are retained, but the plain record is reframed as a data envelope with provider-declared extensions; this avoids turning snapshot fields into a closed universal Order/SDK contract.",
-      "contractAnchors": [
-        "K03",
-        "K04",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/builder.ts:33-80: assembles account strings, position contract metadata, Submitted/PreSubmitted open orders, health, Git head/pending commits into UTASnapshot: The returned object places account financial strings, positions, open orders, health, and Git status in one plain record. Position IDs fall back to broker.getNativeKey; strike is a number filtered against UNSET_DOUBLE; open orders retain only Submitted/PreSubmitted and stringify IDs/quantities/prices."
       ],
       "currentBehavior": "The returned object places account financial strings, positions, open orders, health, and Git status in one plain record. Position IDs fall back to broker.getNativeKey; strike is a number filtered against UNSET_DOUBLE; open orders retain only Submitted/PreSubmitted and stringify IDs/quantities/prices.",
       "problem": "This record mixes broker facts and mutable Git intent, uses interchangeable strings/numbers, omits AccountScope/checkpoint/freshness, and has no runtime validation. Number strike and string status allow malformed or unitless values to cross persistence and HTTP boundaries.",
-      "targetModel": "Use a typed SnapshotView made of accounting, position, working-order, health, and GitAudit components. Common fields use unit-aware decimal values and explicit scope; an OrderObservation contains only the fields the provider actually declares and returns, with an exact provider extension for native fields. The source pending-ID query is represented as ByIds coverage and cannot prove namespace absence; only a declared Complete enumeration may support that absence claim. The current Submitted/PreSubmitted working-order slice remains a local view policy applied to the query's proven coverage; Snapshots do not define the universe of executable order variants.",
-      "pureTransitions": [
-        "mapAccountObservation -> Result<AccountingView, UnitMismatch | DecodeFailure> while preserving absent optional source fields.",
-        "mapPositionObservation -> Result<PositionView, IdentityFailure | UnitMismatch>; preserve native contract metadata as a declared extension and never guess an instrument or multiplier.",
-        "selectWorkingOrders(listing) -> Submitted/PreSubmitted observations only from the query's proven coverage; Partial/Unavailable or missing ByIds remain visible.",
-        "assembleViews(parts, audit, checkpoint) -> SnapshotView with per-component freshness/coherence and structural omission for inapplicable fields."
-      ],
-      "effectBoundary": "Projection/query adapters decode provider payloads and Git audit; pure mappers select fields and preserve units. HTTP encoders use the declared SnapshotView schema, not SDK objects or raw rows. No mapper is an order compiler and no data read acquires an execution lock.",
-      "durability": "Record accepted observations and local sequence/checkpoint evidence when persistence is enabled; projection rows may lag the observations and must expose that lag. Replay preserves the exact declared observation extension; it does not turn external observations into execution authority or same-instant facts.",
-      "errors": [
-        "Identity or unit mismatch -> reject/degrade the affected component with evidence, never substitute a symbol, zero, or multiplier.",
-        "Incomplete or ByIds-only order coverage -> ListingPartial/Unavailable or explicit missing-ID evidence, not an empty working-order set or remote rejection.",
-        "Provider extension/schema mismatch -> declared decode failure; unsupported execution semantics are outside this read model.",
-        "Projection lag -> stale view with its actual checkpoint and as-of."
-      ],
       "preservedBehavior": [
         "Keep all financial values lossless at the wire boundary, and keep derivative secType/multiplier/strike/right/expiry available for offline rendering.",
         "Keep only Submitted/PreSubmitted in the working-order slice; terminal history is promised only when a separate recorded observation/projection supplies it, not inferred from this old builder.",
         "Keep Git head/pending data available, but mark it as audit intent and never use it as remote execution truth."
       ],
-      "replacementSteps": [
-        "Define versioned component schemas and the envelope, including an exact provider-extension slot rather than a universal order-type product.",
-        "Move native sentinel/identity decoding into provider codecs and replace string/number casts with boundary constructors.",
-        "Migrate HTTP/equity consumers to scoped, unit-qualified views and remove the monolithic live UTASnapshot after callers move."
-      ],
-      "verificationCases": [
-        "A declared Complete enumeration containing Submitted, PreSubmitted, and Filled returns only the first two in workingOrders while retaining the provider-declared status evidence.",
-        "A ByIds query that omits a requested order retains missing-ID/uncertain evidence and never becomes a complete absence claim; a Partial listing or mismatched component sequence remains explicit."
-      ],
       "openQuestions": []
     },
     {
       "id": "MAP-69E23AB274",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "The source intent to avoid fabricated data and keep failures from appearing as successful snapshots is retained; the catch-all and nullable result are reframed into the K07 error classes and a data-reader policy.",
-      "contractAnchors": [
-        "K03",
-        "K05",
-        "K07",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/builder.ts:81-85: catch logs account and error.message then returns null for every build failure: Every thrown error, including query failure, malformed broker data, storage/schema defect, and programmer defect, is reduced to a warning string and nullable result. The caller cannot choose retry, quarantine, supervision, or operator action by cause."
       ],
       "currentBehavior": "Every thrown error, including query failure, malformed broker data, storage/schema defect, and programmer defect, is reduced to a warning string and nullable result. The caller cannot choose retry, quarantine, supervision, or operator action by cause.",
       "problem": "The catch boundary destroys failure taxonomy and can turn corruption into an apparently normal skipped snapshot. It also leaks unstructured error text to logs and makes scheduler retry behavior depend on null rather than durable policy.",
-      "targetModel": "Remove the catch-all from pure snapshot assembly and return a typed SnapshotResult/Failure union. Expected provider, transport, schema, availability, and projection failures stay distinguishable; only an impossible invariant is a supervised defect. Data-worker policy decides retry, stale retention, quarantine, or operator attention without using null as a scheduler or HTTP protocol.",
-      "pureTransitions": [
-        "assembleSnapshot -> Result<SnapshotView, SnapshotFailure> preserving component and evidence references.",
-        "classifySnapshotFailure(failure, readPolicy) -> Skip | RetryAt | ObservationUncertain | RebuildProjection | StopReader | OperatorRequired.",
-        "encodeFailure(failure, redactionPolicy) -> structured diagnostic; Error.message is never the wire contract."
-      ],
-      "effectBoundary": "Provider/application boundaries catch and classify expected errors where they can persist the outcome; pure assembly does no IO or logging. Supervision handles defects and sink failures do not rewrite committed snapshot facts.",
-      "durability": "A failed capture records its typed status, attempt, and next eligibility when the data job is durable; no successful snapshot receipt or checkpoint is emitted on failure. Existing valid history remains queryable with explicit freshness. No trading recovery or compensation state is created for a read failure.",
-      "errors": [
-        "Query/transport failure -> typed retryable or unavailable data outcome.",
-        "Malformed observation/projection -> DecodeFailure/quarantine with unchanged checkpoint.",
-        "Observation uncertainty -> reconcile or pause the data job; never blind-retry a possibly repeated read as an order action.",
-        "Defect -> supervised failure with redacted evidence, not null."
-      ],
       "preservedBehavior": [
         "Preserve no-data behavior as an explicit Skipped/CapabilityUnavailable outcome.",
         "Do not silently preserve a malformed snapshot as no-data; retain evidence and stop or rebuild the affected path."
-      ],
-      "replacementSteps": [
-        "Change callers and service APIs to consume typed snapshot results and failures.",
-        "Add redacted failure schemas and reader supervision; remove warning-plus-null as the protocol.",
-        "Update HTTP and scheduler projections to encode stale/unavailable/partial states rather than empty arrays."
-      ],
-      "verificationCases": [
-        "A corrupt persisted row produces DecodeFailure with an unchanged checkpoint, not Skipped or NoHistory.",
-        "A transient read timeout produces ObservationUncertain/retry state, while an impossible invariant reaches supervision as a defect and never grants an execution capability."
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-27667D4B9F",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The public-export problem is retained, but its correction is scoped to a composable data facade: declarations drive query/capture metadata without replacing them with a closed broker action contract or mandatory handlers.",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K06"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/index.ts:1-8: barrel exports service, Pump scheduler/config, JSONL store, builder, and plain snapshot/index types: The snapshot barrel makes createSnapshotStore, buildSnapshot, and Pump-backed service constructors public beside types. domain/trading/index.ts re-exports these symbols, allowing HTTP and composition code to depend directly on file persistence and timer implementation."
       ],
       "currentBehavior": "The snapshot barrel makes createSnapshotStore, buildSnapshot, and Pump-backed service constructors public beside types. domain/trading/index.ts re-exports these symbols, allowing HTTP and composition code to depend directly on file persistence and timer implementation.",
       "problem": "The public surface implies that the legacy store and scheduler are authoritative and lets callers bypass the selected snapshot-writer/projection-query ownership. Keeping aliases would preserve two write paths and make cutover unverifiable.",
-      "targetModel": "Make the snapshot barrel a narrow UTA-facing data facade: declared SnapshotView/query schemas, finite capture-request/result schemas, SnapshotCause provenance, and authorized projection-retention commands. Capability leaves are derived from their declarations; there is no global action-contract registry or public filesystem-store constructor. Provider and persistence implementations stay at the composition root.",
-      "pureTransitions": [
-        "resolveSnapshotRequest(request) -> read, capture, or retention command with explicit scope and schema identity; no direct store construction.",
-        "mapLegacyTrigger(trigger, evidence) -> SnapshotCause only at the boundary; cause is provenance, not authority.",
-        "projectSnapshotView(rows, checkpoint) -> declared protocol envelope with freshness and listing completeness."
-      ],
-      "effectBoundary": "The barrel performs no runtime IO. Composition wires provider adapters, observation queue if needed, projection query, and retention implementation behind these data ports; consumers cannot instantiate a legacy JSONL authority or receive a dispatch function.",
-      "durability": "Only the selected data writer may persist accepted observations and projection checkpoints; public contracts expose typed receipts/status, not storage paths or order-effect identities. Schema revisions invalidate or migrate the data view explicitly.",
-      "errors": [
-        "LegacyStoreAccess -> compile-time removal after caller migration; no alias or dual write path.",
-        "ProjectionUnavailable/SchemaMismatch -> typed data failure.",
-        "Unknown or malformed legacy trigger -> boundary validation failure.",
-        "Unavailable capability -> availability result, not a fabricated unsupported action handler."
-      ],
       "preservedBehavior": [
         "Preserve query capability and the four user-visible causes through explicit mapping.",
         "Remove implementation details from exports rather than retaining names that silently route to the new backend."
-      ],
-      "replacementSteps": [
-        "Migrate service, routes, scheduler, tests, and Alice data consumers to query/capture/retention contracts.",
-        "Remove createSnapshotStore, direct builder, chunk metadata, and Pump exports once callers no longer depend on them.",
-        "Expose only typed data contracts from the barrel; keep provider and persistence construction in composition."
-      ],
-      "verificationCases": [
-        "A barrel consumer can query a typed view or submit a capture request but cannot construct createSnapshotStore or access SnapshotChunkEntry.",
-        "A manual capture returns a data-job receipt and a historical query returns checkpoint/freshness metadata; a legacy direct-delete call is rejected at the boundary."
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-F64B549F14",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source shows only an in-process Pump, so the target is reframed from a trading-style durable request to a durable, provenance-bound data observation request; the empirical cursor question and post-commit trigger intent remain explicit without granting the trigger authority.",
-      "contractAnchors": [
-        "K05",
-        "K06",
-        "K09",
-        "K11",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/scheduler.ts:1-18: 调度器当前把 SnapshotService.takeAllSnapshots(\"scheduled\") 直接作为 Pump 的 tick 回调，并把回调异常记录后吞掉；该边界只有进程内事件，没有 durable data-request cursor、source sequence 或可恢复的请求身份"
       ],
       "currentBehavior": "调度器当前把 SnapshotService.takeAllSnapshots(\"scheduled\") 直接作为 Pump 的 tick 回调，并把回调异常记录后吞掉；该边界只有进程内事件，没有 durable data-request cursor、source sequence 或可恢复的请求身份。",
       "problem": "After a committed source operation, a fire-and-forget hook or the next cron tick cannot be used to infer that a snapshot request was durably admitted. Process exit between the source commit and callback loses the request; a provider read with unknown outcome must not be treated as an ordinary schedule failure or blindly retried.",
-      "targetModel": "Separate OptionalScheduledSnapshot/ReadTelemetry from a post-commit observation request. A committed source event may carry AccountScope, source-operation identity/revision, and local source evidence to request a snapshot, but the event is only a trigger/provenance and cannot approve or dispatch anything. Legacy revision/cursor values are accepted only after the open data inventory proves their mapping; otherwise the request/view remains MigrationRequired or Unavailable. Scheduled pulls may coalesce per scope/window.",
-      "pureTransitions": [
-        "committedEventToRequest -> one durable observation request keyed by source event identity and scope; replay is idempotent at the data-request boundary.",
-        "scheduleWindowToRequest -> optional per-scope finite pull request; coalescing never removes a post-commit request.",
-        "inventoryLegacyHistory -> VerifiedObservationCursor or MigrationRequired only after schema/version, scope, record identity, monotonicity, gap, and persisted-cursor evidence.",
-        "observationJob -> Ready | Leased | Completed | Failed, with ObservationUncertain as an outcome/reconciliation record, not an order recovery state."
-      ],
-      "effectBoundary": "The scheduler/timer, committed-event subscriber, provider readers, and snapshot writer are Effects. The scheduler does not own persistence writes, call a broker, or treat EventLog as authority; native protocol work remains inside provider adapters.",
-      "durability": "A required post-commit observation request and its cursor remain durable until a recorded terminal or uncertain/reconciliation result; optional scheduled requests can be deduplicated. Accepted observation payloads and local sequences are the only replayable facts. No order WAL/CAS, approval, compensation, or broker idempotency is inferred.",
-      "errors": [
-        "Committed event followed by process exit -> cursor replay restores one observation request.",
-        "Missing or conflicting legacy evidence -> MigrationRequired/Unavailable with source digest preserved; never derive a sequence from timestamps or array positions.",
-        "Partial listing/projection -> explicit Partial/Unavailable rather than empty data.",
-        "Observation timeout/unknown -> ObservationUncertain with prior checkpoint retained; it does not create an trading recovery case."
-      ],
       "preservedBehavior": [
         "继续支持 scheduled trigger 及既有手动/后置触发语义，但后置触发改由 committed event 关联，不靠 timing。",
         "保持每个账户独立处理；一个 scope 的失败不能抹掉其他 scope 的已提交事实。",
         "保持 EventLog 作为可读观测/审计输出，不能让其失败回滚交易 commit。"
-      ],
-      "replacementSteps": [
-        "Define request/cursor/result schemas with source provenance, scope, schema fingerprint, and local sequence evidence.",
-        "Use Pump only to submit optional scheduled requests; consume post-commit source events through a durable data-request subscriber.",
-        "At startup recover data cursors/jobs before automatic admission and expose the actual view envelope."
-      ],
-      "verificationCases": [
-        "Commit a source event and terminate before its subscriber runs: restart produces exactly one mandatory observation request; a same-window scheduled request may coalesce only with another scheduled request.",
-        "Inventory with missing or non-monotonic legacy evidence remains MigrationRequired/Unavailable; verified mapping resumes only from a persisted cursor, without timestamp-derived sequence.",
-        "A read timeout remains ObservationUncertain and never invokes order approval, compensation, or dispatch."
       ],
       "openQuestions": [
         "生产历史 journal/legacy files 的 schema/version、每个 scope 的 record identity、revision/sequence 单调性与缺口、以及已持久化 migration/subscriber cursor 仍需实施前实际数据盘点；当前 source 仅有进程内 Pump，不能回答该事实。"
@@ -328,1704 +99,505 @@
     },
     {
       "id": "MAP-5F2BAD0154",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "The source distinction between disabled automatic ticks and explicit runNow is retained, while free-form config and in-memory failure behavior are reframed as typed data scheduling and resource policy rather than trading policy.",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K05",
-        "K06",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/scheduler.ts:19-29: SnapshotConfig requires enabled: boolean and every: string; SnapshotScheduler exposes start(), stop(), and runNow(), while duration parsing and serial execution are delegated to Pump. The config has no scope, capacity, lease, retry, or failure-policy fields and the lifecycle methods return no durable admission/status."
       ],
       "currentBehavior": "SnapshotConfig has a required boolean enabled and free-form every string; Pump interprets the duration, while start/stop/runNow expose only process-local lifecycle and no scope, capacity, lease, retry, or failure-policy state.",
       "problem": "裸字符串和布尔值无法表达合法 Duration、禁用自动调度但允许手动请求、每 scope 的容量及 FailurePolicy；错误配置会在异步 tick 中才暴露，且旧实现没有 typed admission receipt。",
-      "targetModel": "Parse SnapshotConfig into a typed SnapshotSchedulePolicy: AutoSchedule(Every(Duration), policyRevision) or ManualOnly, with explicit per-scope resource limits and a data-reader retry/uncertainty policy. Manual capture remains possible when automatic scheduling is disabled. These limits govern finite observation work and availability; they are not order FailurePolicy, approval, or compensation settings.",
-      "pureTransitions": [
-        "parseConfig -> SnapshotSchedulePolicy, rejecting non-positive durations and malformed units before starting a timer.",
-        "decideAdmission(cause, policy, scope) -> Admit, Existing, Backpressured, or Unavailable; ManualOnly blocks only automatic windows.",
-        "decideReadRetry(outcome, policyRevision) -> next data attempt or ObservationUncertain without treating timeout as known rejection."
-      ],
-      "effectBoundary": "Config parsing and admission decisions are pure. Timer, queue, provider reader, and persistence adapters perform Effects and return typed status after the data request is durably accepted when durability is configured.",
-      "durability": "Persist the policy revision with an accepted data request/job so restart cannot silently reinterpret it. A manual or post-commit request is not discarded because an optional schedule is disabled; no transaction reservation or order lock is held.",
-      "errors": [
-        "Invalid duration/config -> ConfigurationError; existing accepted data jobs remain explicit.",
-        "Finite queue/resource capacity -> Backpressured/AdmissionUnavailable; required source requests remain replayable.",
-        "ObservationUncertain -> pause/reconcile according to reader policy; do not convert to order rejection or blind retry.",
-        "Unavailable scope -> typed scope result, never accountId-only default."
-      ],
       "preservedBehavior": [
         "保持 enabled=false 时自动 tick 不发生的旧语义；保持显式 runNow 可以触发一次。",
         "保持 every 字符串的既有合法值在 parse 后代表相同时间间隔；不承诺旧非法值继续工作。",
         "保持 scheduled/post-push/post-reject/manual cause 在 envelope 中可区分。"
       ],
-      "replacementSteps": [
-        "Add a typed policy parser and configuration error path.",
-        "Connect resource limits and data-job leases to the shared composition scheduler while keeping source-event requests distinct from optional telemetry.",
-        "Expose status/receipts to runtime and HTTP consumers instead of inferring state from null or an empty list."
-      ],
-      "verificationCases": [
-        "Parse enabled=false/every=\"15m\": automatic admission is suppressed, while an authorized manual data request receives a durable receipt.",
-        "When capacity is full, a scheduled request is Backpressured and a committed source event remains replayable; no order effect state is created."
-      ],
       "openQuestions": []
     },
     {
       "id": "MAP-F7BC708300",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source serial Pump intent is retained as a timer concern, but the target removes hidden all-account and order-style locking semantics in favor of scoped, composable data requests and supervised reader leases.",
-      "contractAnchors": [
-        "K05",
-        "K06",
-        "K07",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/scheduler.ts:31-44: createSnapshotScheduler 为 Pump 提供 onTick，tick 时一次性调用 takeAllSnapshots(\"scheduled\")；Pump 的 serial 选项只在本进程内避免重入，无法表示每个 AccountScope 的 lease 或跨进程恢复"
       ],
       "currentBehavior": "createSnapshotScheduler 为 Pump 提供 onTick，tick 时一次性调用 takeAllSnapshots(\"scheduled\")；Pump 的 serial 选项只在本进程内避免重入，无法表示每个 AccountScope 的 lease 或跨进程恢复。",
       "problem": "一次全账户 fan-out 把 scope 边界、并发预算和提交顺序隐藏掉；重启/多实例会重复扫描，交易触发请求可能与 scheduled 批次互相丢弃或覆盖。",
-      "targetModel": "A scheduler tick enumerates currently Available AccountScopes and emits one optional finite snapshot pull request per scope/window. It does not perform a hidden all-account fan-out or imply a universal provider interface. Post-commit source-event requests use a distinct identity and priority and are never removed by scheduled coalescing.",
-      "pureTransitions": [
-        "availableScopes -> per-scope optional requests; Discovering/Unavailable scopes produce typed status, not an account-only default.",
-        "dedup(scope, window, policyRevision) -> Existing or new optional request; source-event identity is never merged away.",
-        "lease(scope, job) -> supervised data-worker ownership with epoch/deadline sufficient to reject stale worker writes, not an order conflict lock."
-      ],
-      "effectBoundary": "Pump/timer emits admissions; data workers call provider adapters and projection persistence. Persistence/queue effects stay behind the chosen writer and query ports; provider-native protocols are free inside their adapters.",
-      "durability": "Per-scope data requests, worker leases, attempts, and view checkpoints survive restart when durable capture is selected. A tick receipt means request acceptance, not observation completion; optional capacity cannot erase a required source request.",
-      "errors": [
-        "Scope discovery pending/unavailable -> ScopeDiscoveryPending/ScopeUnavailable.",
-        "Stale lease write -> typed fencing failure with no checkpoint overwrite.",
-        "Provider observation unknown or listing partial -> ObservationUncertain/Partial; no retry is treated as order dispatch or recovery.",
-        "Resource exhaustion -> Backpressured for optional requests."
-      ],
       "preservedBehavior": [
         "保持 scheduled trigger 的周期性意图及每账户独立失败隔离。",
         "保持同一进程内不并行冲突快照的结果，但把 serial 约束提升为 durable per-scope lease。",
         "保持手动和交易提交请求的优先级高于可选 telemetry。"
       ],
-      "replacementSteps": [
-        "Replace takeAllSnapshots fan-out with typed per-scope data admissions.",
-        "Use AccountScope and data-worker lease identity in the shared scheduler; keep Pump as timer only.",
-        "Recover pending requests/checkpoints before opening optional automatic admission and report admitted/running/completed/uncertain status."
-      ],
-      "verificationCases": [
-        "With scope A Discovering and scope B Available, a tick admits only B and reports A pending.",
-        "Two workers claiming one scope fence the stale write, while a source-event request stays distinct from a scheduled window request."
-      ],
       "openQuestions": []
     },
     {
       "id": "MAP-330646FEBC",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source idempotent lifecycle and stop behavior are retained, but target states and recovery are explicitly data-worker lifecycle semantics, not a gateway to transaction recovery or broker execution.",
-      "contractAnchors": [
-        "K05",
-        "K06",
-        "K09",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/scheduler.ts:46-57: start 调用 pump.start 且有 started guard，stop 调用 pump.stop，runNow 直接调用 pump.runNow；生命周期方法没有恢复 barrier、admission receipt、drain 状态或 typed terminal status"
       ],
       "currentBehavior": "start 调用 pump.start 且有 started guard，stop 调用 pump.stop，runNow 直接调用 pump.runNow；生命周期方法没有恢复 barrier、admission receipt、drain 状态或 typed terminal status。",
       "problem": "Process startup may accept new requests before old data-job leases or uncertainty statuses are classified; stop only halts future ticks and cannot say whether queued jobs were admitted or completed. runNow's void result cannot distinguish response loss from non-admission.",
-      "targetModel": "Use a local scheduler lifecycle ADT Created -> Recovering -> Running -> Draining -> Stopped/Failed. Startup restores snapshot data requests/cursors/checkpoints before opening automatic admission; stop closes new optional requests and drains or records accepted work. runNow returns a typed data-job receipt/result, not void.",
-      "pureTransitions": [
-        "lifecycleTransition(state, command) -> exhaustive transition for repeated start/stop, failed recovery, and draining admission.",
-        "runNow(request) -> JobReceipt | Existing | AdmissionRejected, keyed by explicit scope and data-cause identity.",
-        "recoverDataJob(job, evidence) -> resume, uncertain/reconcile, or operator-required data outcome; it never manufactures execution authority."
-      ],
-      "effectBoundary": "Effects execute cursor replay, projection/store queries, worker lease fencing, timer start/stop, and provider observation. Lifecycle and admission decisions stay pure; no order-effect writer is hidden in the scheduler.",
-      "durability": "Running is published only after the data recovery barrier completes. stop/exit retains accepted requests, data-worker leases, observations, and projection checkpoints; response loss is resolved by the data command identity and payload digest.",
-      "errors": [
-        "Recovery barrier failure -> Failed/Unavailable and no new automatic admission.",
-        "runNow during Draining -> Draining/AdmissionRejected; an already committed data request remains recoverable.",
-        "Repeated start/stop -> idempotent lifecycle transition with no second timer or worker.",
-        "Observation uncertainty -> explicit data outcome, not an trading recovery case."
-      ],
       "preservedBehavior": [
         "保持 start/stop 可重复调用无额外副作用。",
         "保持 stop 后不会继续 Pump 自动 tick；保持 runNow 是显式即时意图而不依赖 enabled。",
         "保持调度错误不会让既有交易提交失败；错误转为 typed status；已有可能执行的交易计划仍由 C05 RecoveryCase 管理。"
       ],
-      "replacementSteps": [
-        "Extend the scheduler API with typed lifecycle/status and data-job receipts.",
-        "Connect recovery barrier ordering to runtime composition before starting the optional Pump.",
-        "Persist drain/restart state for scoped data jobs and remove void fire-and-forget behavior."
-      ],
-      "verificationCases": [
-        "Start with an unfinished data lease: lifecycle remains Recovering until data classification completes, and runNow cannot bypass it.",
-        "After a committed runNow response is lost, lookup returns the same data receipt; stop closes admission and restart sees the queued request."
-      ],
       "openQuestions": []
     },
     {
       "id": "MAP-B273D4875A",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The old retry intent is retained, but fixed delay and null are reframed as a typed data-observation policy; order continuation and execution recovery are deliberately not inherited by snapshots.",
-      "contractAnchors": [
-        "K05",
-        "K07",
-        "K11",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/service.ts:1-18: 服务层定义固定 RETRY_DELAY_MS=3000，并把 build 失败、存储失败和无可用快照都压成 null/日志；重试间隔和失败分类不随 job 或 scope 持久化"
       ],
       "currentBehavior": "服务层定义固定 RETRY_DELAY_MS=3000，并把 build 失败、存储失败和无可用快照都压成 null/日志；重试间隔和失败分类不随 job 或 scope 持久化。",
       "problem": "固定进程内 sleep 不能保证重启后恢复，也无法区分已知拒绝、Unknown、存储损坏和暂时 unavailable。null 让 scheduler、HTTP 和调用方把“没有历史”“未完成”“失败”混为一谈。",
-      "targetModel": "Replace fixed in-process sleep with a typed durable data-read policy containing queue capacity, lease deadline, attempt, backoff, and Failure/Uncertainty classification. CaptureResult is Captured(view), Skipped(reason), Failed(error), Partial, or ObservationUncertain; it never uses null to represent no history, unavailable storage, or an order outcome.",
-      "pureTransitions": [
-        "classifyReadError(error) -> Retryable | Skipped | ProjectionUnavailable | ObservationUncertain | Terminal using declared error evidence.",
-        "backoffTransition(attempt, policyRevision, now) -> next eligibility without resetting on process restart.",
-        "buildReadResult -> envelope retaining scope, local sequence, checkpoint, observedAt, and freshness/coherence."
-      ],
-      "effectBoundary": "Clock/timer, provider reads, data queue, projection decode, and supervisor are Effects; policy and result classification are pure. No read policy calls approval, compensation, or order dispatch.",
-      "durability": "Persist data-job attempt, next eligibility, uncertainty, and projection checkpoint when capture is durable; receipt is delivered after the snapshot writer commits. The last valid view remains available as stale evidence, not as a fresh precondition.",
-      "errors": [
-        "Corrupt projection/schema -> CorruptProjection/ProjectionUnavailable; never NoHistory.",
-        "Read timeout/disconnect -> ObservationUncertain/reconcile-pending with prior checkpoint retained; no blind repeat of an uncertain side effect.",
-        "Provider-declared domain rejection -> preserve it as data-reader error; do not generalize it into order FailurePolicy.",
-        "Unavailable scope -> typed scope failure."
-      ],
       "preservedBehavior": [
         "保持成功 snapshot 的日志/观察语义；保持 scheduled 的周期意图。",
         "保持单账户失败不自动取消其他账户，但隔离提升为 durable partition。",
         "保持既有 retry 的用户可见时序意图，但不保证旧的固定毫秒数作为协议。"
       ],
-      "replacementSteps": [
-        "Remove fixed sleep/null protocol and connect typed data failure outcomes to the scheduler.",
-        "Define serializable capture/query/result schemas and preserve provider error evidence.",
-        "Make routes and composition branch on explicit data status instead of null/empty-array inference."
-      ],
-      "verificationCases": [
-        "A corrupt projection row yields CorruptProjection/Failed while last valid evidence remains queryable; a retryable read records attempt and next eligibility.",
-        "A timeout yields ObservationUncertain and no order recovery state; a declared provider error retains its own category."
-      ],
       "openQuestions": []
     },
     {
       "id": "MAP-FC05F3240D",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source interface defect is retained, but the target boundary is reframed around data delivery and projection retention; the old all-in-one service must not become a closed transaction API.",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K05",
-        "K06"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/service.ts:20-25: SnapshotService 接口把采集、批量调度、查询、删除混在一起，方法返回 Promise<UTASnapshot|null> 或 Promise<boolean>，没有 query checkpoint、scope 或 durable receipt"
       ],
       "currentBehavior": "SnapshotService 接口把采集、批量调度、查询、删除混在一起，方法返回 Promise<UTASnapshot|null> 或 Promise<boolean>，没有 query checkpoint、scope 或 durable receipt。",
       "problem": "The single interface hides distinct data boundaries: capture admission needs an accepted data-job receipt and selected persistence boundary, query only reads a projection, and retention cannot erase recorded observations; null/bool cannot express partial/unavailable/recovery outcomes.",
-      "targetModel": "Split the mixed SnapshotService surface into SnapshotCaptureAdmission, SnapshotProjectionQuery, and SnapshotRetention. Capture is a finite data request with scope/cause and a typed receipt; query is read-only and returns an envelope with freshness, coherence, and listing completeness; retention may compact only rebuildable projection data. None is an order approval/compensation/dispatch port.",
-      "pureTransitions": [
-        "parseCaptureRequest -> explicit AccountScope, SnapshotCause, schema fingerprint, and resource policy.",
-        "queryProjection -> Complete, Partial, Unavailable, or NoHistory with actual checkpoint/as-of and provider extension data.",
-        "decideRetention(row, checkpoint, evidence) -> Keep | Compact | Reject; authoritative observation evidence and unfinished data requests are protected."
-      ],
-      "effectBoundary": "Inject separate provider-read, data-writer, projection-query, retention, and clock dependencies. The public interfaces do not depend on UTAManager or filesystem paths and do not expose native SDK types.",
-      "durability": "Capture receipts/status, query envelopes, and retention receipts are distinct. If a projection is dropped/rebuilt, only recorded observations can rebuild it; retention cannot erase source evidence or turn query success into an execution receipt.",
-      "errors": [
-        "Unknown scope/invalid bounds -> typed validation or scope discovery result.",
-        "Stale/partial projection -> explicit freshness/listing result, never empty list.",
-        "Corrupt storage -> typed ProjectionUnavailable/DecodeFailure.",
-        "Retention crossing unfinished or uncertainty evidence -> RetentionRejected."
-      ],
       "preservedBehavior": [
         "保留 manual/scheduled/post-push/post-reject 的调用意图，通过 Cause 映射而非删掉 trigger。",
         "保留查询 limit/range 能力，但改成 typed Instant/sequence bounds。",
         "保留可授权删除历史读模型的需求，禁止其越权为 journal delete。"
       ],
-      "replacementSteps": [
-        "Migrate callers to the three data ports and delete the null/bool mixed contract.",
-        "Define serializable requests/results and explicit scope/cause schemas.",
-        "Bind HTTP to query and scheduler/UI to capture; keep retention authorization out of ordinary reads."
-      ],
-      "verificationCases": [
-        "A complete empty projection returns NoHistory, while missing checkpoint and malformed row return Partial/Unavailable and DecodeFailure.",
-        "Authorized retention compacts rebuildable data but cannot remove recorded observation evidence or an active uncertain data request."
-      ],
       "openQuestions": []
     },
     {
       "id": "MAP-622FCFCD63",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source cache-per-account behavior and EventLog wiring are retained as evidence, but target storage is reframed as a shared, scoped data projection; it must not inherit a universal broker or order-effect authority.",
-      "contractAnchors": [
-        "K02",
-        "K05",
-        "K07",
-        "K11"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/service.ts:27-43: createSnapshotService 保存 UTAManager、EventLog、baseDir，并以 Map<accountId, SnapshotStore> 惰性建立每账户目录存储；缓存是进程本地且 key 只有 accountId"
       ],
       "currentBehavior": "createSnapshotService 保存 UTAManager、EventLog、baseDir，并以 Map<accountId, SnapshotStore> 惰性建立每账户目录存储；缓存是进程本地且 key 只有 accountId。",
       "problem": "Process crashes, multiple instances, or scope changes can create divergent authoritative file views; subAccountId, scope revision, local sequence, and projection checkpoint cannot enter the key. EventLog is not a persistence receipt, yet holding it in the service makes that confusion likely.",
-      "targetModel": "Replace the per-account Map of JSONL stores with a composition-provided shared snapshot persistence/query layer keyed by explicit AccountScope, projection kind, schema version, and local sequence. EventLog is an optional post-commit observation sink, not a write confirmation. Files remain migration/backup input only; cache identity cannot claim component coherence.",
-      "pureTransitions": [
-        "resolveScope(accountId, subAccountEvidence) -> AccountScope or ScopeDiscoveryFailure; no implicit default subaccount.",
-        "cacheKey(scope, projectionKind, schemaVersion) -> stable data partition identity; component checkpoints remain separate.",
-        "classifyLegacyFiles(fileset) -> Candidate | MigrationRequired | Corrupt, not successful merely because a file opened."
-      ],
-      "effectBoundary": "Composition injects provider readers, shared persistence, projection query, clock, and post-commit EventLog sink. Runtime authority is not a process-local Map or filesystem constructor; provider internals remain outside this boundary.",
-      "durability": "An accepted observation/request and its local sequence are durable when configured; each projection checkpoint advances with its own persistence commit. EventLog failure leaves the data fact queryable. No order reservations, WAL, or recovery cases are attached to the cache.",
-      "errors": [
-        "Storage unavailable/locked -> StorageUnavailable/Retryable without creating an empty directory.",
-        "Legacy decode/corruption -> MigrationRequired/CorruptProjection with evidence retained.",
-        "Scope revision change -> new requests use the new capability context while historical view scope stays immutable.",
-        "Component cache disagreement -> MixedFreshness, not coherent snapshot."
-      ],
       "preservedBehavior": [
         "保持每账户独立历史和 lazy creation 的资源意图，但权威性移到共享 durable layer。",
         "保持 EventLog 可观察输出；EventLog 失败不回滚已提交 journal。",
         "保持 baseDir 可用于一次性 migration/备份路径，不作为运行时 source of truth。"
       ],
-      "replacementSteps": [
-        "Inject shared persistence/query and AccountScope into service composition; separate EventLog as a sink.",
-        "Define the legacy JSONL/index migration contract and prohibit runtime writes to old paths after cutover.",
-        "Add per-component sequence/checkpoint/freshness to projection rows and query results."
-      ],
-      "verificationCases": [
-        "Two workers sharing one persistence layer read the same scope/checkpoint after restart; a corrupt legacy file yields MigrationRequired rather than an empty store.",
-        "A projection checkpoint advances only with its row transaction, and EventLog sink failure leaves the committed observation queryable."
-      ],
       "openQuestions": []
     },
     {
       "id": "MAP-5BD7779096",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source success/skipped/error observability and per-account isolation remain useful, but the mixed live builder/store/log boundary is reframed as finite data observation plus projection persistence, without trading execution machinery.",
-      "contractAnchors": [
-        "K05",
-        "K07",
-        "K09",
-        "K11",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/service.ts:45-76: takeSnapshot 解析 UTA，调用 buildSnapshot，build 返回 null 时记录 snapshot.skipped；成功后直接 store.append，再记录 snapshot.taken；所有异常 catch 后记录 snapshot.error 并返回 null"
       ],
       "currentBehavior": "takeSnapshot 解析 UTA，调用 buildSnapshot，build 返回 null 时记录 snapshot.skipped；成功后直接 store.append，再记录 snapshot.taken；所有异常 catch 后记录 snapshot.error 并返回 null。",
       "problem": "采集、权威事实提交、投影更新和日志观察没有边界：build 期间发生的 sync/query 不是已提交 observation，append 成功但进程在日志前退出也无法判断结果。账户未知、broker listing 不完整、projection decode 失败都被 null 折叠。",
-      "targetModel": "Make takeSnapshot a finite observation worker: obtain typed account/position/order data plus separate GitAudit, validate scope/listing completeness and provider schemas, record the accepted observation, and update the projection. snapshot.taken/skipped/error are post-commit observability outcomes, not authority. No read path performs order prepare, approval, compensation, or dispatch.",
-      "pureTransitions": [
-        "collect -> ObservationSet where each component has provenance, observedAt, and provider/local revision; ListingResult must be Complete before absence is used.",
-        "foldRecordedObservation -> SnapshotView with local sequence/checkpoint while external observedAt remains evidence, not same-instant proof.",
-        "classifyCapture -> Captured | Skipped | Partial | ProjectionUnavailable | ObservationUncertain; keep Git audit separate from broker facts."
-      ],
-      "effectBoundary": "The worker and provider/Git adapters perform IO; the data writer/projection query perform persistence; pure builders only transform validated observations. EventLog is a best-effort post-commit sink whose failure does not rewrite the data result.",
-      "durability": "Record request and accepted observation identity/payload before acknowledging durable capture; advance the projection checkpoint only with the row update. An unavailable or partial read does not delete a prior valid view, and an unrecorded live read cannot be replayed.",
-      "errors": [
-        "UTA/sync/query unavailable -> typed Unavailable/ObservationError, never empty account/order data.",
-        "Partial listing or uncertain read -> Partial/ObservationUncertain while retaining prior evidence.",
-        "Schema/storage failure -> ProjectionUnavailable/CorruptProjection with rebuild evidence.",
-        "EventLog sink failure -> observable sink status only; capture fact remains committed."
-      ],
       "preservedBehavior": [
         "保留健康状态、Git head/pending、持仓/订单元数据和 trigger/cause 观测。",
         "保留 successful snapshot.taken/skipped/error 的可观测 intent，但改为 typed post-commit events。",
         "保留一次采集只影响目标 scope；不把一个 scope 的异常传播为全局 transaction failure。"
       ],
-      "replacementSteps": [
-        "Define ObservationSet/completion boundaries and rewrite takeSnapshot as a data worker.",
-        "Move append/projection update into the selected snapshot writer and keep EventLog post-commit.",
-        "Update query/HTTP consumers to envelope/failure variants instead of null."
-      ],
-      "verificationCases": [
-        "A recorded Complete observation whose projection fold crashes is rebuilt exactly once from the recorded payload; an unrecorded live read is not recreated.",
-        "A Partial listing after a prior Complete view returns Partial/stale and preserves the prior view; EventLog failure cannot change the capture receipt."
-      ],
       "openQuestions": []
     },
     {
       "id": "MAP-19A41F635E",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The all-scope and failure-isolation intent is retained, but the retry and lease model is reframed as durable data delivery; order-specific known-rejection continuation and execution recovery are excluded.",
-      "contractAnchors": [
-        "K05",
-        "K06",
-        "K07",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/service.ts:78-102: takeAllSnapshots resolves all UTAs，Promise.allSettled 后把失败账户放入 null 数组，等待 3 秒，再 retry 一次；批处理返回 void，失败身份只存在本次调用"
       ],
       "currentBehavior": "takeAllSnapshots resolves all UTAs，Promise.allSettled 后只把 fulfilled 且 snap===null 的账户放入失败数组，等待 3 秒，再 retry 一次；批处理返回 void，失败身份只存在本次调用；批处理返回 void，失败身份只存在本次调用。",
       "problem": "批量 fan-out 没有 durable per-scope job、lease 或 backpressure；重启丢掉失败列表，retry 可能重复未知副作用，且固定一次 retry 无法表达 ObservationUncertain/FailurePolicy。",
-      "targetModel": "Represent a batch capture as independent finite ObservationJobs per Available AccountScope. Queue capacity, worker leases, attempts, and reader uncertainty are data-resource concerns; optional scheduled jobs can coalesce, while requests caused by a committed source event retain their identity. Batch status is a typed product of scope results, not a transaction or order-recovery state.",
-      "pureTransitions": [
-        "resolveScopes -> Available scopes plus explicit Discovering/Unavailable outcomes; never invent an account-only scope.",
-        "decideBatch -> per-scope Admit | Existing | Backpressured | Skipped with cause and resource evidence.",
-        "decideRetry -> data-reader retry, pause, or reconcile from typed outcome and policy revision; uncertain reads are not known order rejection."
-      ],
-      "effectBoundary": "A bounded data queue, provider readers, leases, observation persistence, projection updates, and backoff are Effects. Independent scopes may run concurrently; same-scope worker fencing protects data projection writes, not broker execution.",
-      "durability": "Persist job identity, attempts, lease, source evidence, data outcome, next retry, and checkpoint when durable capture is required. A worker crash replays the data job; one scope rollback does not erase another scope. No order reservation or a trading recovery case is created.",
-      "errors": [
-        "One scope failure -> typed per-scope result without cancelling other scopes.",
-        "ObservationUnknown/timeout -> ObservationUncertain with replay/reconcile status; no blind duplicate read is presented as a successful effect.",
-        "Optional capacity full -> Backpressured; committed source-event request remains replayable.",
-        "Partial listing -> Partial, not successful empty orders."
-      ],
       "preservedBehavior": [
         "保持 all-scope snapshot 的用户意图与独立失败隔离。",
         "保留失败后再次尝试的能力，但从固定一次 retry 改成 policy/lease 可恢复。",
         "保持 scheduled/post/manual cause 可观测并可按 scope 查询。"
       ],
-      "replacementSteps": [
-        "Replace Promise.allSettled/sleep/null retry with per-scope data admissions and supervised workers.",
-        "Connect source cursor, scope discovery, queue/resource policy, and observation results.",
-        "Return per-scope receipts/status and stop HTTP from collapsing failures into an empty response."
-      ],
-      "verificationCases": [
-        "Scope A read becomes uncertain while B captures Complete: B commits independently and A remains ObservationUncertain with its last checkpoint.",
-        "When optional capacity is full, it returns Backpressured while the committed source-event request survives restart and is not coalesced away."
-      ],
       "openQuestions": []
     },
     {
       "id": "MAP-226B693FB4",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source recent/range read and operational cleanup needs remain, but timestamp deletion is reframed as projection-only retention with typed data status, not an order or authoritative-fact mutation.",
-      "contractAnchors": [
-        "K02",
-        "K05",
-        "K06",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/service.ts:104-112: getRecent 直接读取每账户 SnapshotStore 的 JSONL；deleteSnapshot 直接按 timestamp 删除行并返回 bool，服务层不检查 journal/checkpoint 或是否包含未完成证据"
       ],
       "currentBehavior": "getRecent 直接读取每账户 SnapshotStore 的 JSONL；deleteSnapshot 直接按 timestamp 删除行并返回 bool，服务层不检查 journal/checkpoint 或是否包含未完成证据。",
       "problem": "把读模型删除暴露为普通布尔操作会误导调用方，以为已删除交易事实；按时间戳还会遇到 duplicate/范围边界，无法表达 stale/no-history/unavailable。",
-      "targetModel": "Replace getRecent with a read-only SnapshotProjectionQuery taking explicit AccountScope, typed Instant/sequence bounds, and a validated limit. Return a SnapshotViewEnvelope plus Complete/Partial/Unavailable/NoHistory and listing/freshness/coherence metadata. Replace ordinary deleteSnapshot with authorized projection retention/compaction; it cannot erase recorded snapshot evidence.",
-      "pureTransitions": [
-        "parseQuery -> scoped Instant/sequence bounds and Limit; reject missing scope, invalid timezone, reversed range, and invalid limit.",
-        "classifyQuery -> Complete, NoHistory, Partial, Stale, or Unavailable using coverage/checkpoint/decode evidence, never [] as an error.",
-        "decideRetention -> Keep | Compact | Reject using checkpoint and rebuildability evidence, not timestamp equality."
-      ],
-      "effectBoundary": "Query is a read-only persistence effect; retention is a separate authorized persistence effect. HTTP/service code never unlinks files or invokes a provider reader from the query port.",
-      "durability": "Query exposes actual sequence/checkpoint/as-of/freshness. Retention receipts audit projection compaction while recorded observations and uncertainty evidence remain. No read/delete operation changes order facts or dispatch state.",
-      "errors": [
-        "Unknown scope -> ScopeUnavailable; complete empty coverage -> NoHistory.",
-        "Stale/corrupt/storage unavailable -> typed Stale/CorruptProjection/ProjectionUnavailable.",
-        "Retention of unfinished or uncertain data -> RetentionRejected.",
-        "Ambiguous timestamp identity -> reject rather than deleting by guess."
-      ],
       "preservedBehavior": [
         "保持 recent limit/range 查询能力及历史读取语义。",
         "保持有权限清理 rebuildable 的历史 read projection 的运维需求。",
         "保持查询失败不改变交易/快照事实。"
       ],
-      "replacementSteps": [
-        "Migrate query and cleanup callers to typed ProjectionQuery and SnapshotRetention.",
-        "Implement retention authorization/checkpoint guards and remove ordinary timestamp deletion.",
-        "Expose envelope and explicit retention receipt/failure through HTTP and operations."
-      ],
-      "verificationCases": [
-        "A complete scope with zero rows returns NoHistory; unavailable projection returns ProjectionUnavailable rather than [].",
-        "Retention targeting data referenced by an unfinished/uncertain capture is rejected and leaves recorded evidence/checkpoint intact."
-      ],
       "openQuestions": []
     },
     {
       "id": "MAP-2EF977A049",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source fixture roles and local isolation are retained, but tests are reframed to prove data schemas, scope, and persistence outcomes rather than a MockBroker-shaped global SDK or order transaction.",
-      "contractAnchors": [
-        "K03",
-        "K05",
-        "K07",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/snapshot.spec.ts:1-57: the fixture section imports UnifiedTradingAccount, MockBroker, EventLog types, temporary-path helpers, submitted/filled order constructors, and a microtask flush helper. In this range it defines createUTA/tempDir/tempPath/makeSubmittedOrder/makeFilledOrder/flush; EventLog is only imported and no service/store is constructed until later ranges, so this range establishes no durable data writer, projection, lease, or EventLog sink."
       ],
       "currentBehavior": "The shared test helpers build live UnifiedTradingAccount/MockBroker fixtures, temporary directory/path names, submitted and filled orders, and a timer-flush helper; this range does not itself establish a durable data writer, projection, lease, or EventLog sink.",
       "problem": "These fixtures cover only one process and accountId-based file paths, so they cannot prove AccountScope, durable data persistence, projection checkpoints, leases/recovery, or multi-worker semantics; MockBroker success is not native-provider evidence.",
-      "targetModel": "Use typed observation/view fixtures with explicit AccountScope, cause, provider-declared ListingResult, observedAt, and local sequence. The persistence fixture may use an isolated durable database/namespace and a real snapshot writer/query boundary; temporary directories remain only for legacy migration tests. MockBroker supplies boundary data, not native guarantees or transaction semantics.",
-      "pureTransitions": [
-        "fixture(scope, observations, clock) -> typed data request/result with no implicit account default.",
-        "encodeDecode(observation/view) -> preserves schema version, provider extension, local sequence, checkpoint, and freshness/coherence.",
-        "failureFixture -> Partial | ObservationUncertain | Corrupt | Unavailable data variants rather than null for every case."
-      ],
-      "effectBoundary": "Tests may exercise the real chosen persistence/query/queue layer and fake provider adapter/clock, while MockBroker and EventLog remain boundary adapters/sinks. No fixture creates order approval, compensation, or dispatch authority.",
-      "durability": "Each test namespace isolates scope and data receipts; commit/rollback and checkpoint assertions happen at the snapshot writer boundary. Cleanup removes only its namespace and does not treat a directory as proof of commit.",
-      "errors": [
-        "Missing scope -> ScopeRequired/ScopeDiscoveryPending.",
-        "Partial/unknown listing -> typed data result, never an empty order array.",
-        "Persistence failure -> no receipt/checkpoint for the failed write and prior evidence remains.",
-        "Mock success -> evidence of the fixture only, not a provider guarantee."
-      ],
       "preservedBehavior": [
         "保留 UTA、MockBroker、EventLog 的测试角色及既有 domain builder fixtures。",
         "保留测试隔离和可重复性；temp dir 仅用于明确的 legacy migration test。",
         "保留不依赖真实外部凭据的本地测试性质。"
       ],
-      "replacementSteps": [
-        "Add scoped observation/view factories and an isolated durable persistence fixture.",
-        "Move service/scheduler assertions from filesystem/EventLog authority to writer/query/queue boundaries.",
-        "Attach sequence/checkpoint/freshness assertions to each behavior without requiring a universal provider type."
-      ],
-      "verificationCases": [
-        "Two explicit scopes plus a Partial order listing produce a typed Partial result rather than null/empty orders.",
-        "A failed snapshot write has no receipt/checkpoint, while a post-commit EventLog sink failure leaves the data fact queryable."
-      ],
       "openQuestions": []
     },
     {
       "id": "MAP-83DAA2E639",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "The source precision and derivative rendering obligations are retained; the prior plain-object/order-semantic target is narrowed to declaration-derived data schemas and exact provider extensions, which K03/K04 require.",
-      "contractAnchors": [
-        "K03",
-        "K04",
-        "K05",
-        "K07",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/snapshot.spec.ts:58-137: builder 测试验证健康账户、财务字段均为字符串、position 的 aliceId 不属于合同、期权 multiplier/strike/right/expiry round-trip，以及股票 multiplier 被省略"
       ],
       "currentBehavior": "builder 测试验证健康账户、财务字段均为字符串、position 的 aliceId 不属于合同、期权 multiplier/strike/right/expiry round-trip，以及股票 multiplier 被省略。",
       "problem": "现有断言针对 plain UTASnapshot 和字符串字段，不能证明新读模型的 AccountScope、单位、来源序列和查询 freshness；只测期权几个字段也可能遗漏完整订单语义。",
-      "targetModel": "Test the typed SnapshotView envelope and its provider-declared extensions: explicit scope, lossless decimal Money/Quantity/Price, schema version, local sequence/checkpoint, as-of, freshness/coherence, and Complete/Partial listing. Preserve OPT/FOP metadata and omission of inapplicable STK fields. Do not expand this read test into a hand-written catalogue of executable order combinations.",
-      "pureTransitions": [
-        "map observations -> typed view while preserving provider extension fields and structural absence for fields not applicable to the instrument.",
-        "encode/decode -> exact decimal and schema round-trip without Number conversion or raw object fallback.",
-        "projectOrderListing -> working-order data only when listing coverage is Complete; native order fields remain observation data, not execution support."
-      ],
-      "effectBoundary": "Provider adapter/fixture obtains observations; pure schema and view mapping perform assertions. Persistence checks occur only at the data commit/checkpoint boundary and never call an order compiler.",
-      "durability": "Envelope schema/version and local sequence/checkpoint survive persistence; scope revisions do not rewrite historical views. Provider-native extension identity is retained separately from common fields.",
-      "errors": [
-        "Malformed decimal/unit/scope -> SchemaDecodeFailure/ScopeRequired, not zero.",
-        "Inapplicable derivative field -> omitted structurally; applicable but unavailable field -> explicit missing/uncertain evidence.",
-        "Provider extension mismatch -> declared schema failure; no claim about venue execution capability.",
-        "Mixed sequence -> MixedFreshness."
-      ],
       "preservedBehavior": [
         "保留健康、账户财务、持仓、订单和 Git audit 的可观察内容。",
         "保留字符串金额和可选 derivative fields 的兼容 wire shape，外层增加 envelope 而不是丢元数据。",
         "保留股票无 multiplier 的既有语义。"
       ],
-      "replacementSteps": [
-        "Create typed observation/view fixtures with provider extension schemas.",
-        "Keep OPT/FOP precision and STK structural omission cases; remove aliceId-as-contract assumptions.",
-        "Assert supported data fields, unavailable fields, and listing completeness without a Cartesian order model."
-      ],
-      "verificationCases": [
-        "OPT metadata and exact decimal values round-trip, while an inapplicable STK multiplier is absent rather than defaulted into the view.",
-        "Mixed component sequences report MixedFreshness and a provider extension decode failure is explicit; neither is silently treated as execution support."
-      ],
       "openQuestions": []
     },
     {
       "id": "MAP-FAA33A98FD",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "The source working-order filter, Git audit fields, and no-data behavior are retained; null and incomplete-listing ambiguity are reframed as K05/K07 data delivery variants rather than an order execution contract.",
-      "contractAnchors": [
-        "K04",
-        "K05",
-        "K07",
-        "K09"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/snapshot.spec.ts:139-225: 测试 builder 只把 Submitted/PreSubmitted 纳入 openOrders；disabled/offline/查询抛错返回 null；同时验证 headCommit/pendingCommits"
       ],
       "currentBehavior": "测试 builder 只把 Submitted/PreSubmitted 纳入 openOrders；disabled/offline/查询抛错返回 null；同时验证 headCommit/pendingCommits。",
       "problem": "将订单缺席、UTA unavailable、broker query error 和 git 观察失败都压成 null；没有 ListingComplete/Partial/Unavailable 的边界，无法防止把未覆盖 namespace 当作“没有订单”。",
-      "targetModel": "Represent order observations with an explicit query kind and coverage: ByIds for the source pending-ID read, or Enumeration with Complete(scope/namespace/cursor/observedAt/orders), Partial, or Unavailable. Only Complete enumeration coverage permits an absence claim; the existing Submitted/PreSubmitted working-order projection may filter returned ByIds observations but cannot treat missing IDs as remote absence. Git head/pending remains a separate audit observation. Disabled/offline/read errors become typed data outcomes and cannot overwrite the last complete view.",
-      "pureTransitions": [
-        "filterWorkingOrders(query) -> Submitted/PreSubmitted observations only from the query's proven coverage; ByIds misses remain explicit.",
-        "foldListing -> Complete | Partial(missing namespace/cursor) | Unavailable(reason); missing coverage is not a cancel/rejection decision.",
-        "foldGitAudit -> head/pending provenance independent of broker/account facts."
-      ],
-      "effectBoundary": "Provider/Git readiness and listing reads are Effects; pure listing and audit folds only transform validated input. Projection persistence records coverage and freshness; no data read enters approval or compensation.",
-      "durability": "Partial or uncertain observations leave the prior Complete projection available with stale evidence unless an explicit retention policy says otherwise. A local sequence/checkpoint identifies the data view; it is not a broker version or order execution receipt.",
-      "errors": [
-        "Disabled/offline -> CaptureSkipped/ReadinessUnavailable.",
-        "Timeout/disconnect -> ObservationUncertain with reader reconciliation policy, not order recovery.",
-        "Partial coverage -> ListingPartial; HTTP must not return [] as Complete.",
-        "Git audit failure -> audit component unavailable without changing broker facts."
-      ],
       "preservedBehavior": [
         "保留 Submitted/PreSubmitted 的既有筛选意图。",
         "保留 Git head/pending 字段及其 audit 价值。",
         "保留 disabled/offline 不产生正常 snapshot 的行为，但状态从 null 变为 typed。"
       ],
-      "replacementSteps": [
-        "Replace null assertions with availability, capture, and listing ADTs.",
-        "Add namespace/cursor/observedAt and ByIds-versus-Enumeration coverage cases plus provider extension decode cases.",
-        "Make query consumers distinguish stale/partial/unavailable from no history."
-      ],
-      "verificationCases": [
-        "Declared Complete enumeration with Submitted and Filled returns only Submitted in working orders; a ByIds miss or Partial result retains missing evidence and never a complete empty set.",
-        "A timeout after a prior Complete view leaves that view stale and capture uncertain; disabled/offline remains distinct from corrupt storage."
-      ],
       "openQuestions": []
     },
     {
       "id": "MAP-DCBAABE629",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "Fixture isolation, repeatability, and legacy-file compatibility remain obligations; the target is reframed so missing files are not silently successful and no order transaction machinery is introduced into data storage tests.",
-      "contractAnchors": [
-        "K03",
-        "K05",
-        "K11",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/snapshot.spec.ts:227-261: store 测试工厂为每个 accountId 建临时目录，makeSnapshot 创建普通 plain snapshot，afterEach 删除目录；覆盖空 index 的默认行为"
       ],
       "currentBehavior": "store 测试工厂为每个 accountId 建临时目录，makeSnapshot 创建普通 plain snapshot，afterEach 删除目录；覆盖空 index 的默认行为。",
       "problem": "The fixture hard-codes the legacy file layout and cannot expose persistence schema/checkpoint, scope identity, truncated migration input, or persistence-commit rollback.",
-      "targetModel": "Make storage tests exercise a scoped durable snapshot layer and an explicit legacy importer. New fixtures create AccountScope and typed observations/views; JSONL/index files are only migration input. Empty history is a typed NoHistory result after complete initialization, not the fallback for a missing or corrupt index.",
-      "pureTransitions": [
-        "testNamespace(testId) -> explicit scope/persistence namespace with no accountId-only collision.",
-        "decodeLegacy(files) -> ValidCandidate | Corrupt | MigrationRequired with source hash/evidence.",
-        "assertPersistenceCommit -> failed snapshot persistence advances neither projection row nor checkpoint/receipt."
-      ],
-      "effectBoundary": "The fixture runs the chosen snapshot persistence/query boundary; temporary files are confined to importer tests. Provider mocks supply observations and do not stand in for native or order-effect guarantees.",
-      "durability": "Migration receipts and source hashes are persisted only after validated import; test cleanup is namespace-scoped. New storage tests do not construct order locks or compensation state.",
-      "errors": [
-        "Corrupt/missing index or chunk -> CorruptProjection/MigrationRequired, not empty history.",
-        "Scope revision mismatch -> preserve historical facts and use new scope for new requests.",
-        "Persistence rollback -> no projection/checkpoint/receipt."
-      ],
       "preservedBehavior": [
         "保留 fixture 级隔离、测试后清理和 store 可重复初始化。",
         "保留旧 JSONL 文件兼容性作为 migration 需求，不保留其运行时权威性。",
         "保留空历史测试，但改成 NoHistory typed result。"
       ],
-      "replacementSteps": [
-        "Add scoped durable-store and typed view factories.",
-        "Split old makeSnapshot coverage into envelope cases and legacy importer cases.",
-        "Cover crash/rollback/checkpoint atomicity at the snapshot persistence boundary."
-      ],
-      "verificationCases": [
-        "A truncated legacy file yields CorruptProjection/MigrationRequired and no NoHistory receipt.",
-        "Two scopes share the fixture store without collision; rollback removes neither the other scope nor its checkpoint."
-      ],
       "openQuestions": []
     },
     {
       "id": "MAP-95A7E16E24",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "The source append/history and rebuildability intent is retained, but chunk layout and in-memory append assumptions are reframed as data persistence details rather than authoritative protocol or order transaction semantics.",
-      "contractAnchors": [
-        "K03",
-        "K05",
-        "K11",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/snapshot.spec.ts:263-301: store tests assert first append is readable, 51 appends are readable across a chunk rollover, and three timestamps appended in increasing order are returned newest-first with trigger/account metadata. The tests do not prove a durable source sequence or snapshot-persistence commit boundary."
       ],
       "currentBehavior": "The tests pin JSONL/index creation, a 50-row chunk implementation detail, and newest-first physical append order under monotonic timestamps; they do not establish chronological ordering for out-of-order appends or snapshot-persistence/projection commit semantics.",
       "problem": "Chunk rollover and index update are file operations; they do not prove durable data persistence, projection checkpoint, scope identity, crash atomicity, or retention of unfinished evidence.",
-      "targetModel": "Test append persistence as recorded snapshot observations plus projection rows/checkpoints. The historical 50-row chunk rollover remains an implementation/migration case, not a domain contract. Queries use local sequence and typed time evidence; replay rebuilds the same data view without exposing chunk names or any order-effect semantics.",
-      "pureTransitions": [
-        "appendFold(recordedObservation, state) -> deterministic projection row/checkpoint by local sequence and observation identity.",
-        "queryMetadata -> cause, scope, sequence, checkpoint, freshness/coherence and provider extension are preserved.",
-        "retentionEligibility -> excludes unfinished/uncertain data evidence without invoking order recovery."
-      ],
-      "effectBoundary": "Exercise the chosen data writer/query persistence and crash points; do not treat file append plus index rename as a snapshot-data commit boundary or provider guarantee.",
-      "durability": "A data receipt is delivered only after the observation/projection persistence boundary commits; projection may be dropped/rebuilt from recorded observations, while source evidence remains retained.",
-      "errors": [
-        "Commit failure/crash -> no partial data receipt/checkpoint.",
-        "Duplicate observation identity -> one logical projection fact.",
-        "Projection unavailable -> typed unavailable with retained source observations, not empty history."
-      ],
       "preservedBehavior": [
         "保留追加历史、在单调 append 输入下的 newest-first 查询、trigger/account 元数据和容量可扩展意图；新协议用 sourceSequence 定义排序，不把 chunk rollover 当时间保证。",
         "保留 chunk rollover 作为 migration/storage implementation test，不把 chunk name 暴露给 domain。",
         "保留历史可重建性质。"
       ],
-      "replacementSteps": [
-        "Replace chunk-count assertions as domain assertions with sequence/checkpoint/rebuild assertions.",
-        "Add data-writer crash/replay and scoped query cases.",
-        "Keep chunk rollover only as an implementation/migration fixture."
-      ],
-      "verificationCases": [
-        "Two recorded observations with sequences 4 and 5 query deterministically by sequence even with equal or out-of-order timestamps.",
-        "A crash before projection commit followed by replay yields one row/checkpoint, and no order approval/dispatch state is required."
-      ],
       "openQuestions": []
     },
     {
       "id": "MAP-A605F93FC5",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "Range, limit, timestamp entry, and empty-history use cases are retained, while the source string comparison/chunk-order behavior is reframed as typed data query semantics with explicit failure status.",
-      "contractAnchors": [
-        "K03",
-        "K05",
-        "K06",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/snapshot.spec.ts:303-351: range tests append ISO timestamps in increasing order and assert reverse physical order, truthy limit, inclusive start/end string bounds, and reading across 50-row chunks. The implementation compares timestamp strings and has no source-sequence/freshness or typed error assertions."
       ],
       "currentBehavior": "Range tests cover newest physical append first, limit, inclusive string timestamp bounds, and chunk traversal under canonical ISO inputs; they do not show that arbitrary timestamp formats or out-of-order appends are chronological, nor distinguish corrupt/storage/unavailable from no history.",
       "problem": "字符串时间比较和 chunk 顺序不能提供 typed Instant/sequence ordering；范围读没有 stale/checkpoint/freshness，也不能区分 corrupt row、storage unavailable 与 no history。",
-      "targetModel": "Use a typed SnapshotProjectionQuery with explicit AccountScope, Instant/sequence bounds, validated limit, and SnapshotQueryResult Complete/Partial/Unavailable/NoHistory. Preserve the timestamp query entry after timezone parsing, but define ordering from recorded sequence plus a declared tie-breaker rather than string/chunk order.",
-      "pureTransitions": [
-        "parseBounds -> typed Instant/sequence bounds; reject no-timezone values, reversed ranges, and invalid/overflow limits.",
-        "orderRows -> deterministic sequence/time tie-breaker independent of physical files.",
-        "classifyResult -> coverage/checkpoint/decode status; only complete empty coverage is NoHistory."
-      ],
-      "effectBoundary": "The query performs only read/decode Effects against the snapshot projection and does not call a writer, provider action, order lock, or retry side effect.",
-      "durability": "Query results expose durable checkpoint/as-of; projection rebuild yields the same selected sequence set and provider extension data. Persistence failure does not delete source observations.",
-      "errors": [
-        "Invalid bound/schema -> QueryInvalid/DecodeFailure.",
-        "Stale/partial checkpoint -> explicit Stale/Partial.",
-        "Storage unavailable -> ProjectionUnavailable.",
-        "Complete empty range -> NoHistory only after coverage is complete."
-      ],
       "preservedBehavior": [
         "保留在规范化时间输入和单调 append 下的 newest-first、limit、start/end、跨存储分段历史意图；用 typed Instant/sequence 明确定义乱序输入。",
         "保留 timestamp 查询入口，但边界改由明确 timezone/Instant 解码。",
         "保留空 history 结果，改为 NoHistory typed variant。"
       ],
-      "replacementSteps": [
-        "Add typed query parser/result decoder and remove raw JSON/string scanning.",
-        "Expose sequence/checkpoint/freshness/coherence and provider extension metadata.",
-        "Align HTTP with ListingResult and stale/unavailable behavior."
-      ],
-      "verificationCases": [
-        "Out-of-order timestamps with explicit sequences follow the sequence/tie-break rule; invalid timezone/reversed bounds return QueryInvalid.",
-        "Corrupt row, partial checkpoint, complete empty range, and unavailable store produce distinct typed results."
-      ],
       "openQuestions": []
     },
     {
       "id": "MAP-DF2BB19B01",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source concurrency and empty-store tests remain useful, but their target is reframed from a trading-style writer to a composable data queue with typed backpressure and replay evidence.",
-      "contractAnchors": [
-        "K01",
-        "K05",
-        "K06",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/snapshot.spec.ts:353-369: 测试空 store 返回空数组，并以 Promise.all 触发多个 append，断言并发写入后计数和时间序列完整"
       ],
       "currentBehavior": "测试空 store 返回空数组，并以 Promise.all 触发多个 append，断言并发写入后计数和时间序列完整。",
       "problem": "Promise chain 的进程内串行不等同于 bounded writer queue；测试未覆盖容量满、commit response lost、lease recovery、scope isolation 或 Unknown no-duplicate。",
-      "targetModel": "Test a bounded snapshot data queue and writer: empty initialized query is NoHistory, concurrent requests are serialized or partitioned by explicit scope, and capacity/backpressure is observable. The writer must decide each data command against the current persisted data state rather than precomputing from a stale initial snapshot; none of this is an order WAL or compensation queue.",
-      "pureTransitions": [
-        "queueDecision -> Admit | Wait | Backpressured with scope/cause/resource priority.",
-        "dataWriterFold -> each accepted command sees the current state and produces its own typed receipt/result.",
-        "idempotency -> same data command identity/digest returns Existing after response loss; conflicting digest is rejected."
-      ],
-      "effectBoundary": "Exercise the real chosen snapshot queue/writer/persistence boundary with a fake clock/crash control; Array/Promise.all is only input generation, not queue semantics.",
-      "durability": "Data receipts and checkpoints appear after persistence commit; queue/lease state survives restart when configured, and source-event requests are not replaced by scheduled coalescing.",
-      "errors": [
-        "Capacity full -> Backpressured and request remains replayable when required.",
-        "Persistence rollback -> no data receipt/checkpoint.",
-        "Commit response loss -> lookup returns the same data receipt without duplicate projection.",
-        "Partial/uncertain read -> typed data outcome."
-      ],
       "preservedBehavior": [
         "保留并发 append 的完整性目标和空 store 行为。",
         "保留写入顺序可观察性，但以 durable sequence/transaction order 定义。",
         "保留 scoped failure isolation。"
       ],
-      "replacementSteps": [
-        "Replace Promise.all fixture assertions with bounded data queue/writer assertions.",
-        "Add capacity, crash, replay, and scope isolation controls.",
-        "Change empty-array assertions to NoHistory vs Unavailable/Partial."
-      ],
-      "verificationCases": [
-        "With capacity one, a second required source-event request remains replayable; response-loss lookup returns one data receipt.",
-        "A same-scope batch sees prior accepted data state and rollback advances neither row nor checkpoint."
-      ],
       "openQuestions": []
     },
     {
       "id": "MAP-E65165A605",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source manager/mock/EventLog isolation roles are retained, while the target fixture is reframed to prove scoped data persistence and sink separation rather than filesystem or global order authority.",
-      "contractAnchors": [
-        "K01",
-        "K03",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/snapshot.spec.ts:371-395: service fixture 创建 UTAManager、MockBroker、EventLog、临时目录和 SnapshotService；通过 manager 初始化 UTA 并以文件路径观察结果"
       ],
       "currentBehavior": "service fixture 创建 UTAManager、MockBroker、EventLog、临时目录和 SnapshotService；通过 manager 初始化 UTA 并以文件路径观察结果。",
       "problem": "The test only verifies local service wiring and does not establish the selected durable data writer, cursor, lease, or projection dependencies; it can mistake EventLog delivery or directory existence for snapshot persistence.",
-      "targetModel": "Build a service fixture from an explicit scope namespace, provider observation adapter, snapshot persistence/query layer, data queue/lease supervisor when needed, and post-commit EventLog sink. EventLog and temporary directories are test boundaries, not proof of snapshot persistence. The fixture must create typed data envelopes and allow readiness/recovery ordering to be observed.",
-      "pureTransitions": [
-        "composeFixture(deps) -> either a complete typed data fixture or a reason-specific setup failure; no hidden account default.",
-        "mapResult -> receipt/status/envelope/failure separately, never null.",
-        "cleanup(namespace) -> removes only this test data partition and leaves other scopes intact."
-      ],
-      "effectBoundary": "The fixture may start the actual chosen data writer/queue/query and fake provider/clock; EventLog remains an independent sink. It does not construct order approval or execution state.",
-      "durability": "Assertions occur after snapshot persistence commit and inspect data request/checkpoint state; sink failure is independently observable and cannot erase the committed data view.",
-      "errors": [
-        "Missing scope/provider/persistence -> setup unavailable/pending.",
-        "Writer unavailable -> AdmissionUnavailable, no fake file store.",
-        "EventLog sink failure -> data fact remains queryable with sink status.",
-        "Teardown collision -> namespace isolation failure."
-      ],
       "preservedBehavior": [
         "保留 manager/mock broker/event log 的隔离测试角色。",
         "保留多 UTA fixture 的 scope 独立性。",
         "保留临时 filesystem 仅用于迁移/备份实验。"
       ],
-      "replacementSteps": [
-        "Implement shared scoped fixture composition and typed observation factories.",
-        "Move service assertions from directory existence to receipt/query/envelope state.",
-        "Add recovery-barrier and sink-failure controls without importing order transaction states."
-      ],
-      "verificationCases": [
-        "Restart with a leased data job and recover it before scheduled admission; EventLog failure does not erase the committed fact.",
-        "A missing explicit scope fails setup with ScopeDiscoveryPending instead of creating an accountId-only store."
-      ],
       "openQuestions": []
     },
     {
       "id": "MAP-30284C5902",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "The source distinction between successful write, skipped unavailable account, and builder failure is retained, while null/EventLog timing are reframed as typed data outcomes and post-commit observation.",
-      "contractAnchors": [
-        "K05",
-        "K07",
-        "K09",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/snapshot.spec.ts:397-432: 单账户 service 测试断言成功会写入 store 并产生 snapshot.taken 事件；unknown account 返回 null；builder 失败时返回 null、记录 skipped 且不写 store"
       ],
       "currentBehavior": "单账户 service 测试断言成功会写入 store 并产生 snapshot.taken 事件；unknown account 返回 null；builder 失败时返回 null、记录 skipped 且不写 store。",
       "problem": "这些断言把“写 store”和“事件”当成成功标准，没有 commit receipt/source sequence；unknown、builder failure、projection unavailable 与 no-history 由 null 混淆，EventLog 失败边界也未测试。",
-      "targetModel": "Verify typed CaptureResult for one scope: Captured only after snapshot persistence/projection commit, Skipped for known availability preconditions, Failed/ProjectionUnavailable for typed data failures, and ObservationUncertain for ambiguous reads. snapshot.taken is post-commit observability, not authority; no trading execution recovery state is involved.",
-      "pureTransitions": [
-        "outcomeFold -> ObservationComplete -> Captured; Disabled/NoScope -> Skipped; Unknown -> ObservationUncertain; storage/schema -> Failed/ProjectionUnavailable.",
-        "eventProjection -> committed data receipt -> post-commit snapshot.taken event with scope/sequence/checkpoint.",
-        "queryClassification -> NoHistory only for complete empty coverage."
-      ],
-      "effectBoundary": "The data worker, snapshot writer/query, and EventLog sink are separate Effects. Sink exceptions cannot roll back a committed snapshot fact or change a caller’s data receipt.",
-      "durability": "Assert receipt/job/checkpoint only after data persistence commit; failed writes expose no captured row. Post-commit events may retry by event identity independently of the fact.",
-      "errors": [
-        "Unknown scope -> ScopeUnavailable/ScopeDiscoveryPending.",
-        "Builder/query failure -> typed data failure; no empty history.",
-        "Partial listing -> Partial/ObservationUncertain and prior view retained.",
-        "Sink failure -> fact queryable and sink status visible."
-      ],
       "preservedBehavior": [
         "保留成功写入/事件、unknown 不写入、builder failure 不成功写入的既有意图。",
         "保留 skipped/taken/error 可观察分类，但使其有明确 source/commit semantics。",
         "保留单账户结果隔离。"
       ],
-      "replacementSteps": [
-        "Replace null assertions with CaptureResult/receipt/query assertions.",
-        "Add commit rollback, sink failure, response-loss, and replay cases for data persistence.",
-        "Place EventLog assertions after data commit and inspect sequence/checkpoint."
-      ],
-      "verificationCases": [
-        "A successful capture yields a post-commit data receipt/envelope; unknown scope is typed and a builder failure leaves no captured row.",
-        "After persistence succeeds and EventLog fails, query still returns the captured view and response-loss lookup does not duplicate it."
-      ],
       "openQuestions": []
     },
     {
       "id": "MAP-F2E552347E",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source batch and failure-isolation intent is retained, but all-settled/retry behavior is reframed into typed data-job products and resource leases rather than order recovery machinery.",
-      "contractAnchors": [
-        "K05",
-        "K06",
-        "K07",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/snapshot.spec.ts:434-466: 批量 service 测试覆盖多账户全成功、一个账户失败而其他成功，并要求 all accounts 的结果仍可用"
       ],
       "currentBehavior": "批量 service 测试覆盖多账户全成功及 acc2 disabled 时 acc1 仍写入、acc2 记录 skipped；它不检查 durable identity 或 restart。",
       "problem": "Promise.allSettled 的成功只证明调用返回，不证明 durable request 保留、scope/partition isolation、backpressure、lease recovery 或 FailurePolicy；一个 scope 的 unknown 可能被第二次 retry 重复。",
-      "targetModel": "Represent batch capture as a typed per-scope result product over durable finite data jobs. Workers may run independently by scope and resource budget; one scope’s failure does not cancel another. Optional scheduled duplicates can coalesce, but a request sourced from a committed event retains identity. This batch has no order approval, reservation, compensation, or dispatch semantics.",
-      "pureTransitions": [
-        "batchSummary -> per-scope Captured/Skipped/Failed/ObservationUncertain/Backpressured/Unavailable variants, never all/null.",
-        "partitionDecision -> independent scope work may proceed; same-scope data writes are fenced by worker lease.",
-        "retryDecision -> only declared reader-retry classes are retried; uncertain reads pause/reconcile."
-      ],
-      "effectBoundary": "Per-scope data queues/workers, provider adapters, persistence, and EventLog are Effects; summary and retry policy are pure. Shared storage transactions are for data facts/checkpoints only.",
-      "durability": "Accepted data jobs/statuses persist across restart; one scope rollback does not remove another scope’s fact. Source-event cursor remains until its data request reaches a recorded terminal/uncertain state.",
-      "errors": [
-        "Scope A failure does not cancel B; A retains its last checkpoint and typed uncertainty.",
-        "Optional capacity -> Backpressured; required source request remains replayable.",
-        "Partial listing -> Partial, not empty orders.",
-        "Storage failure -> per-scope unavailable with prior evidence preserved."
-      ],
       "preservedBehavior": [
         "保留全账户调用意图与失败隔离。",
         "保留多账户并行能力，但不保留内存 Promise result 作为 durability。",
         "保留 batch-level observability with richer per-scope statuses."
       ],
-      "replacementSteps": [
-        "Replace allSettled assertions with durable per-scope status/receipt summaries.",
-        "Add restart, lease expiry, backpressure, and uncertain-read cases.",
-        "Connect scope discovery/readiness while keeping event-sourced data requests separate from schedules."
-      ],
-      "verificationCases": [
-        "A timeout in scope A and Complete observation in B yield A=ObservationUncertain/B=Captured after restart without execution exclusion for A.",
-        "A scheduled duplicate coalesces by scope/window, while a committed source event retains a distinct request identity and sequence evidence."
-      ],
       "openQuestions": []
     },
     {
       "id": "MAP-BC1C2B98A1",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "The source latest-first/limit read behavior is retained as a data-query use case, while ordering, scope, and failure states are reframed to the explicit projection contract.",
-      "contractAnchors": [
-        "K03",
-        "K05",
-        "K06",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/snapshot.spec.ts:468-477: getRecent 测试追加两条 snapshot 后请求 limit=1，并断言只返回最新条目"
       ],
       "currentBehavior": "getRecent 测试追加两条 snapshot 后请求 limit=1，并只断言返回长度为 1；没有断言 selected sequence/checkpoint 或 value 是最新。",
       "problem": "只验证数组长度/顺序，无法看到 requested scope、source sequence、checkpoint/as-of、stale/coherence 或 corrupt/partial result。",
-      "targetModel": "Test ProjectionQuery limit=1 as a typed scoped query. The result carries the selected local sequence/checkpoint, observedAt/as-of, freshness/coherence, and Complete/NoHistory/Partial/Unavailable status; equal timestamps use an explicit sequence tie-breaker. The query remains read-only.",
-      "pureTransitions": [
-        "parseLimitAndBounds -> scoped typed limit/range.",
-        "orderViews -> local sequence then declared tie-breaker, independent of physical append order.",
-        "classifyQuery -> Complete/NoHistory/Stale/Unavailable from coverage/checkpoint evidence."
-      ],
-      "effectBoundary": "Only the projection query/decoder runs; it does not capture, append, sync, or execute a broker operation.",
-      "durability": "Rows and checkpoint are read from the same snapshot projection consistency boundary; no-history is available only after complete coverage.",
-      "errors": [
-        "Corrupt/stale projection -> typed failure/stale status, not empty latest.",
-        "Unknown scope -> scope error.",
-        "Invalid limit -> QueryInvalid."
-      ],
       "preservedBehavior": [
         "保留 latest-first + limit behavior。",
         "保留 getRecent 读取不写入的性质。"
-      ],
-      "replacementSteps": [
-        "Extend fixtures with explicit scope/sequence/checkpoint/freshness.",
-        "Remove plain-array-only assertions and verify provider extension preservation.",
-        "Keep query side-effect free."
-      ],
-      "verificationCases": [
-        "Two views with equal observedAt and sequences 10/11 queried with limit=1 return sequence 11 and its checkpoint; stale checkpoint is not fresh.",
-        "Complete empty coverage is NoHistory, while corrupt projection and unknown scope are typed failures."
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-3AF27244D4",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source timer configuration and testability remain, but the target verifies composable finite data delivery and lifecycle rather than a mock of a universal service or order workflow.",
-      "contractAnchors": [
-        "K05",
-        "K06",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/snapshot.spec.ts:479-501: scheduler setup creates a mock SnapshotService and a 15-minute {enabled:true,every:\"15m\"} config, then afterEach calls scheduler.stop(); this setup does not create a temporary directory or durable scheduler state."
       ],
       "currentBehavior": "Scheduler tests use a mock service, a string-duration config, and process-local stop cleanup; flush/timer helpers observe Pump calls rather than persisted job admission, cursor, lease, or projection state.",
       "problem": "mock service + fake timers 只验证回调调用，不验证 durable job admission、cursor replay、lease/recovery、scope discovery 或 actual stop/drain。",
-      "targetModel": "Test a shared scoped snapshot scheduler/data-job layer with a fake clock only for window calculation. Assert durable request receipts/status, recovery barrier ordering, and optional schedule dedup; do not assert mock service call counts as the scheduler contract.",
-      "pureTransitions": [
-        "nextWindow(policy, clock) -> optional finite request time.",
-        "lifecycle -> Recovering/Running/Draining/Stopped data-scheduler state.",
-        "admitScheduled(scope, window) -> one optional data request identity with explicit availability."
-      ],
-      "effectBoundary": "The test starts the chosen data writer/queue/lease layer against an isolated persistence namespace; fake provider data and fake clock are adapters. It does not create order locks or approvals.",
-      "durability": "Data jobs, leases, cursors, and projection checkpoints survive restart where configured; scheduled requests coalesce, while source-event requests remain distinct.",
-      "errors": [
-        "Recovery barrier incomplete -> scheduled admission paused/rejected.",
-        "Lease expired -> new data-worker epoch; stale write rejected.",
-        "Mock timeout -> ObservationUncertain/Partial, not successful capture or execution recovery."
-      ],
       "preservedBehavior": [
         "保留 15 分钟 schedule intent、start/stop/runNow testability。",
         "保留 timer 不应并行冲突执行的目标。"
-      ],
-      "replacementSteps": [
-        "Replace mock call-count assertions with data receipt/query/status assertions.",
-        "Add startup recovery and lease-expiry controls.",
-        "Test optional scheduled coalescing separately from committed source-event requests."
-      ],
-      "verificationCases": [
-        "Restart with a persisted scheduled data request and incomplete barrier: no timer admission until barrier completion, then exactly one identity.",
-        "Lease expiry rejects late old-epoch data write; a mock timeout remains ObservationUncertain."
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-051EE15C40",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "The source explicit-runNow and idempotent-start intent is retained, while direct invocation/void results are reframed as typed scoped data admission.",
-      "contractAnchors": [
-        "K05",
-        "K06",
-        "K09",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/snapshot.spec.ts:503-528: 测试 runNow 立即调用 service；重复 start 不重复启动；enabled=false 时自动 tick 不触发，但 runNow 仍触发"
       ],
       "currentBehavior": "测试 runNow 立即调用 service；重复 start 不重复启动；enabled=false 时自动 tick 不触发，但 runNow 仍触发。",
       "problem": "runNow void/直接调用无法区分 admission success、existing job、backpressure 和 response loss；enabled 与 manual policy 未持久化，重启行为未知。",
-      "targetModel": "runNow submits an explicit scoped finite snapshot request and returns JobReceipt/Existing/Backpressured/Unavailable. ManualOnly/disabled suppresses automatic schedule only; an authorized manual data request remains admissible. Repeated start remains idempotent at the data-scheduler lifecycle boundary.",
-      "pureTransitions": [
-        "policyCheck -> automatic-window suppression versus explicit manual request.",
-        "dedup(commandId, payloadDigest, scope) -> Existing data job or new admission.",
-        "startTransition -> one timer/supervisor identity for repeated start."
-      ],
-      "effectBoundary": "The data writer/queue and timer supervisor perform Effects; receipt completes only after data admission persistence. No direct service call is a broker action.",
-      "durability": "Manual policy and data-job identity survive restart; source-event requests remain independent of automatic scheduling. There is no order lock or approval attached to a snapshot request.",
-      "errors": [
-        "Backpressure/unknown scope -> typed data admission rejection.",
-        "Response lost after commit -> same data receipt lookup.",
-        "Start while Recovering -> typed NotReady/AdmissionUnavailable."
-      ],
       "preservedBehavior": [
         "保留 disabled auto + manual runNow；保留 idempotent start。",
         "保留 immediate intent, now represented by durable admission."
-      ],
-      "replacementSteps": [
-        "Replace direct mock invocation with data receipt/job-store assertions.",
-        "Cover restart and response-loss identity.",
-        "Include explicit scope and policy revision in requests."
-      ],
-      "verificationCases": [
-        "With automatic scheduling disabled, an authorized manual data request creates one durable job and a repeated commandId returns Existing.",
-        "After response loss and restart, lookup returns the original data receipt rather than duplicating capture."
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-D073ACA66E",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source coalescing, stop, and later-run intent is retained, but the target makes the distinction between optional data scheduling and source-triggered data capture explicit and removes swallowed order-style uncertainty.",
-      "contractAnchors": [
-        "K05",
-        "K06",
-        "K09",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/snapshot.spec.ts:530-566: scheduler 测试验证并发 runNow 只产生一次 in-memory 调用，stop 后不再调用，service error 被吞掉且后续 tick 仍运行"
       ],
       "currentBehavior": "scheduler 测试验证并发 runNow 只产生一次 in-memory 调用，stop 后不再调用，service error 被吞掉且后续 tick 仍运行。",
       "problem": "内存 coalescing 会丢掉必须保留的 transaction event；stop/error 无 durable status，吞错可能丢 job；后续 tick 可能盲重试 Unknown。",
-      "targetModel": "Apply durable dedup only to OptionalScheduledSnapshot by AccountScope/window/policy revision. Preserve every committed source-event request identity. stop closes new optional admission and drains/records accepted data jobs; worker/read errors become typed Failed, Partial, or ObservationUncertain rather than swallowed or retried as an order action.",
-      "pureTransitions": [
-        "scheduledDedupKey -> scope + window + policy revision; source event sequence is never merged with it.",
-        "stopTransition -> AdmissionClosed -> Draining -> Stopped while accepted data jobs persist.",
-        "classifyReaderError -> Retryable | Partial | ObservationUncertain | Terminal with declared evidence."
-      ],
-      "effectBoundary": "Timer, data queue, worker lease, provider reader, persistence, and reconciliation are Effects; no catch-and-discard path hides data loss.",
-      "durability": "Dedup/job/error/lease/checkpoint state is durable when configured; no receipt is returned before data admission commit. EventLog sink errors leave data facts/status visible.",
-      "errors": [
-        "Unknown provider read -> ObservationUncertain/reconcile-pending, no blind duplicate or execution exclusion.",
-        "stop during persistence -> commit or rollback is explicit; accepted data request remains recoverable.",
-        "EventLog sink error -> data fact remains visible with sink status.",
-        "Repeated scheduled window -> Existing optional request."
-      ],
       "preservedBehavior": [
         "保留 scheduled concurrent coalescing, stop, later run behavior and service error isolation。",
         "保留 service error 不抛到 timer caller，但 expose typed status."
-      ],
-      "replacementSteps": [
-        "Replace in-memory call-count assertions with durable data-job/dedup/status queries.",
-        "Add source-event versus scheduled coalescing cases.",
-        "Add stop/drain and worker-restart scenarios."
-      ],
-      "verificationCases": [
-        "Two same-window scheduled calls and one committed source event yield one scheduled request plus one distinct source-event request; stop during commit yields one receipt or rollback.",
-        "A data read timeout becomes ObservationUncertain and is not retried as execution; sink failure leaves job/data status visible."
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-E9161D7938",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source callback timing and result-isolation facts are retained, while the target reframes the hook as provenance-only data triggering so snapshot capture cannot be mistaken for transaction approval or execution.",
-      "contractAnchors": [
-        "K05",
-        "K09",
-        "K11",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/snapshot.spec.ts:568-624: UTA hook 测试验证 push/reject 成功后调用 onPostPush/onPostReject；disabled push 不调用；hook error 不影响 push 返回"
       ],
       "currentBehavior": "UTA hook 测试验证 push/reject 成功后调用 onPostPush/onPostReject；disabled push 不调用；hook error 不影响 push 返回。",
       "problem": "hook 是成功 Git 操作后的异步 fire-and-forget callback，进程退出会丢失请求；hook 失败/成功没有 commit sequence，也不区分 UTA scope；测试只能证明 callback timing，不证明 durable event。",
-      "targetModel": "Map successful push/reject hooks to a committed-source-event observation request carrying scope, source-operation identity/revision, and source sequence evidence. The source event triggers a snapshot pull but does not authorize it as an order effect. Disabled/failed operations emit no request; a post-commit EventLog or snapshot sink failure cannot alter the already committed source result.",
-      "pureTransitions": [
-        "push/reject transition -> source event only after the source operation commits; disabled/failed operation emits none.",
-        "subscriberFold -> source event identity to one durable snapshot observation request.",
-        "resultSeparation -> source command result and post-commit data capture/sink result are independent."
-      ],
-      "effectBoundary": "The source-event commit, data subscriber, finite reader, snapshot persistence, and EventLog sink are separate Effects. No direct mutable UTA hook is the data authority and no callback is an approval path.",
-      "durability": "A committed source event remains replayable until its data request reaches a recorded terminal/uncertain outcome; data observation identity is separate from the source operation identity. Unknown data read does not create trading recovery state or a second order dispatch.",
-      "errors": [
-        "Source operation rollback -> no observation request/receipt.",
-        "Commit then process exit -> cursor replay creates exactly one data request.",
-        "Observation uncertainty -> source remains committed; capture is uncertain/replayable.",
-        "Disabled operation -> no event/request."
-      ],
       "preservedBehavior": [
         "保留成功 push/reject 才触发后置捕获；disabled push 不触发；后置失败不改变 push 返回。",
         "保留 post-push/post-reject trigger identity in SnapshotCause."
-      ],
-      "replacementSteps": [
-        "Remove direct setSnapshotHooks authority dependency and subscribe to committed source events.",
-        "Add scoped data-request linkage and idempotency.",
-        "Rewrite tests around commit/replay and independent source/sink results."
-      ],
-      "verificationCases": [
-        "A successful source operation commits, process exits before callback, and restart creates exactly one snapshot request; a failed operation creates none.",
-        "A capture timeout leaves the source result committed and data request uncertain/replayable; sink failure cannot change source receipt."
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-78D69C071D",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source durable-history and migration intent is retained, but the file layout is reframed as a data-storage implementation detail with explicit scope/evidence instead of an authoritative per-account or order-effect store.",
-      "contractAnchors": [
-        "K03",
-        "K05",
-        "K07",
-        "K11"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/store.ts:1-24: store 以 fs/path、baseDir/accountId/snapshots、index.json 和每 chunk 最多 50 行建立文件布局；数据权威落在 per-account JSONL"
       ],
       "currentBehavior": "store 以 fs/path、baseDir/accountId/snapshots、index.json 和每 chunk 最多 50 行建立文件布局；数据权威落在 per-account JSONL。",
       "problem": "The directory contains only accountId, so it cannot express AccountScope/subaccount/revision; index and chunk writes are separate, so a crash can leave data and metadata inconsistent; filesystem writes are not a shared snapshot-persistence commit boundary.",
-      "targetModel": "Treat per-account JSONL/index layout as legacy migration input, not the runtime snapshot model. The target persistence contract is scoped by AccountScope, local received sequence, schema version, and projection kind, with source observations retained separately from rebuildable projections. Physical files/chunk size are implementation details and do not become provider or order semantics.",
-      "pureTransitions": [
-        "legacyPath -> candidate scope/fileset only when explicit scope/revision evidence exists.",
-        "projectionKey -> scope + projection kind + schema version + local sequence, never accountId alone.",
-        "rebuildFold -> recorded observation sequence to projection rows/checkpoint deterministically."
-      ],
-      "effectBoundary": "Filesystem effects are confined to a validated importer/backup path; runtime query and persistence use the chosen shared data layer. No file constructor is an order writer or execution authority.",
-      "durability": "Migration records source digest, mapping, and cursor evidence before cutover; projection rows can be dropped/rebuilt only from recorded observations. Unfinished/uncertain data evidence is not silently deleted by retention.",
-      "errors": [
-        "Missing/corrupt legacy files -> MigrationRequired/CorruptProjection, not empty history.",
-        "Undiscoverable scope -> ScopeDiscoveryPending/UnknownScope.",
-        "Persistence unavailable/rollback -> no data receipt/checkpoint advance.",
-        "Ambiguous legacy revision -> retain evidence and stop affected migration."
-      ],
       "preservedBehavior": [
         "保留历史按账户查询（旧实现按物理 append 顺序读取，非任意乱序 timestamp 的排序）、持久化和可迁移的意图。",
         "保留旧文件作为迁移输入；不保留 chunk filename/50 行作为外部语义。",
         "保留可重建快照读模型。"
       ],
-      "replacementSteps": [
-        "Define scoped persistence/projection schema and migration evidence.",
-        "Implement a validated legacy importer with hash and atomic migration receipt.",
-        "Remove runtime writes to per-account JSONL and migrate service/query callers."
-      ],
-      "verificationCases": [
-        "A valid legacy file yields a scoped migration receipt while a truncated chunk yields CorruptProjection/MigrationRequired and no empty history.",
-        "Dropping/rebuilding a projection from recorded observations preserves local sequence and values while retaining source evidence."
-      ],
       "openQuestions": []
     },
     {
       "id": "MAP-D9EDA3CFCA",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source combined append/read/delete interface is retained as the defect evidence, while target ports are reframed for finite data delivery and projection retention with no universal broker action surface.",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K05",
-        "K06"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/store.ts:26-34: SnapshotStore exposes append(snapshot), readRange({startTime?, endTime?, limit?}), and deleteByTimestamp(timestamp); the factory receives accountId separately and SnapshotStoreOptions contains only optional baseDir. All identifiers and bounds are plain strings/numbers."
       ],
       "currentBehavior": "SnapshotStore combines append/read/delete behind one interface; accountId is a factory string, startTime/endTime are optional timestamp strings, and limit is an unrefined number. The boolean timestamp delete has no scope, checkpoint, or authorization boundary.",
       "problem": "接口让 append/delete/read 共用一个无类型边界，时间字符串/裸 accountId 可绕过 scope 和 schema；delete 看起来等价于事实删除。",
-      "targetModel": "Split SnapshotStore into SnapshotCapture/ObservationWriter, SnapshotProjectionQuery, and SnapshotRetention ports. Requests carry explicit AccountScope, typed Instant/sequence bounds, validated limit, schema identity, and provider extension data where applicable. Ordinary timestamp delete is removed from the runtime data contract.",
-      "pureTransitions": [
-        "parseDataRequest -> AccountScope/Instant/Sequence/Limit or typed validation failure.",
-        "queryResult -> Complete/Partial/Unavailable/NoHistory with checkpoint/freshness.",
-        "retentionDecision -> authorized projection compaction only; it cannot cross recorded/unfinished data evidence."
-      ],
-      "effectBoundary": "Inject distinct data-writer, read-query, retention, provider, and clock effects; callers do not receive filesystem paths or native SDK types.",
-      "durability": "Capture, query, and retention receipts/statuses are distinct; source observation evidence and projection checkpoints are durable when configured. No data port exposes order WAL/CAS or compensation behavior.",
-      "errors": [
-        "Unknown scope/invalid bounds -> typed validation/scope result.",
-        "Corrupt projection/storage unavailable -> typed query error.",
-        "Retention crossing unfinished/uncertain evidence -> rejection.",
-        "Timestamp ambiguity -> no deletion by guess."
-      ],
       "preservedBehavior": [
         "保留 append/history query and cleanup use cases with explicit authorization.",
         "保留 range/limit behavior after typed parsing."
-      ],
-      "replacementSteps": [
-        "Replace SnapshotStore interface and migrate callers/tests to three data ports.",
-        "Define serializable scoped requests/results and provider extension decoding.",
-        "Remove boolean timestamp delete and route cleanup through authorized retention."
-      ],
-      "verificationCases": [
-        "A missing scope, reversed bounds, or invalid limit is rejected before data IO; complete empty query returns NoHistory.",
-        "Retention cannot be passed through the read port and storage failure returns typed unavailable without changing recorded facts."
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-D8989CCCCB",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source constructor and serialized-write intent remain relevant, but target ownership moves to a composable scoped data layer and worker lease rather than a hidden object-local or order-oriented authority.",
-      "contractAnchors": [
-        "K03",
-        "K05",
-        "K07",
-        "K11"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/store.ts:36-41: 构造函数把 accountId 拼进 baseDir，初始化 indexPath/chunkDir，并以 writeChain Promise 作为写串行化机制"
       ],
       "currentBehavior": "构造函数把 accountId 拼进 baseDir，初始化 indexPath/chunkDir，并以 writeChain Promise 作为写串行化机制。",
       "problem": "路径拼接与进程本地 chain 不能跨实例共享、不能做 lease fencing/transaction rollback，也无法让 scope revision 随事实保存。",
-      "targetModel": "Construct a shared snapshot persistence/query layer with explicit AccountScope and schema identity. Queue/worker ownership is composition-level and may be implemented with a durable data job; it is not an object-local Promise chain and not an order conflict lock. A legacy filesystem constructor exists only in the importer.",
-      "pureTransitions": [
-        "storageKey(scope, projectionKind, schema) -> scoped data key.",
-        "dataJobState -> Ready | Leased | Completed | Failed with ObservationUncertain recorded as an outcome/reconciliation fact.",
-        "writerFold -> current persisted data state to next row/checkpoint; no callback or SDK instance crosses the boundary."
-      ],
-      "effectBoundary": "The composition root injects shared persistence, queue/lease supervisor, provider readers, and clock. Constructors do not create runtime authority directories or perform hidden IO.",
-      "durability": "Lease owner/epoch/deadline, data request identity, local sequence, and projection checkpoint persist across restart when configured. Historical scope remains fixed across capability revisions; no order reservation is held.",
-      "errors": [
-        "Storage connection unavailable/locked -> StorageUnavailable/Backpressured.",
-        "Stale worker epoch -> fencing failure.",
-        "Scope revision mismatch -> old data view immutable and new request explicitly re-resolved.",
-        "Schema mismatch -> MigrationRequired/DecodeFailure."
-      ],
       "preservedBehavior": [
         "保留初始化后可 append/read 的 consumer intent。",
         "保留单 scope 串行冲突控制，提升为 durable lease."
-      ],
-      "replacementSteps": [
-        "Remove per-account path/Promise chain from runtime storage.",
-        "Inject explicit AccountScope and shared data Layer.",
-        "Add data-worker fencing, replay, and projection recovery."
-      ],
-      "verificationCases": [
-        "Two workers for one scope: only current data lease epoch advances the projection; stale write is typed failure.",
-        "Restart after data admission preserves the request/checkpoint without creating a new empty directory."
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-CF8F8B0486",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "The source versioning and empty-initialized-store use case are retained; the catch-all fallback is reframed into K03/K05 typed data decoding and availability.",
-      "contractAnchors": [
-        "K03",
-        "K05",
-        "K06",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/store.ts:43-50: readIndex 读取 JSON，任何 fs/parse error 都 catch 后返回 version 1、空 chunks；调用方无法知道 index 不存在、损坏还是 storage 失败"
       ],
       "currentBehavior": "readIndex 读取 JSON，任何 fs/parse error 都 catch 后返回 version 1、空 chunks；调用方无法知道 index 不存在、损坏还是 storage 失败。",
       "problem": "catch-all empty fallback 会把 corruption、permission error 和 no history 混为成功空 store，造成 silent data loss/incorrect listing. ",
-      "targetModel": "Decode projection metadata through an exhaustive typed decoder. Distinguish NotFound/NoHistory (only for an explicitly initialized scope), CorruptProjection, StorageUnavailable, and SchemaVersionMismatch; never catch all errors into an empty store. Provider schema/hash evidence and local checkpoint remain visible.",
-      "pureTransitions": [
-        "decodeProjectionMetadata(bytes, schema) -> VersionedMetadata or DecodeFailure with source/hash evidence.",
-        "classifyReadState(metadata, coverage) -> NoHistory | Corrupt | Unavailable | Partial/Complete.",
-        "preserveCheckpointOnFailure -> no checkpoint advance or data deletion when decode fails."
-      ],
-      "effectBoundary": "File/database reads happen at the data boundary; schema decoder and result classification are pure. No fallback path invokes a broker or order effect.",
-      "durability": "Decode failure leaves the last valid projection/source observation evidence intact; migration status and receipts are explicit. NoHistory requires complete initialization evidence.",
-      "errors": [
-        "Truncated/malformed bytes -> CorruptProjection.",
-        "Permission/database error -> StorageUnavailable.",
-        "Version/hash mismatch -> SchemaMigrationRequired.",
-        "Missing initialized row -> NoHistory only with complete scope coverage."
-      ],
       "preservedBehavior": [
         "保留 empty store behavior as explicit NoHistory when genuinely initialized.",
         "保留 versioning need, now schema decoder."
-      ],
-      "replacementSteps": [
-        "Remove catch-all empty fallback.",
-        "Add typed metadata decoder/error variants and migration status.",
-        "Make query/HTTP preserve corruption/unavailable versus NoHistory."
-      ],
-      "verificationCases": [
-        "Malformed metadata returns CorruptProjection and does not reset checkpoint to an empty version.",
-        "Permission/database failure returns StorageUnavailable while prior valid data evidence remains queryable."
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-22671716C7",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "The source atomic-update intent and migration safety are retained, but atomicity is explicitly scoped to snapshot data persistence and not misrepresented as a universal trading transaction.",
-      "contractAnchors": [
-        "K03",
-        "K05",
-        "K11",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/store.ts:52-57: saveIndex 将 JSON 写到 index.tmp 后 rename 覆盖 index.json，试图以文件替换提供原子更新"
       ],
       "currentBehavior": "saveIndex 将 JSON 写到 index.tmp 后 rename 覆盖 index.json，试图以文件替换提供原子更新。",
       "problem": "rename covers only one file and cannot commit chunk append, recorded observation, projection checkpoint, and schema metadata together; a crash can leave those data facts inconsistent.",
-      "targetModel": "Use the chosen snapshot writer’s atomic persistence boundary for observation/projection rows, checkpoints, and schema metadata. The source temp-file rename remains a legacy migration/backup mechanism only; it cannot claim atomicity across data rows and metadata unless the selected persistence layer proves it.",
-      "pureTransitions": [
-        "persistenceFold -> row/checkpoint/schema metadata commit or rollback.",
-        "legacyMigration -> validated file/hash staging followed by one explicit migration receipt.",
-        "responseIdentity -> same data command identity/digest resolves a committed receipt after response loss."
-      ],
-      "effectBoundary": "The persistence adapter executes its data commit; migration filesystem effects are isolated. Snapshot query/assembler stays pure and no data persistence waits on broker IO or order approval.",
-      "durability": "Rollback exposes neither a snapshot receipt nor checkpoint advance; commit exposes both and preserves recorded observation evidence. This is data persistence atomicity, not order WAL or broker exactly-once.",
-      "errors": [
-        "Persistence failure -> full snapshot-persistence rollback.",
-        "Migration rename/permission failure -> MigrationFailed with old authority untouched.",
-        "Schema/hash mismatch -> typed migration/corruption result."
-      ],
       "preservedBehavior": [
         "保留原子更新目标和 migration safety intent.",
         "保留 durable version metadata."
-      ],
-      "replacementSteps": [
-        "Replace temp+rename as runtime persistence boundary with the selected snapshot writer transaction.",
-        "Retain file fsync/hash only for validated legacy import.",
-        "Add rollback/response-loss/recovery evidence cases for snapshot data."
-      ],
-      "verificationCases": [
-        "Crash before data commit exposes neither row nor checkpoint; after commit, lookup returns one data receipt.",
-        "Legacy rename/permission failure leaves prior authority untouched and returns MigrationFailed rather than switching to a partial index."
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-88C7B6755F",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source helper’s physical-layout role is retained for migration evidence, while target ordering is reframed around declared data provenance and avoids treating a filename as native or order authority.",
-      "contractAnchors": [
-        "K03",
-        "K05",
-        "K11"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/store.ts:59-61: chunkName(n) formats the physical file as chunk-NNNN.jsonl with four-digit padding; this helper is used only by the JSONL store to choose a file name."
       ],
       "currentBehavior": "chunkName maps a local chunk counter to chunk-NNNN.jsonl; the physical name is a file-layout ordering aid, not a durable source sequence or projection checkpoint.",
       "problem": "chunk number/name 会泄漏旧存储布局并把 row order 与 chronology 混为一谈；重建、跨实例和 compaction 后名称无法作为 source sequence。",
-      "targetModel": "Keep chunkName out of the UTA-facing data schema. A migration parser may recognize legacy names, but runtime ordering and checkpointing use the recorded local sequence, observation identity, and typed time evidence; physical filenames do not imply provider revision, chronology, or order semantics.",
-      "pureTransitions": [
-        "legacyChunkName -> migration metadata or MigrationCorrupt.",
-        "dataOrdering -> local sequence plus declared tie-breaker, not filename.",
-        "compaction -> new projection metadata/version while source observations remain addressable."
-      ],
-      "effectBoundary": "Only the legacy importer scans filenames; runtime query uses the selected data persistence indexes/decoder. No filename is a broker or order identity.",
-      "durability": "Sequence/checkpoint and provider revision evidence remain stable across physical rebuild/compaction; retention receipts record data changes.",
-      "errors": [
-        "Malformed chunk name -> MigrationCorrupt.",
-        "Duplicate local sequence/identity -> SchemaConflict, no silent overwrite.",
-        "Unknown provider revision -> evidence unavailable, not inferred from filename."
-      ],
       "preservedBehavior": [
         "保留旧 chunk layout migration support and chronological queries."
-      ],
-      "replacementSteps": [
-        "Remove chunkName from runtime types/API.",
-        "Add migration-only parser and sequence/identity checks.",
-        "Expose typed query order/checkpoint independent of physical layout."
-      ],
-      "verificationCases": [
-        "Rebuilding the same recorded sequence into different physical layouts yields identical query order/checkpoint; malformed legacy name is MigrationCorrupt.",
-        "Duplicate local sequence is rejected as SchemaConflict rather than ordered by filename."
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-C7360CA0A4",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source append ordering and capacity goal are retained, but the target explicitly scopes idempotency and atomicity to snapshot data records, not broker actions or order WAL.",
-      "contractAnchors": [
-        "K03",
-        "K05",
-        "K07",
-        "K11"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/store.ts:63-86: doAppend 读取 index，选择/创建最后 chunk，追加 JSON 行后保存 index；chunk 满时新建 chunk，读写步骤分散"
       ],
       "currentBehavior": "doAppend 读取 index，选择/创建最后 chunk，追加 JSON 行后保存 index；chunk 满时新建 chunk，读写步骤分散。",
       "problem": "append、index update 和 JSON serialization 之间没有共同 commit；并发/崩溃可能丢行、重复行或错误 checkpoint，且 plain cast 接受任意 payload。",
-      "targetModel": "Replace doAppend with a typed snapshot-writer command: validate the declared observation/view schema, record source evidence and identity, and update the rebuildable projection/checkpoint in the chosen persistence transaction. Idempotency is for data record identity/command receipt, not broker dispatch.",
-      "pureTransitions": [
-        "appendDecision(validObservation, state) -> next local sequence/checkpoint or typed validation failure.",
-        "idempotentReplay(commandId, payloadDigest) -> Existing data receipt or conflict, no duplicate fact.",
-        "projectionFold(recordedObservation) -> deterministic scoped view preserving provider extension and coverage."
-      ],
-      "effectBoundary": "The data writer/persistence transaction and bounded queue are Effects; direct filesystem append is importer-only. Schema validation occurs before commit and no order compiler is called.",
-      "durability": "Accepted observation/request and data receipt are atomic at the selected persistence boundary; projection may be rebuilt only from recorded payloads. Live reads not recorded are not replayable.",
-      "errors": [
-        "Invalid schema/unit/scope -> Decode/Validation failure before data commit.",
-        "Persistence failure -> rollback rows/checkpoint/receipt.",
-        "Duplicate replay -> Existing data receipt.",
-        "Partial/uncertain observation -> typed data outcome, no blind duplicate."
-      ],
       "preservedBehavior": [
         "保留 append ordering, durable history, and capacity scalability.",
         "保留 legacy importer, not runtime behavior."
-      ],
-      "replacementSteps": [
-        "Replace doAppend with typed data-writer command/transaction.",
-        "Add local sequence/checkpoint/identity and provider extension validation.",
-        "Migrate callers and queries away from JSONL authority."
-      ],
-      "verificationCases": [
-        "Record an observation, crash before projection update, and replay: one idempotent data row/checkpoint is produced; an unrecorded live read is not replayable.",
-        "Same command identity with a different payload digest returns a data conflict and appends no second fact."
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-CECC039853",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source cleanup use case is retained, but timestamp-based mutation is reframed as authorized data-projection retention and explicitly separated from order compensation or authoritative-fact deletion.",
-      "contractAnchors": [
-        "K05",
-        "K06",
-        "K11",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/store.ts:88-125: doDelete 扫描所有 chunk，逐行 JSON.parse 后按 timestamp 过滤，重写保留行或删除空 chunk，再保存 index"
       ],
       "currentBehavior": "doDelete 扫描所有 chunk，逐行 JSON.parse 后按 timestamp 过滤，重写保留行或删除空 chunk，再保存 index。",
       "problem": "Timestamp deletion cannot uniquely identify a fact; scan-and-rewrite may lose rows, and ordinary delete can erase unfinished/uncertain data evidence while bypassing retention authorization.",
-      "targetModel": "Remove doDelete as an ordinary runtime operation. Introduce authorized snapshot projection retention/compaction by recorded data identity, sequence/checkpoint, and policy; never delete source observations required for rebuild or unresolved/uncertain capture evidence. Timestamp remains a query/display field, not deletion identity.",
-      "pureTransitions": [
-        "retentionEligibility(row, checkpoint, evidence) -> Keep | Compact | Reject.",
-        "compactionFold -> retain rebuildable projection data and metadata without changing source authority.",
-        "identityMatch -> local sequence/record identity, never timestamp equality alone."
-      ],
-      "effectBoundary": "An authorized data-retention persistence operation is the only deletion/compaction Effect; ordinary query/service code cannot unlink files. No order compensation or execution recovery is part of retention.",
-      "durability": "Retention receipt/audit/checkpoint are durable; source observation evidence, data-job uncertainty, and migration evidence survive compaction. A failed retention persistence operation has no partial deletion.",
-      "errors": [
-        "Unfinished/uncertain data request -> RetentionRejected.",
-        "Missing/ambiguous sequence -> reject, never delete by guess.",
-        "Persistence failure -> no partial compaction.",
-        "Corrupt row -> quarantine/migration path, not silent deletion."
-      ],
       "preservedBehavior": [
         "保留受控清理磁盘/历史读模型的运维目标。",
         "保留 timestamp query semantics, not timestamp deletion identity."
-      ],
-      "replacementSteps": [
-        "Remove public timestamp delete from ordinary callers.",
-        "Define retention authorization/schema/audit and checkpoint guards.",
-        "Keep source observations and uncertainty evidence outside projection compaction."
-      ],
-      "verificationCases": [
-        "Retention targeting an unfinished or uncertain capture returns RetentionRejected and leaves source/projection evidence.",
-        "Compaction crash before commit exposes no partial deletion; rebuilding from retained observations restores the eligible view."
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-25F7996D49",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source serial-conflict and post-error progress intent is retained, while target queue/failure semantics are narrowed to data delivery and persistence rather than a generalized transaction executor.",
-      "contractAnchors": [
-        "K05",
-        "K06",
-        "K07",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/store.ts:127-139: public append/delete 通过 Promise chain 串行执行；finally-like chain advancement 让后续操作可继续，即使前一操作 reject"
       ],
       "currentBehavior": "public append/delete 通过 Promise chain 串行执行；finally-like chain advancement 让后续操作可继续，即使前一操作 reject。",
       "problem": "chain 是本地内存队列，错误后的后续 append 仍缺 durable failure classification；无 capacity/backpressure/lease，ack 与 commit 不可见，delete 与 append 共享危险边界。",
-      "targetModel": "Replace the in-memory append/delete Promise chain with a bounded supervised snapshot-data queue and writer. Persist data job states Ready/Leased/Completed/Failed, record ObservationUncertain separately, expose Backpressured, and resolve receipts only after persistence commit. Retention is a separate data operation; no chain swallowing or order-effect state is used.",
-      "pureTransitions": [
-        "queueTransition -> enqueue/lease/complete/fail with exhaustive data-job variants; uncertainty is an outcome record.",
-        "dataBatchFold -> current persisted snapshot state, preserving scope and provider coverage.",
-        "failurePolicy -> reader retry/pause/reconcile/terminal classes, not order known-rejection or compensation policy."
-      ],
-      "effectBoundary": "Queue persistence, worker lease/fencing, provider reads, data transaction, and reconciliation are Effects; no in-memory chain hides failures and no deletion shares the append path.",
-      "durability": "Queued data jobs and attempts survive restart when configured; source-event cursor preserves required capture requests; no data receipt before commit and no silent truncate/drop.",
-      "errors": [
-        "Queue full -> Backpressured with replayable request.",
-        "Persistence failure -> no data receipt/checkpoint.",
-        "Uncertain observation -> pause/reconcile without blind duplicate; unrelated scope continues.",
-        "Stale worker epoch -> data write rejected."
-      ],
       "preservedBehavior": [
         "保留 serial conflict control and later operation progress after an error, now supervised/typed.",
         "保留 append/read isolation; delete becomes retention."
-      ],
-      "replacementSteps": [
-        "Replace writeChain with bounded data queue/writer.",
-        "Return typed receipt/status and migrate callers.",
-        "Separate retention worker/API and data uncertainty records."
-      ],
-      "verificationCases": [
-        "Fill a bounded data queue, crash after lease acquisition, and restart: request reappears with a new worker epoch and no pre-commit acknowledgement.",
-        "An uncertain snapshot query remains ObservationUncertain without order recovery; an unrelated scope continues and source-event request identity is preserved."
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-7CCB6F93A0",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "Newest-first/range/limit and cross-chunk history intent are retained as data-query behavior, while raw casts and empty-array failure collapse are reframed under the typed projection contract.",
-      "contractAnchors": [
-        "K03",
-        "K05",
-        "K06",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/store.ts:141-168: readRange walks index.chunks and each file from the last line backwards, applies lexicographic startTime/endTime checks, and stops when the truthy limit is reached; JSON.parse results are cast to UTASnapshot without validation. It returns append-order newest-first only when callers append monotonically increasing timestamps; it does not sort by timestamp."
       ],
       "currentBehavior": "readRange returns reverse physical append order across chunks, subject to optional string timestamp comparisons and a truthy limit; it is not guaranteed chronological for out-of-order appends and collapses empty history, malformed rows, and storage failures into either [] or a thrown untyped error.",
       "problem": "raw cast 不验证 schema/scope/units；字符串 bound 可能受 timezone/format 影响；read failure、partial scan 和 empty history 都折成数组，消费者无法判断 freshness/coherence。",
-      "targetModel": "Replace readRange with typed SnapshotProjectionQuery over AccountScope, Instant/sequence bounds, validated limit, and declared projection schema. Decode provider extensions and units, return SnapshotViewEnvelope plus Complete/Partial/Unavailable/NoHistory, and order by recorded sequence/tie-breaker rather than physical append order.",
-      "pureTransitions": [
-        "parseQuery -> typed bounds/limit and scope.",
-        "decodeRow -> versioned SnapshotView or DecodeFailure while preserving exact decimal/provider extension data.",
-        "classifyQuery -> Complete/Partial/Unavailable/NoHistory from coverage, checkpoint, and storage evidence."
-      ],
-      "effectBoundary": "Query is a read-only persistence effect and never triggers writes, event hooks, provider dispatch, approval, or compensation.",
-      "durability": "Rows and projection checkpoint are read at one data consistency boundary; source observations remain available for rebuild and corrupt rows do not advance checkpoint.",
-      "errors": [
-        "Corrupt/unknown schema -> CorruptProjection/SchemaVersionMismatch.",
-        "Storage failure -> ProjectionUnavailable.",
-        "Partial coverage/stale checkpoint -> explicit Partial/Stale, not [].",
-        "Invalid time/limit/scope -> QueryInvalid/ScopeRequired."
-      ],
       "preservedBehavior": [
         "保留 newest-first, range, limit and cross-chunk history intent.",
         "保留 optional time query after explicit timezone decode."
-      ],
-      "replacementSteps": [
-        "Remove raw JSON casts/string scanning.",
-        "Define typed query envelope/errors and align HTTP.",
-        "Add sequence/checkpoint/freshness/coherence and listing coverage metadata."
-      ],
-      "verificationCases": [
-        "Equal observedAt with different local sequences returns deterministic sequence order; invalid timezone is QueryInvalid rather than lexicographic acceptance.",
-        "Corrupt row or partial checkpoint returns typed evidence, while complete empty coverage alone is NoHistory."
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-BF84B32A4C",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "The source four trigger intents remain the local provenance vocabulary, but payload and authority are reframed under K05/K09 so the cause cannot be mistaken for a closed broker action contract.",
-      "contractAnchors": [
-        "K04",
-        "K05",
-        "K09",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/types.ts:10-12: SnapshotTrigger 是 scheduled、post-push、post-reject、manual 四值字符串 union，供 builder/store 记录来源"
       ],
       "currentBehavior": "SnapshotTrigger 是 scheduled、post-push、post-reject、manual 四值字符串 union，供 builder/store 记录来源。",
       "problem": "trigger 只有名称，没有 transaction identity、scope、source sequence 或 manual actor；post-push 字面值不能证明已经 commit，scheduled 也不能区分可选 telemetry 与强制请求。",
-      "targetModel": "Replace the four string values with a small serializable SnapshotCause provenance union: Scheduled(window, policyRevision), Manual(actor, commandId), PostPush(sourceIdentity, revision, localSequence), and PostReject(sourceIdentity, revision, localSequence), each with explicit AccountScope. Cause identifies why a finite snapshot request exists; it is not a capability, approval, or broker action map.",
-      "pureTransitions": [
-        "legacyTriggerToCause -> only after boundary validation and source evidence; post causes require the corresponding committed source event.",
-        "dedupKey(cause, scope, policyRevision) -> one data request identity; scheduled may coalesce by window, source events may not be erased.",
-        "causeMetadata -> stable query/audit provenance while observation uncertainty remains a data outcome."
-      ],
-      "effectBoundary": "Composition/subscriber/admission Effects construct causes from committed source evidence or explicit commands; the snapshot domain does not depend on callback timing, SDK objects, or broker dispatch.",
-      "durability": "Cause identity, scope, policy revision, and local sequence are persisted with the data request/result when durable capture is selected. Provider-native revision remains separate from local sequence.",
-      "errors": [
-        "Missing source identity/scope -> InvalidCause/AdmissionRejected.",
-        "Duplicate source event -> Existing data request.",
-        "Unknown/partial observation -> ObservationUncertain/Partial, not generic order retry.",
-        "Legacy trigger without evidence -> validation failure."
-      ],
       "preservedBehavior": [
         "保留四种既有触发意图和查询可见性。",
         "保留 post-push/post-reject 仅在成功提交后发生的语义。",
         "保留 scheduled/manual 的 explicit invocation."
       ],
-      "replacementSteps": [
-        "Replace string union payload with serializable local Cause union and evidence fields.",
-        "Migrate service/scheduler/types/query/tests.",
-        "Define legacy wire decode without claiming a universal action schema."
-      ],
-      "verificationCases": [
-        "Round-trip all four cause variants with scope and source evidence; duplicate source identity returns Existing data request.",
-        "A post-source event emitted after commit survives process exit; uncommitted/disabled source emits none and a data timeout remains ObservationUncertain."
-      ],
       "openQuestions": []
     },
     {
       "id": "MAP-587333CEE9",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source snapshot fields, financial precision, optional metadata, and independent Git concept are retained; the target is reframed from a plain/global order-shaped object into a composable data envelope with exact provider schemas.",
-      "contractAnchors": [
-        "K03",
-        "K04",
-        "K05",
-        "K07",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/types.ts:14-66: UTASnapshot 是 plain object：accountId/timestamp/trigger、account financial string fields、positions/openOrders、health、headCommit/pendingCommits；position/order identity 和元数据多为 string/number/optional"
       ],
       "currentBehavior": "UTASnapshot 是 plain object：accountId/timestamp/trigger、account financial string fields、positions/openOrders、health、headCommit/pendingCommits；position/order identity 和元数据多为 string/number/optional。",
       "problem": "plain optional fields 不能表达 AccountScope、来源/checkpoint/freshness/coherence、单位、listing completeness 或 query failure；optional derivative/order fields 容易把不支持能力和缺失证据混为一谈。",
-      "targetModel": "Define SnapshotViewEnvelope as a versioned, scoped data view with cause, capturedAt/as-of, local received sequence, projection checkpoint, per-component freshness/coherence, and Complete/Partial/Unavailable status. Component schemas use unit-aware values and preserve provider-declared extensions exactly; OrderObservation contains only observed common/native fields and does not require a universal set of order variants.",
-      "pureTransitions": [
-        "foldRecordedObservation -> typed accounting, positions, working-order observations, RuntimeHealth, and GitAudit with provenance.",
-        "encode/decode -> versioned envelope, exact decimal/unit relations, scope and provider-extension schemas.",
-        "freshnessFold -> CoherentAt(fence) only with a proven common local fence; otherwise MixedFreshness/stale/partial.",
-        "listingFold -> Complete/Partial/Unavailable."
-      ],
-      "effectBoundary": "Provider/query/persistence boundaries validate input and output; pure domain transformations preserve data units and variants. Public encoders never expose native SDK objects or raw rows and never provide an execution function.",
-      "durability": "Recorded observation identity/payload and local sequence are durable when selected; projection rows/checkpoints may rebuild from recorded data. Captured/as-of timestamps are observation evidence, not same-instant or native-finality guarantees.",
-      "errors": [
-        "Scope/unit/schema failure -> typed SnapshotDecodeFailure/ScopeRequired.",
-        "Partial/stale listing or projection -> explicit status, no empty fallback.",
-        "Provider extension unavailable -> declared field absence/uncertainty, not a guessed default.",
-        "No snapshot view authorizes order execution or compensation."
-      ],
       "preservedBehavior": [
         "保留账户财务字符串、持仓/订单/健康/Git metadata、trigger and recent/range views.",
         "保留 Submitted/PreSubmitted filtering only where listing Complete.",
         "保留 optional derivative metadata when applicable; omit only when domain says not applicable."
       ],
-      "replacementSteps": [
-        "Replace plain UTASnapshot with envelope/components and migrate consumers.",
-        "Add branded/unit-aware constructors and exact provider extension codecs.",
-        "Update schemas/queries/routes and legacy decode without enumerating a Cartesian order model."
-      ],
-      "verificationCases": [
-        "An envelope with Recovering health, decimal values, explicit scope, sequence, and component checkpoints round-trips all declared variants.",
-        "Equal observedAt with different local sequences yields MixedFreshness; unavailable provider extension remains explicit rather than silently omitted or treated as execution support."
-      ],
       "openQuestions": []
     },
     {
       "id": "MAP-26E7DEFDF7",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "The source versioned index and range/limit intent are retained, but physical chunk metadata is reframed as storage/migration detail under K03/K05 and cannot imply native or order guarantees.",
-      "contractAnchors": [
-        "K03",
-        "K05",
-        "K11",
-        "K12"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/snapshot/types.ts:68-80: SnapshotChunkEntry/Index 描述 chunk 内 start/end timestamp、count 和 version 1 chunks 列表，直接暴露文件分片元数据"
       ],
       "currentBehavior": "SnapshotChunkEntry/Index 描述 chunk 内 start/end timestamp、count 和 version 1 chunks 列表，直接暴露文件分片元数据。",
       "problem": "chunk metadata 只能近似时间范围，不能代表 journal source sequence、projection checkpoint、schema hash、freshness 或 compaction eligibility；version 1 fallback 还会隐藏损坏。",
-      "targetModel": "Replace SnapshotChunkEntry/Index as a UTA-facing contract with versioned projection metadata: AccountScope, schema version/fingerprint, local sequence/checkpoint, observedAt/as-of, coverage/freshness/coherence, row/hash evidence, and migration/retention status. Physical chunks may remain an implementation detail or migration format; decode failures are typed.",
-      "pureTransitions": [
-        "metadataFold -> checkpoint/freshness/coherence from recorded sequence and coverage.",
-        "compactionState -> Eligible | Blocked(unfinished/uncertain) | Completed for projection data only.",
-        "schemaTransition -> Supported | MigrationRequired | Corrupt with explicit evidence."
-      ],
-      "effectBoundary": "The data persistence adapter writes metadata with projection rows and executes authorized migration/compaction; query decoder is pure. No chunk metadata is an order or provider capability contract.",
-      "durability": "Sequence/checkpoint/hash/schema version survive restart and projection rebuild from recorded observations; source evidence and uncertain data jobs remain outside compaction, with receipts audited.",
-      "errors": [
-        "Version/hash mismatch -> SchemaMigrationRequired/CorruptProjection.",
-        "Checkpoint gap -> Partial/Stale, not Complete.",
-        "Active unfinished/uncertain data request -> CompactionBlocked.",
-        "Malformed metadata -> typed decode failure."
-      ],
       "preservedBehavior": [
         "保留 versioned storage evolution, range/limit query and rebuildability goals.",
         "保留 migration/compaction metadata for operations, without chunk API."
       ],
-      "replacementSteps": [
-        "Replace chunk types with scoped projection metadata types.",
-        "Migrate store/service/query tests to sequence/checkpoint/freshness.",
-        "Add schema/hash and retention guards without exposing physical filenames."
-      ],
-      "verificationCases": [
-        "A checkpoint gap or schema hash mismatch yields Partial/SchemaMigrationRequired and never Complete; an active uncertain request blocks compaction.",
-        "Rebuilding metadata after physical compaction preserves sequence/checkpoint/hash and visible values while retaining observation evidence."
-      ],
       "openQuestions": []
     }
-  ],
-  "crossGroupContracts": [
-    "SnapshotViewEnvelope 是本组的 UTA-facing 数据边界：显式 AccountScope（accountId + subAccountId）、schemaVersion、SnapshotCause provenance、capturedAt/asOf、local received sequence、projection checkpoint、每组件 Freshness/Coherence 与 overall Complete/Partial/Unavailable 一起传递。OrderObservation 只在声明的 listing schema 中保留实际返回的公共字段与 provider-native extension；不在快照层发明全量订单类型或执行合同。",
-    "post-push/post-reject 若作为捕获来源，只能由已提交 source event 的 identity/revision/sequence 触发一个有限 snapshot pull。来源事件是 provenance，不是 approval 或 dispatch authority；同一 source identity 重放只得到同一 data request。可选 scheduled/read telemetry 可按 scope/window 合并，但不得删除 committed-source request。",
-    "Snapshot data persistence、projection query 与 retention 是独立边界：若实现选择 durable capture，则 accepted observation payload/identity、local sequence 与 projection row/checkpoint 按选定 writer 的数据事务提交；projection 可 drop/rebuild，但未记录的外部 read 不可 replay。该事务不是 order WAL/CAS，也不需要 prepare/approve/compensate。",
-    "Freshness 不由 timestamp 相等推导：provider Native revision 与 local Received sequence 分开；只有同一 scope 的 proven local sequence fence 才能报告 CoherentAt，否则暴露 MixedFreshness/stale/Partial。capturedAt/asOf 只是外部观察证据，不证明 broker same-instant、finality 或 replay。",
-    "C03/C05 的订单 known-rejection continuation、approval、reservation、compensation、RecoveryCase 不扩散到 snapshot reads。数据 reader 使用自己的 declared error/availability policy：timeout、断连、listing gap 与 output violation 保持 ObservationUncertain/Partial/Unavailable，并先保留证据或对账，不凭重试次数制造订单效果。",
-    "Pump 只计算可选 finite pull 的窗口并提交 data admission；启动/停止管理 data cursor、worker lease、backpressure 与 drain。它不能成为 pending fact authority；读 worker lease 是资源/进程监督，不是 broker order lock。",
-    "Provider 内部可使用任意 SDK、REST/OpenAPI、语言和协议；adapter 在固定 UTA-facing CapabilityDescriptor/data schema 边界声明 input/result/error、delivery、resources、source revision 与 availability，并保留 exact native fields。当前 IBKR/UnifiedTradingAccount/global switch 只属于 source evidence，不能变成所有 provider 必须实现的 SDK。"
-  ],
-  "additionalFindings": [
-    "services/uta/src/domain/trading/snapshot/types.ts:1-8 明确快照概念上独立于 TradingGit commit 且财务值以 string 保存；目标保留这两个事实，Git head/pending 进入独立 GitAudit component，provider-native metadata 通过 exact declared extension 保存，不让 Git 或 SDK 成为 snapshot authority。",
-    "services/uta/src/main.ts:102-113 当前直接创建 SnapshotService、注册 post hooks 并启动 scheduler；目标 root composition 负责数据 reader、source-event subscriber、projection/query/retention 与 lifecycle barrier，且在 recovery/cursor barrier 后开放可选 data admission，不将 source event 当作 order authority。",
-    "services/uta/src/domain/trading/UnifiedTradingAccount.ts:793-810 当前以 fire-and-forget callback 且吞掉异常；目标保留 source operation 与 snapshot sink 结果隔离，但把 callback 改为 committed-source provenance + durable data request，避免进程退出丢 capture intent。",
-    "services/uta/src/http/routes-trading.ts:611-630 当前在 service 缺失或异常时返回 {snapshots: []}、DELETE 按 timestamp 删除；目标通过显式 scope/query envelope/ProjectionUnavailable 表达数据状态，删除仅可走授权 projection retention，不能清除 recorded observation evidence。",
-    "services/uta/src/http/routes-trading.ts:632-693 当前 equity curve 按 accountId、round timestamp、Number(v)||0 且异常返回空 points；目标按 scope 与 component freshness/coherence 聚合有单位 Money/FX，unknown/partial/unavailable 不可降为 0 或空结果。",
-    "src/core/pump.ts:1-25 明确 serial in-flight tick 会被 drop、tick error 只做 backoff、stop 是 terminal no-op；目标可继续将 Pump 当可选 data timer，但 mandatory source-event capture request 必须由 durable data cursor/request 状态保存。",
-    "services/uta/src/domain/trading/index.ts:60-74 当前公开旧 service/scheduler/store/builder 与 plain types；目标切换到 typed snapshot data query/capture/retention/view/cause contracts，provider/persistence constructors 留在 composition root，避免双写或 chunk API 成为公共合同。",
-    "services/uta/src/domain/trading/snapshot/store.ts:63-85,141-168 当前 append/index 与 readRange 依赖 JSONL 物理顺序和字符串 bounds；目标只把这些作为 migration/source evidence，运行时使用 validated schema、local sequence、projection checkpoint、coverage 与 typed query result。"
   ]
 }

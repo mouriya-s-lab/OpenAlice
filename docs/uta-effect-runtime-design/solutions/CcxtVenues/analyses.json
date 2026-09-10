@@ -3,46 +3,14 @@
   "entries": [
     {
       "id": "MAP-2FB8A60A26",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "fixture 以 Partial<CcxtMarket> 强转是本条的核心风险；目标改为 provider market leaf 的声明源与边界解码，同时保留 native identity 证据，不要求全局 broker 类型。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K04",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/ccxt-contracts.spec.ts:1-24: imports marketToContract/contractToCcxt/ccxtTypeToSecType and defines makeMarket as `{ id: overrides.symbol, active: true, ...overrides } as CcxtMarket`, so required fields are supplied only by the casted fixture."
       ],
       "currentBehavior": "测试 helper 允许 Partial<CcxtMarket>，把 id 默认成 symbol、active 默认 true，再直接把对象交给三个 translator；测试没有 native response 解码、连接 identity 或 AccountScope。",
       "problem": "Partial 加强制转换把缺 base/quote/type 的对象伪装成可转换市场，也把 native id 与 unified symbol 的混淆固定进 fixture；因此测试不能证明 adapter 会拒绝未知 shape，也不能证明 InstrumentId 不带账户。",
-      "targetModel": "以 provider 声明的 `NativeMarketSchema` leaf 为声明源：输入记录明确 `venueIdentity`、`nativeId`/`nativeSymbol`、base、quote、kind、activity，衍生字段按该 leaf 的 schema extension 携带 settle/expiry/contractSize/strike/optionRight。解码后产生 account-independent `InstrumentId` 与 `InstrumentMetadata`；AccountScope 只在后续 private observation/effect context 绑定，不进入市场 identity。只有 provider-declared extensions 才进入精确 domain schema；未声明或无法解码的字段只保留 adapter evidence，不以 unchecked JSON 进入 domain。",
-      "pureTransitions": [
-        "provider market leaf 的 unknown payload -> Result<DecodedMarket, NativeProtocolViolation>：按声明 schema 验证字段、有限数值与 identity；未声明 kind 保留 raw/path 并报告 availability，而不是假装成 Spot。",
-        "DecodedMarket -> Result<Instrument, InstrumentMetadataFailure>：按当前 source represented variant 构造有单位 metadata；同一 venue/native identity 在不同 AccountScope 仍是同一 market。"
-      ],
-      "effectBoundary": "fixture builder、native decoder、identity constructor 都是纯函数；Exchange/UTA/网络不得进入该测试。连接层提供已验证的 venue identity 与 market snapshot，interpreter 只消费解码结果。",
-      "durability": "fixture 不写持久化；生产 catalog 保存 venue/native identity、metadata version、activity/asOf 和 decode evidence。PreparedPlanRecord 保存选定 InstrumentId/version，不保存 CcxtMarket 或 SDK Contract。",
-      "errors": [
-        "NativeProtocolViolation(path, reason)：必需字段缺失或类型错误时拒绝该 market row，调用方保留诊断。",
-        "UnknownMarketKind(rawType, path)：不得回退 CRYPTO；catalog 不产生 Instrument。",
-        "InvalidDerivativeMetadata(kind, field)：Future/Option 缺必需 metadata 时标记该产品不可用，不生成默认 multiplier。"
-      ],
       "preservedBehavior": [
         "保留 spot、swap、future、option translator fixture 的覆盖意图和 exact native symbol 断言。",
         "改变只在边界：malformed/unknown 输入显式失败，且 native id、symbol 与 AccountScope 不再被 fixture cast 隐式混合。"
-      ],
-      "replacementSteps": [
-        "将 makeMarket 改为按四个 `MarketKind` 构造完整 `NativeMarketFixture`，不再用 Partial 或 `as CcxtMarket` 隐藏必需字段。",
-        "把 translator 断言迁移到 `Instrument`/`InstrumentMetadata`/catalog codec；SDK Contract 只在 adapter compatibility view 测试。",
-        "增加缺字段、未知 kind、native id 与 symbol 不一致的反例，要求调用方穷尽处理失败 variant。"
-      ],
-      "verificationCases": [
-        "完整 BTC/USDT spot fixture 产生同一 venue/native identity 的 SpotInstrument；换 AccountScope 不改变 InstrumentId，但订单 observation 的 scope 改变。",
-        "future 缺 expiry 或 contractSize、option 缺 strike/right 时返回 InvalidDerivativeMetadata，绝不写默认 multiplier。",
-        "type=margin 或未知字符串时返回 UnknownMarketKind，不能生成 CRYPTO Instrument。"
       ],
       "openQuestions": [
         "各 venue 的 native market id 是否稳定且与 unified symbol 是否一一对应需按连接 conformance 采样；在未证明前 catalog 只接受明确 identity evidence。"
@@ -50,44 +18,14 @@
     },
     {
       "id": "MAP-00DA721165",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "source 断言的 settlement、UTC expiry 与 multiplier 仍是有价值的市场事实，但 IBKR Contract 投影应改成可组合 Instrument metadata leaf，避免把账户或 SDK 类别当统一 authority。",
-      "contractAnchors": [
-        "K02",
-        "K03",
-        "K04",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/ccxt-contracts.spec.ts:26-77: asserts spot/perp/USDC-perp/future mappings for symbol, localSymbol, secType, exchange, currency, settlement, expiry, and multiplier."
       ],
       "currentBehavior": "测试把 CCXT unified symbol 放进 Contract.localSymbol，断言 spot 为 CRYPTO、swap 为 CRYPTO_PERP，并验证 USDT/USDC settlement 区分；future 的毫秒 expiry 转 UTC YYYYMMDD，contractSize 转 multiplier。",
       "problem": "这些断言依赖可变 IBKR Contract 与 legacy secType 字符串，无法表达 InstrumentId 与 display symbol 的差异，也没有证明 quote/settle、expiry、multiplier 在不同 scope 下仍是同一产品事实。",
-      "targetModel": "为 NativeMarketSchema -> InstrumentMetadata 定义 VenueIdentity、NativeMarketKey、InstrumentId、SettlementCurrency、Expiry、ContractMultiplier；Instrument 承载该 provider leaf 已声明的语义变体（当前有证据时可投影 Spot/Perpetual/Future/Option），provider-native extensions 保持精确，不把这些投影封成所有 venue 必须实现的全局 taxonomy。wire symbol 只留在 CCXT adapter 的 native identity。",
-      "pureTransitions": [
-        "DecodedMarket -> Result<Instrument, InstrumentMetadataFailure>：按 kind 构造变体，settle 不得被 quote 覆盖；Future/Option 的 expiry 与 multiplier 关系由 constructor 检查。",
-        "NativeMarketKey -> InstrumentId：以 venue + account-independent native key 形成 canonical identity，display symbol 不能替换 native key。"
-      ],
-      "effectBoundary": "market codec 与 identity construction 无 IO；loaded markets 与 venue name 由 connection layer 作为显式输入，adapter 才把 InstrumentId 翻译回 unified symbol。",
-      "durability": "目录投影应持久化 InstrumentId、venue、settlement、metadataVersion/asOf；不持久化 Contract 对象。重复观察以 venue/native identity 去重并保留最新版本。",
-      "errors": [
-        "InstrumentMetadataFailure(missingExpiry|missingMultiplier|invalidSettlement)：查询返回不可用市场并要求重新加载 metadata。",
-        "VenueIdentityMismatch(expected, actual)：禁止把另一 exchange 的 wire symbol 发送给当前连接。"
-      ],
       "preservedBehavior": [
         "USDT 与 USDC 结算的 perp 必须仍是两个不同 InstrumentId。",
         "future expiry 仍按 UTC 日生成，contractSize 仍影响 multiplier；新模型把这些变成有单位的值而不是 Contract 字段。"
-      ],
-      "replacementSteps": [
-        "把四组 Contract 断言改为 canonical Instrument 与 metadata 断言，同时保留 wire key 的 exact equality。",
-        "新增 option fixture 的 strike/right/expiry/multiplier 关系测试，防止 only-spot happy path 掩盖衍生产品问题。",
-        "在 adapter test 中加入 round-trip native key 查询，确认 domain 不泄漏 IBKR SDK。"
-      ],
-      "verificationCases": [
-        "ETH/USDT:USDT 与 ETH/USDC:USDC 必须产生不同 settlement 与 InstrumentId。",
-        "future expiry=1664409600000 产生 20220929；非法/缺失 expiry 返回失败。",
-        "相同 display base、不同 venue/native key 查询不能互相命中。"
       ],
       "openQuestions": [
         "各 venue 对 option/future 的 expiry 与 contractSize 是否始终提供需在对应 broker conformance 中实测；未有证据时该 market capability 保持 unavailable。"
@@ -95,89 +33,27 @@
     },
     {
       "id": "MAP-00DCA04091",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "localSymbol/symbol 优先和唯一 fallback 是该 resolver 的有用行为；目标把它放入带 venue/version 的 catalog capability leaf，显式表达 Ambiguous/NotFound，而不是加入全局订单映射。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K04",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/ccxt-contracts.spec.ts:79-103: tests direct localSymbol/symbol lookup and a no-localSymbol base+secType+currency fallback."
       ],
       "currentBehavior": "contractToCcxt 测试覆盖 spot/perp 的直接 wire lookup，并将清空 localSymbol 的用户 Contract 交给 base+secType+currency 搜索；测试期望唯一结果，未覆盖多结果与缺失的区分。",
       "problem": "输入是外部可变 Contract，fallback 的 Ambiguous 与 NotFound 都被 null 表示，调用者无法决定是补充 instrument identity 还是报告不存在；测试也无法防止不同 settlement/venue 的误命中。",
-      "targetModel": "`InstrumentCatalog.resolve(InstrumentQuery)` 的 query 可含 `VenueIdentity`、`InstrumentId?`、`NativeMarketKey?`、base/kind/quote/settlement/expiry；它不要求或推断 AccountScope。结果是 `Found{instrumentId,nativeKey,metadataVersion}`、`Ambiguous{candidates}`、`NotFound{query}` 或 `VenueMismatch`，只有 Found 交给 CCXT interpreter。",
-      "pureTransitions": [
-        "CatalogIndex + InstrumentQuery -> ResolveResult：先 exact native key，再 canonical identity，再按显式 kind/quote/settlement/expiry 筛选；候选不唯一返回 Ambiguous，不用 null。",
-        "Found -> NativeRequest：检查 selected VenueIdentity/metadata version 后编译 wire symbol；Ambiguous/NotFound/VenueMismatch 一律在 dispatch 前终止。"
-      ],
-      "effectBoundary": "目录读取由 application/InstrumentCatalog port 提供 immutable snapshot；纯 resolver 不访问 Exchange 或 SDK，CCXT adapter 只执行最终 wire translation。",
-      "durability": "catalog snapshot 的 index/version 与 selected InstrumentId 写入 prepared plan；计划重启时用同一 identity/version 重建，不能从 null 或 Contract 字符串猜测。",
-      "errors": [
-        "InstrumentNotFound(query)：调用者先刷新 catalog 或要求用户补充 identity，不发送请求。",
-        "InstrumentAmbiguous(candidates)：调用者必须选择具体 settlement/expiry/native key。",
-        "VenueMismatch：拒绝跨 exchange 直接复用 native key。"
-      ],
       "preservedBehavior": [
         "完整 wire localSymbol 的 direct hit 仍是最快且优先路径。",
         "没有 localSymbol 时仍可支持用户输入的唯一 base/type/currency 查询，但其结果带 Found 证据。"
-      ],
-      "replacementSteps": [
-        "把 Contract fixture 改为 InstrumentQuery，并让 resolver 返回闭合结果而非 string|null。",
-        "迁移 CcxtBroker 调用方为先读取 catalog 再调用 adapter compileNative；删除 null-as-both-error 分支。",
-        "把 ambiguity/not-found 作为协议可观察错误，补充不同 settlement 的候选测试。"
-      ],
-      "verificationCases": [
-        "catalog 同时有 BTC spot 与 BTC perpetual 时只给 base 查询返回 Ambiguous；补 settle 后返回唯一 Found。",
-        "精确 BTC/USDT:USDT native key 返回当前 venue 的 Found 与 exact wire symbol。",
-        "unknown native key 返回 NotFound，不生成 skeletal order/quote/close request。"
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-1767B100E0",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "unknown type 被旧 switch 默认成 CRYPTO；provider schema 只声明已采样映射并保留未知 native extension，避免制造一个封闭的全局市场枚举。",
-      "contractAnchors": [
-        "K02",
-        "K03",
-        "K04",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/ccxt-contracts.spec.ts:105-112: tests only spot/swap/future/option values for ccxtTypeToSecType."
       ],
       "currentBehavior": "测试只固定四个已知 type 映射为 CRYPTO、CRYPTO_PERP、FUT、OPT；没有断言 unknown type 的行为，而实现对未知值默认返回 CRYPTO。",
       "problem": "缺失 unknown-case 测试让错误市场被当作现货进入资产/订单路径，类型信息丢失后无法触发 capability 或 protocol failure。",
-      "targetModel": "market-kind 不是全局封闭 SDK 枚举；CCXT provider leaf 声明它当前接受的 native type vocabulary，并将已采样的 `spot|swap|future|option` 投影为语义 market units。未声明/新增 type 作为保留 raw extension，产生 `UnknownMarketKind` 与独立 availability，不生成 CRYPTO 或新的 action capability。",
-      "pureTransitions": [
-        "provider leaf schema + raw type -> Result<MarketKind, UnknownMarketKind>：仅对已证实 vocabulary 做映射，未知字符串保留 raw value/path。",
-        "MarketKind + provider capability descriptor -> availability：类型事实与可执行/read capability 分开，不能从 type mapping 推断交易支持。"
-      ],
-      "effectBoundary": "纯 decoder/test only；网络响应先在 native schema 边界解码，application 将 UnknownMarketKind 作为查询失败或跳过该记录并记 evidence。",
-      "durability": "无独立 writer；若未知市场来自已持久化 catalog，记录 ProtocolViolation/metadata version 并阻断该条 projection 更新，不能写成 CRYPTO 快照。",
-      "errors": [
-        "UnknownMarketKind(rawType)：adapter 停止该市场的转换并返回 NativeProtocolViolation。",
-        "MarketTypeCapabilityUnavailable(kind)：解码成功但 action capability 未声明时，prepare 返回 CapabilityUnavailable。"
-      ],
       "preservedBehavior": [
         "四个已知 CCXT type 的现有映射保持不变。",
         "未知值由旧的宽松默认改为显式拒绝，这是为防止错误分类而不是扩大或收缩已知能力。"
-      ],
-      "replacementSteps": [
-        "增加 unknown/empty/type-case variance 的 decoder tests。",
-        "替换返回 string 的 helper 为闭合 domain kind codec，并更新所有调用者的 exhaustive match。",
-        "把 capability derivation 与 instrument kind 分开，禁止 switch default 掩盖新类型。"
-      ],
-      "verificationCases": [
-        "type=spot/swap/future/option 保持四个已知结果。",
-        "type=margin、linear 或 future-v2 返回 UnknownMarketKind，catalog 不产生 Instrument。",
-        "新增 native type 后编译器/穷尽测试要求显式决定其 target variant。"
       ],
       "openQuestions": [
         "CCXT 4.5.38 各 exchange 实际返回的 type vocabulary 需在 native response conformance 中采样；未采样值都应走 Unknown。"
@@ -185,45 +61,14 @@
     },
     {
       "id": "MAP-C2F10E778E",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "八个 timeframe token 与按 exchange.timeframes 校验的证据边界可保留；重写只把它作为 provider data leaf 的 availability，不把静态表当跨 venue 保证。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K05",
-        "K06"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/ccxt-contracts.ts:1-22: defines an explicit BarInterval-to-CCXT timeframe table and comments that support varies per exchange."
       ],
       "currentBehavior": "CCXT_TIMEFRAME 是覆盖 1m、5m、15m、30m、1h、4h、1d、1w 的静态 Record；注释要求调用时再与 exchange.timeframes 校验，但该校验不在此纯表中。",
       "problem": "静态 token 相同不等于 venue 支持；如果把表当作 capability，就会在不支持的周期发起请求并把 SDK 失败当成普通网络错误。",
-      "targetModel": "当前 normalized `BarInterval` schema 与 provider-declared timeframe extensions 共同形成该 data leaf 的输入；`MarketDataInterpreter` 持有 `VenueTimeframeCapability{supportedIntervals, exchangeVersion}`，codec 输出声明过的 `NativeTimeframe` 或 `UnsupportedInterval`，而不是把 normalized token 表当作所有 venue 的封闭能力集合。",
-      "pureTransitions": [
-        "BarInterval + capability snapshot -> Result<NativeTimeframe, UnsupportedInterval>：先查 venue 支持集，再编码 exact token。",
-        "NativeBarsResponse -> HistoricalBarsObservation：按 schema 解码、排序并验证 interval/instrument 关系；未知字段不扩成 domain。"
-      ],
-      "effectBoundary": "静态映射与 capability check 纯执行；获取 exchange.timeframes 和 fetchOHLCV 属于 CCXT connection/market-data Effect，结果通过 typed observation port 返回。",
-      "durability": "查询不是交易 authority；如作为 prepare precondition 使用，保存 capability fingerprint、interval 与 observation time。历史 bars projection 用 sequence/asOf，不写 SDK response。",
-      "errors": [
-        "UnsupportedInterval(interval, venue)：调用者改用支持周期或报告 QueryFailure，不重试同一 native request。",
-        "NativeBarsProtocolViolation(path)：响应 schema 不匹配时保留 evidence 并停止该 query。"
-      ],
       "preservedBehavior": [
         "现有八个 normalized interval 的 token 保留。",
         "每个 venue 仍可按自身 timeframes 过滤；不会因 target codec 而假设统一支持。"
-      ],
-      "replacementSteps": [
-        "保留 CCXT_TIMEFRAME 作为 pure token codec，删除把它当全局能力的调用路径。",
-        "在 connection initialization 派生并缓存 typed timeframe capability，market-data service 先检查。",
-        "将 `BarInterval -> string` 结果改为协议可编码失败，移除 SDK raw error 直传。"
-      ],
-      "verificationCases": [
-        "venue capability 仅含 1m/1h 时，5m 查询返回 UnsupportedInterval 且无 fetchOHLCV 调用。",
-        "supported interval 编译出精确 token 并返回带 instrument/asOf 的 observation。",
-        "response 中 interval 不匹配 request 时返回 ProtocolViolation 而非静默接受。"
       ],
       "openQuestions": [
         "各 CCXT venue 的 timeframes 在 sandbox/live 与 SDK version 间差异需连接层启动时实测并纳入 capability fingerprint。"
@@ -231,45 +76,14 @@
     },
     {
       "id": "MAP-F0A14EF839",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "legacy status/fill 映射属于订单效果的观察语义，必须脱离 IBKR-shaped status；target 保留 effect outcome/WAL 纪律，同时允许每个 provider 扩展 native status。",
-      "contractAnchors": [
-        "K02",
-        "K03",
-        "K07",
-        "K08"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/ccxt-contracts.ts:24-53: maps known market/order statuses and constructs OrderState, defaulting unknown type/status to CRYPTO/Submitted."
       ],
       "currentBehavior": "ccxtTypeToSecType 对未知 market type 返回 CRYPTO；mapOrderStatus 将 closed/open/canceled/cancelled/expired/rejected 分别映射到 Filled/Submitted/Cancelled/Inactive，其余（含 undefined）也映射 Submitted；makeOrderState 只写 legacy `OrderState.status`。",
       "problem": "unknown/undefined status 被伪装成 Submitted，rejected/expired 的细义也被压成 Inactive；status、fill、ack 与观察失败没有关联，未确认订单会被当成可工作订单。",
-      "targetModel": "`OrderObservation` 是交易 effect 的可组合观察单位，保留 `scope/instrumentId/brokerOrderId`、provider-native status extension、fill facts、source 与 observedAt；`RemoteOutcome` 与叶子 ack 分离。已知状态可投影为 Working/PartiallyFilled/Filled/Cancelled/Expired/Rejected，未知状态保持 provider raw + Unknown，不要求全局 status vocabulary；PendingSubmit 只来自本地 durable dispatch state。",
-      "pureTransitions": [
-        "provider order-output schema + expected action -> Result<OrderObservation, NativeProtocolViolation|UnknownOrderStatus>：先校验 identity/numeric fill relationship，再按该 venue 的 declared status evidence 投影；closed 不单独证明 Filled。",
-        "leaf Ack + later observation -> RemoteOutcome：known reject/working/confirmed 与 Unknown 分离；SDK/HTTP success 只表示该 leaf 的 Ack。"
-      ],
-      "effectBoundary": "decoder/compiler 纯；fetch/dispatch 在 BrokerActionInterpreter Effect 中执行，所有 SDK object 在 adapter 内转成 typed records。",
-      "durability": "每个 observation 以 broker-scoped order identity + instrument/scope + observation version 去重，DispatchStarted/ack/observation 由 JournalWriter 原子关联；不能只存 legacy status string。",
-      "errors": [
-        "UnknownOrderStatus(raw, path)：进入 ObservationFailure/ProtocolViolation，不能自动生成 Working/Submitted。",
-        "InconsistentFill(status, filled, remaining, amount)：保留 raw-safe evidence，拒绝构造 Filled/PartiallyFilled。",
-        "BrokerRejected(reason) 与 UnknownOutcome：前者按 explicit FailurePolicy，后者只进入 reconciliation/RecoveryRequired，不盲目重试。"
-      ],
       "preservedBehavior": [
         "closed/open/canceled/cancelled/expired/rejected 的已知语义继续可见，但由 typed status 与 fill evidence 表达。",
         "OrderState 作为旧边界的 view 可以暂时由 target OrderObservation 映射生成，不能再作为 authority。"
-      ],
-      "replacementSteps": [
-        "引入 NativeOrderSchema 与 exhaustive status decoder，删除 default Submitted/CRYPTO 分支。",
-        "把 `makeOrderState` 调用迁移到 protocol/view codec，核心使用 OrderObservation/RemoteOutcome。",
-        "在每个 selected effect leaf 内分别声明 acknowledgement、observation、failure 与 compensation 类型，迁移所有 catch-to-string/null 调用者；不建立全局 action map。"
-      ],
-      "verificationCases": [
-        "status=open、filled=0 且 amount 有效产生 Working；filled>0 且 remaining>0 产生 PartiallyFilled；closed 只有 fill/remaining 关系成立才 Filled。",
-        "status=queued/new vendor value 或 undefined 返回 UnknownOrderStatus，不产生 Submitted projection。",
-        "DispatchStarted 后网络 timeout 产生 RemoteOutcome.Unknown 并排 observation；order lookup 的 absence 不能代替执行 outcome。"
       ],
       "openQuestions": [
         "各 venue 的完整 status vocabulary、closed 与 fill 的最终一致性语义和 order-id retention horizon 需由 broker conformance 实测后纳入 capability。"
@@ -277,46 +91,14 @@
     },
     {
       "id": "MAP-63CF278660",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "unknown cast 与 multiplier=1 fallback 是 derivative decoder 缺陷；目标用 provider schema/HOF 构造有条件的 Instrument，不把 translator 分支变成通用 action model。",
-      "contractAnchors": [
-        "K02",
-        "K03",
-        "K04",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/ccxt-contracts.ts:55-111: marketToContract copies market.symbol into localSymbol, casts derivative fields, derives UTC expiry/multiplier/right, and calls buildContract."
       ],
       "currentBehavior": "marketToContract 读取 market.base/quote/type/settle，把 unified symbol 写到 localSymbol；通过 unknown cast 取 expiry/contractSize/strike/optionType，FUT/OPT 的 expiry 转 UTC，contractSize 缺失时 multiplier fallback 为 `'1'`，最后调用 buildContract/assertContract。",
       "problem": "unknown cast 与 SDK Contract 投影把未声明 derivative metadata 延迟到 buildContract；缺 contractSize 的 FUT/OPT 会错误地看似有 multiplier，且 quote、settlement 与 canonical/native identity 在 domain 中不可区分。",
-      "targetModel": "native schema 先解码 exact fields；`Instrument` 承载 provider leaf 已声明的语义变体（当前有证据时可投影 Spot/Perpetual/Future/Option），Future/Option constructor 只有在该 leaf 声明并验证 expiry 与 multiplier 时才成立，Option 还需 strike/right；`InstrumentMetadata` 另存 venue/native key、quote、settlement、precision、activity。Perpetual 不因该函数的 FOP 分支而新增 FOP SecType，也不要求其他 provider 复制这些 variants。",
-      "pureTransitions": [
-        "unknown market -> Result<DecodedMarket, NativeProtocolViolation>：验证 symbol/base/quote/type/settle 与衍生 fields 的类型/有限性。",
-        "DecodedMarket -> Result<Instrument, InstrumentMetadataFailure>：按 variant 构造有单位 metadata；FUT/OPT 缺 expiry/contractSize（或 option 缺 strike/right）拒绝，不保留 `'1'` fallback。",
-        "InstrumentId + selected venue adapter -> NativeSymbol：仅 Found 且 venue/version 相符时输出 wire symbol，不能由 SDK Contract 反推。"
-      ],
-      "effectBoundary": "mapper 保持纯函数；markets snapshot 与 exchange identity 作为参数注入。CCXT Exchange/Contract SDK 只在 adapter interpreter 局部存在，不能进入 domain、journal、HTTP。",
-      "durability": "catalog projection 保存 provider identity、metadata/capability version、activity/asOf 与 decode evidence；若某受控 effect 使用该 Instrument，则其 serializable plan 另存 InstrumentId/native key，不保存 Contract/SDK object 或把 catalog observation 当交易事务。",
-      "errors": [
-        "NativeProtocolViolation(field, evidence)：market shape 不合法时拒绝 catalog row。",
-        "MissingDerivativeMetadata(kind, field)：禁止交易/报价该不完整产品，返回 Instrument/Capability failure。",
-        "InstrumentIdentityConflict(nativeKey, settlement|expiry)：冻结冲突更新，不选择一份覆盖另一份。"
-      ],
       "preservedBehavior": [
         "wire symbol 的唯一性、settlement 后缀、UTC expiry 日和 contractSize 语义保留。",
         "现有 buildContract 的 universal/per-secType validation 目的保留，但由 domain constructor 在更早边界承担。"
-      ],
-      "replacementSteps": [
-        "实现 CCXT native market schema 与 typed decoder，移除 unknown cast。",
-        "将 IBKR Contract view 降为 adapter 私有兼容投影，所有内部 callers 改用 Instrument/InstrumentMetadata。",
-        "在 capability derivation 前拒绝未完整市场；对 multiplier fallback 的旧行为仅保留为显式 migration evidence，不作为交易值。"
-      ],
-      "verificationCases": [
-        "spot/perp 保留 quote 与 settlement；USDT/USDC native keys 产生不同 InstrumentId。",
-        "future 缺 expiry、option 缺 strike/right、FUT/OPT 缺 contractSize 各自返回具体 failure，不生成默认 multiplier。",
-        "同一 wire symbol 绑定错误 VenueIdentity 时 compileNative/dispatch 前返回 VenueIdentityMismatch。"
       ],
       "openQuestions": [
         "CCXT markets 对各衍生类型的 contractSize/expiry 可用性需逐 venue 实测；缺证据的市场 capability 必须保持 unavailable。"
@@ -324,233 +106,67 @@
     },
     {
       "id": "MAP-50D001548B",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "exchangeName 未参与当前 lookup 是真实 source bug；目标要求 venue-bound catalog leaf 和版本绑定，但不规定所有 provider 使用同一 SDK lookup。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/ccxt-contracts.ts:113-144: contractToCcxt tries localSymbol, then symbol, then unique base/secType search and returns null for ambiguity/missing."
       ],
       "currentBehavior": "解析顺序是 localSymbol 直接命中、symbol 作为 markets key 命中、最后按 base/secType 搜索；多候选与无候选都返回 null，exchangeName 参数传入但函数只使用 markets 与 Contract 字段。",
       "problem": "null 合并了 identity not found、ambiguous 与 venue mismatch；可变 Contract 字符串成为查找主键，settlement/expiry 未在 fallback 中强制，容易把同 base 的不同产品送到错误 endpoint。",
-      "targetModel": "`ResolveInstrument` 纯函数消费带 `VenueIdentity`/catalog version 的 `InstrumentId | NativeKeyHint | InstrumentQuery`，返回 Found/Ambiguous/NotFound/VenueMismatch；`compileNativeSymbol` 只接受 Found 并携带当前 venue 与 AccountScope 的请求上下文（scope 不改变 InstrumentId）。",
-      "pureTransitions": [
-        "exact native key -> Found：验证当前 venue、active metadata 与 catalog version；不得把另一 venue 的同字符串当命中。",
-        "canonical query -> Found|Ambiguous|NotFound：比较 kind、quote、settlement、expiry 等显式约束；不靠 Contract `null` 表达错误。",
-        "Found + operation-specific scope -> NativeRequest：scope 由 selected read/effect leaf 显式绑定，identity 和 scope 都在该 leaf plan 中保存；查询不会被强制包装成 NativeOrderRequest。"
-      ],
-      "effectBoundary": "catalog snapshot 的 IO 属 application query；resolve/compile 为纯；Exchange API 不参与 fallback，避免查询过程中 SDK lookup 改变结果。",
-      "durability": "准备时写入 selected InstrumentId、catalog version 与 native identity；重启/重试须用同一绑定，若 catalog version 改变返回 ReprepareRequired，而不是重新猜 symbol。",
-      "errors": [
-        "InstrumentNotFound(query)：刷新/补全后重试准备，不发 Effect。",
-        "InstrumentAmbiguous(candidates)：调用方选择具体 market，不选第一项。",
-        "VenueMismatch(expected, actual)：拒绝跨 venue wire identity。",
-        "CatalogVersionChanged(planVersion, currentVersion)：返回 ReprepareRequired。"
-      ],
       "preservedBehavior": [
         "localSymbol/direct unified-key resolution 仍优先。",
         "唯一的 base/type/currency fallback 可保留为显式 query policy；其错误语义从 null 变为可诊断 variant。"
-      ],
-      "replacementSteps": [
-        "引入 typed CatalogIndex 与 ResolveResult，删除调用者对 null 的分支猜测。",
-        "在每个 action prepare 处绑定 InstrumentId/scope/version；adapter dispatch 不再接收任意 Contract。",
-        "将 exchangeName 纳入 VenueIdentity 关系检查，并为多 settlement 候选补测试。"
-      ],
-      "verificationCases": [
-        "direct localSymbol/native key 在当前 venue 命中 Found；catalog 缺 key 返回 NotFound，不生成 skeletal contract。",
-        "BTC spot/perp 同 base 查询返回 Ambiguous；加 settlement/expiry 后才可唯一命中。",
-        "同 native key 在另一 VenueIdentity 的 index 中存在时返回 VenueMismatch，不发送 createOrder。"
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-249466CED5",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "USDT/USD/USDC 偏好是当前 resolver 的 presentation policy；保留 ExplicitOnly/VersionedVenuePolicy 决策，并把排序放在声明的 capability leaf 中而非 universal currency rule。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K04",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/ccxt-contracts.ts:146-180: resolveContractSync linearly scans active markets by base, optional mapped secType, optional quote, and defaults no currency to USDT/USD/USDC.",
         "services/uta/src/domain/trading/brokers/ccxt/CcxtBroker.ts:419-486: searchContracts filters active rows with complete base/quote, ranks swap>future>spot>option then USDT>USD>USDC, applies exact/fuzzy ranking, and annotates derivativeSecTypes; this is current provider search behavior, not universal identity or capability."
       ],
       "currentBehavior": "resolveContractSync 把 query.symbol 大写作 base，遍历 markets，跳过 active=false 或缺 base/quote 的 row，按映射后的 secType 与可选 currency 过滤；currency 缺失时只接受 USDT/USD/USDC，并返回裸 symbol 数组。独立的 CcxtBroker.searchContracts 还按 active/base/quote、swap>future>spot>option、USDT>USD>USDC 与 exact/fuzzy rank 组织搜索结果，并写入 derivativeSecTypes。",
       "problem": "线性 raw scan 和隐式稳定币白名单没有 venue、settlement、expiry、catalog version 或 account-independent identity；返回 strings 使 caller 无法判断 metadata 完整性和候选覆盖。searchContracts 的排序/fuzzy rank 与 derivativeSecTypes 注入也没有声明为 display-only policy，容易被误用为唯一执行选择或 capability。",
-      "targetModel": "`InstrumentCatalogIndex` 按 VenueIdentity/native key/canonical base/kind/quote/settlement/expiry 建索引；`InstrumentQuery` 必须显式携带 `QuoteSelectionPolicy = ExplicitOnly | VersionedVenuePolicy(policyId)`。另设不执行请求的 provider `InstrumentSearch` leaf，保留 source 的 exact-base/fuzzy rank 与 derivativeSecTypes 作为带证据的候选 metadata；排序不能选择执行 instrument，也不能推导 capability。默认是 `ExplicitOnly`；只有 query 明示匹配 venue/version 的 `VersionedVenuePolicy` 才能排序候选，随后由 operation route 绑定 scope。输出 Found/Ambiguous/NotFound，并可携 capability/freshness evidence。",
-      "pureTransitions": [
-        "CatalogIndex + InstrumentQuery -> ResolveResult：仅使用 query 明示约束与 `QuoteSelectionPolicy`；ExplicitOnly 在 quote/settlement 候选不唯一时返回 Ambiguous，VersionedVenuePolicy 仅在 policyId、venue 与 catalog version evidence 匹配时生效；不得偷偷补 USDT/USD/USDC。",
-        "CatalogIndex + search text + presentation policy -> RankedInstrumentCandidates：exact/fuzzy rank 与 derivativeSecTypes 只影响搜索展示，不授予 execution authority。",
-        "ResolveResult + capability snapshot -> InstrumentAvailability：产品存在但 action/read capability、scope 或 freshness 不足时返回 CapabilityUnavailable/Stale，而不是把 no-match 当成功。"
-      ],
-      "errors": [
-        "NoMatchingInstrument(query)：补充约束或刷新 catalog。",
-        "AmbiguousInstrument(candidates)：要求显式 settlement/expiry/native key。",
-        "QuoteSelectionPolicyRequired(query)：未声明 ExplicitOnly 或匹配的 VersionedVenuePolicy 时不排序候选，保留 Ambiguous/NoMatchingInstrument 结果。",
-        "StaleCatalog(version, asOf)：返回 ReprepareRequired。",
-        "InstrumentUnavailableForScope(scope, capability)：market 存在但当前 scope 不可用，禁止 dispatch。"
-      ],
-      "effectBoundary": "加载/更新 markets index 是 connection/catalog Effect；索引查询与结果排序纯函数。任何 ticker/Exchange request 都在后续 market-data/action interpreter。",
-      "durability": "prepared action 保存 query digest、chosen InstrumentId、catalog index version；catalog projection 的 active/metadata freshness 要有 checkpoint，不能靠内存 markets 作为恢复 authority。",
       "preservedBehavior": [
         "inactive rows 与缺 base/quote 的 skeletal rows 继续不可作为候选。",
         "旧 USDT/USD/USDC preference 只能在调用方显式选择匹配的 VersionedVenuePolicy 时用于搜索/展示；默认 ExplicitOnly，不成为 universal currency allowlist 或执行选择。"
-      ],
-      "replacementSteps": [
-        "以 typed metadata 构建索引，避免每次 action 线性遍历 raw Record。",
-        "把 quote/settlement/venue/expiry 约束加入协议 query schema。",
-        "迁移 contractToCcxt 与 searchContracts 调用者，删除返回裸 string 数组的 authority 路径。"
-      ],
-      "verificationCases": [
-        "inactive 或 skeletal market 不进入 index candidate，结果是可诊断 NoMatchingInstrument。",
-        "BTC/USDT 与 BTC/USDC 同时存在且 query 未指定 quote 时，ExplicitOnly 返回 Ambiguous；显式选择匹配的 VersionedVenuePolicy 后才可按该 policy 排序。",
-        "同 base 在两个 venues 的 index query 按 VenueIdentity 分隔，错误 venue 返回 VenueMismatch。"
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-433462008E",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "mock legacy UTA 只覆盖 wiring；目标改为 schema-backed provider data fixtures，保留无网络测试价值并明确不创建交易事务。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/ccxt-tools.spec.ts:1-33: mocks ccxt before importing CcxtBroker and imports UnifiedTradingAccount, UTAManager, MockBroker, and the CCXT tool factory."
       ],
       "currentBehavior": "工具测试在 import 前替换 ccxt，构造 legacy CcxtBroker/UTA/manager，并以 spy/stub 避开连接、schema 与真实 protocol；因此主要证明对象 wiring，而非 application service 的授权和响应解码。",
       "problem": "mock 的成功路径可以绕过 native response validation、account scope 与 connection health，测试通过不代表 AI tool 不会看到 SDK/raw Record 或错误地使用未授权账户。",
-      "targetModel": "将 fixture 分成 `ProtocolRequest`、`DataScope`/`AccountDirectory`、`MarketDataService` 与 `BrokerConnectionTestLayer` 四个 typed ports；private fixture 绑定 AccountScope 与 capability fingerprint，public fixture 明确 `DataScope.Public`，native mocks 只能产生 schema-validated observations。",
-      "pureTransitions": [
-        "wire input -> Result<FundingRateRequest|OrderBookRequest, TransportInvalid>：工具边界只做 decode，不在测试 helper 中拼 domain 对象。",
-        "MarketDataService result -> typed protocol response：成功、stale/unavailable 与 authorization failure 必须保持不同 variant。"
-      ],
-      "effectBoundary": "测试中的 fake connection 是受控 Effect port；tool 不直接 new UTA 或访问 Exchange。codec、authorization decision 和 view encoding 可纯测试，网络/manager lookup 仅由注入 service 模拟。",
-      "durability": "fixture 不写持久化；生产 query 只读取 AccountDirectory/catalog 与 market-data observation checkpoint。查询 leaf 不创建 order intent、approval、compensation 或交易 WAL；只有另一个受控 effect 明确消费 observation 时才记录其版本。",
-      "errors": [
-        "InvalidProtocolInput：schema decode 失败返回结构化工具失败。",
-        "AccountUnavailable/CapabilityUnavailable：connection readiness 不足时不访问 native mock。",
-        "UnauthorizedScope：请求 scope 与 principal 不匹配时禁止调用 MarketDataService。"
-      ],
       "preservedBehavior": [
         "保留工具测试隔离网络的快速特性。",
         "保留 CCXT source/account resolution 与 order-book/funding output 的可观察覆盖，但移除对 legacy UTA object 的必要性。"
-      ],
-      "replacementSteps": [
-        "把 ccxt mock 从 CcxtBroker constructor wiring 改为 typed service fixtures。",
-        "在 protocol boundary fixture 中显式声明 accountId/subAccountId、InstrumentId、asOf/freshness。",
-        "追加 unauthorized、stale、schema-invalid、connection-degraded 分支；删除 raw manager/SDK fixture 作为唯一证明。"
-      ],
-      "verificationCases": [
-        "同一 principal 请求已授权 scope 时得到 typed observation response。",
-        "scope 未授权或 capability degraded 时返回 QueryFailure，fake Exchange 调用计数保持为零（以结果与 side effect 观察，而非只断言 call count）。",
-        "native payload 缺 bids/invalid timestamp 时 protocol decode 失败且不产生空成功响应。"
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-27C6050997",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "直接改写 exchange.markets 和 initialized flag 掩盖了 scope/catalog 边界；目标保留可离线 fixture，但通过 AccountDirectory 与 catalog leaf 证明选择结果。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/ccxt-tools.spec.ts:35-68: makeSwapMarket builds a swap market and makeCcxtUta stubs broker init/account/positions/orders before registering the UTA."
       ],
       "currentBehavior": "测试 fixture 将 swap market 直接写入 broker.exchange.markets，手工把 broker 标成 initialized，并 stub init/getAccount/getPositions/getOrders 后把 UTA 加进 manager；它只为 resolver 提供一个 legacy account。",
       "problem": "fixture 绕过了账户发现、scope revision、capability/readiness 和 market catalog 边界；`any` market 与零值账户不能证明请求属于正确 sub-account 或观察 freshness。",
-      "targetModel": "使用 `CcxtAccountFixture{accountId, scopes, connectionGeneration, capabilities}` 与 `CatalogFixture{InstrumentMetadata}`；查询 fixture 明确 `DataScope.Public` 或显式 `AccountScope`，不把 aliceId 当通行证，也不从没有 selector 的场景捏造 default sub-account。",
-      "pureTransitions": [
-        "fixture catalog + DataScope selector -> ResolveResult：Public 只命中允许 public route；provider/venue native key 解析只命中同一 VenueIdentity，AccountScope 不进入 account-independent market identity，private query 在之后显式绑定 scope。",
-        "fixture observation -> MarketDataService response：按 ObservationFreshness 构造 fresh/stale/unavailable，而不是从 stub account 状态推导。"
-      ],
-      "effectBoundary": "fake init 与 query service 是测试边界；纯 resolver/codec 不应依赖 `broker.exchange.markets` 私有 mutable state。真实 adapter 由 connection Layer 注入，工具只消费 application port。",
-      "durability": "测试不持久化；生产 AccountDirectory、catalog revision、connection generation 与 query checkpoint 是独立 projection。fixture 的 initialized 状态不构成 authority，也不为数据查询引入 order plan。",
-      "errors": [
-        "ScopeDiscoveryPending：尚未有可用 scope 时不得 auto-resolve default。",
-        "InstrumentNotFound/AccountNotFound：selector 失败返回 typed QueryFailure。",
-        "CapabilityUnavailable：stub 宣称 init 成功但未提供 market-data capability 时仍拒绝调用。"
-      ],
       "preservedBehavior": [
         "保留 swap market 的 native symbol `BTC/USDT:USDT` 与 source account identity。",
         "保留测试无需真实凭据即可覆盖工具解析，但不保留通过私有字段强制 initialized 的 shortcut。"
-      ],
-      "replacementSteps": [
-        "用 typed account directory/capability fixture 替代 `as any` broker mutation。",
-        "给每个 fixture 加显式 `AccountScope`、catalog revision 和 connection health。",
-        "让工具测试通过 application service 解析 instrument，删除对 UTA private lifecycle 的 stub 依赖。"
-      ],
-      "verificationCases": [
-        "default unified account 只在目录明确 Available 且有一个显式 default scope 时自动选择。",
-        "同 accountId 有 spot 与 derivatives scope 时 selector 缺 subAccountId 返回 ScopeRequired/ambiguous。",
-        "catalog 中 symbol 与 account scope 不匹配时拒绝，不把错误 market 传给 broker。"
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-054253553C",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "订单簿是数据读取能力而非交易 action；保留 depth、level、freshness 与 public/private 分离，并将错误交给独立 query leaf。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K05",
-        "K06",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/ccxt-tools.spec.ts:71-127: getOrderBook tests resolve aliceId, assert localSymbol/source/bids, and cover malformed ID, wrong UTA, and no-CCXT-account errors."
       ],
       "currentBehavior": "order-book 工具测试通过 `aliceId` 调用 UTA.contractFromAliceId，再 spy broker.getOrderBook；成功结果只检查 localSymbol、source 与 bids 长度，错误通过 result.error 的字符串正则判断。",
       "problem": "测试没有固定 account/sub-account authorization、freshness/asOf、ask/price-level schema 或 stale/unavailable semantics；错误字符串无法区分 malformed protocol、wrong scope、无账户和 broker transport failure。",
-      "targetModel": "`OrderBookRequest{principal, dataScope: Public | Account(AccountScope), instrumentHint, depth: Depth}` -> provider data capability leaf 的 `OrderBookResponse{dataScope, instrumentId,bids,asks,observedAt,source,freshness,coverage}`；level 为 instrument-qualified `Price`/`Quantity`。公共 descriptor 固定交付/availability 外层，provider 可声明 sequence、precision 等 exact extensions；`Public` 不创建默认账户，`Account` 只有在显式 authorized scope 下成立。",
-      "pureTransitions": [
-        "decode request -> resolve DataScope/authorize：Public 只能进入声明 public 的 leaf，Account 必须通过 principal/scope authorization；分别返回 InvalidInput、UnauthorizedScope、InstrumentResolutionFailure 或 CapabilityUnavailable，不调用错误 adapter。",
-        "NativeOrderBookObservation -> response：校验 finite nonnegative price/amount、side sorting、instrument/sequence/timestamp 关系；结果区分 Complete、Partial、Stale、Unavailable，绝不以缺字段/异常生成空成功。"
-      ],
-      "effectBoundary": "HTTP/tool execute 仅调用 application MarketDataService；CCXT fetchOrderBook 是 interpreter Effect。测试 fake 返回 schema-backed observation，不能把 raw bids/asks spread 到 protocol。",
-      "durability": "order book 是 query fact，记录 observation provenance/asOf 与 projection checkpoint（若缓存）；不写交易 intent，也不把 stale cache 当可执行 precondition。",
-      "errors": [
-        "MalformedDataScope/InstrumentNotFound：边界 validation failure；Public 不创建账户，Account 必须带显式 scope。",
-        "UnauthorizedAccountScope/CapabilityUnavailable/PublicRouteUnavailable：账户或 public route 不可用时拒绝。",
-        "MarketDataPartial/Stale/Unavailable：显式返回状态，不返回 bids=[] 的成功。",
-        "NativeProtocolViolation(path)：非法 level、timestamp、sequence 或 instrument 由 adapter decoder 报告。"
-      ],
       "preservedBehavior": [
         "保留 aliceId/native-key 解析后的目标 instrument 与 source 字段。",
         "保留 bid/ask level 的结果语义与 limit 约束；新增的 freshness/authorization 是安全 envelope，不改变合法数据。"
-      ],
-      "replacementSteps": [
-        "把 aliceId 解码成 selector/native hint，在 application 解析 canonical InstrumentId；明确 public-only/keyless operation capability。",
-        "迁移 broker spy 为 MarketDataService fixture，断言完整 response/failure variants，而非只检查 bids 长度。",
-        "增加 unauthorized、partial/stale/unavailable、schema-invalid 和 malformed selector cases，删除 result.error regex 作为唯一协议断言。"
-      ],
-      "verificationCases": [
-        "limit 缺省使用 20，显式 1/100 成功；0、101、非整数在 adapter 前返回 InvalidDepth。",
-        "wrong scope 返回 UnauthorizedScope，不被 manager auto-resolve 到另一账户；keyless public capability 只能返回明确允许的 market-data fact。",
-        "native response 缺 price/amount、含负/NaN 或 timestamp 无证据时返回 ProtocolViolation/Unavailable；transport timeout 不产生空盘口。"
       ],
       "openQuestions": [
         "各 CCXT venue 的 order-book timestamp/sequence 可靠性需实测，sequence 缺失时 freshness policy 必须降低而不能伪造连续性。"
@@ -558,48 +174,15 @@
     },
     {
       "id": "MAP-A023467285",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "funding rate 的 precision/timestamp 仍必须实证；该条改为 provider data schema 与 availability 证据，不扩散订单审批或补偿状态。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/ccxt-tools.spec.ts:129-150: funding-rate test resolves aliceId, spies getFundingRate, and checks source/fundingRate only.",
         "services/uta/src/domain/trading/brokers/ccxt/CcxtBroker.ts:1330-1351: getFundingRate resolves a symbol, calls fetchFundingRate, defaults missing fundingRate to 0 and missing timestamp to Date.now(), and preserves optional next/previous fields."
       ],
       "currentBehavior": "funding 工具测试只断言 aliceId 解析后得到 source 与数值；实现的 broker view 还会把缺失 fundingRate 变成 0、缺 timestamp 变成当前时间，next/previous 时间与 scope/freshness 未在 tool contract 验证。",
       "problem": "缺失 rate/observedAt 被伪装成成功 observation，且 public funding capability 与 account selector 的关系没有显式建模；任意 raw spread 无法判断 rate 是否属于正确 perpetual/native market。",
-      "targetModel": "`FundingRateRequest{principal, dataScope: Public | Account(AccountScope), instrumentHint}` -> `FundingRateResponse{dataScope,instrumentId,fundingRate: Decimal,nextFundingTime?,previousFundingRate?,observedAt,source,freshness}`；Instrument 必须是 Perpetual。Public funding 不补账户/sub-account；Account route 只有显式 scope 与 capability 同时成立时可用。",
-      "pureTransitions": [
-        "wire request -> Result<FundingQuery, ValidationIssue>：解码 Public/Account dataScope 与 native hint 并检查 instrument kind；不把 Contract 或缺省账户作为协议类型。",
-        "NativeFundingPayload -> Result<FundingObservation, FundingPayloadInvalid>：rate 必须有有限数值，observedAt 必须来自有效 native timestamp；缺失的 optional next/previous time 可保持 absent，但缺 observedAt 不得补 now。"
-      ],
-      "effectBoundary": "fetchFundingRate、catalog lookup、authorization 与 connection health 是 Effect ports；rate normalization、perpetual-kind check、freshness 和 response encoding 是纯边界转换。",
-      "durability": "funding observation 可进入 market-data cache/checkpoint，保存 source/asOf/freshness、InstrumentId 和（若 private route）AccountScope；不写交易 journal，除非 prepare 明确绑定该 observation version。",
-      "errors": [
-        "NonPerpetualInstrument：spot/future 未声明 funding semantics 时拒绝。",
-        "FundingPayloadInvalid(path)：缺/非法 rate 或 observedAt 是 NativeProtocolViolation，不能映射 0/now。",
-        "FundingUnavailable/StaleObservation：返回 typed query failure 或带 stale reason 的 response。",
-        "UnauthorizedScope/CapabilityUnavailable：private/public route 不匹配时拒绝。"
-      ],
       "preservedBehavior": [
         "保留 fundingRate、optional previousFundingRate/nextFundingTime 和 source 的信息语义；缺 optional next/previous 仍可表示 absent。",
         "保留 native account/instrument hint 的入口意图，但 adapter 不向 tool 暴露 Contract 或无证据的 timestamp/rate defaults。"
-      ],
-      "replacementSteps": [
-        "定义 FundingRateRequest/Response/QueryFailure codec 与 typed FundingObservation；移除 raw spread 作为公共 output。",
-        "把 `contractFromAliceId` 替换为 AccountDirectory + InstrumentCatalog 解析，并根据 public/private capability 决定 scope。",
-        "补 missing/invalid observedAt、stale、transport、wrong kind、unauthorized cases，确保 missing rate 不变成 0。"
-      ],
-      "verificationCases": [
-        "合法 perpetual 返回 typed response，InstrumentId/source/asOf 可回读；optional next time 缺失仍不影响 observedAt。",
-        "spot Instrument 查询返回 NonPerpetualInstrument，adapter 不执行 funding request。",
-        "broker timeout 或 payload 缺 rate/timestamp 返回 Unavailable/ProtocolViolation，绝不得到 fundingRate=0 或 synthetic now。"
       ],
       "openQuestions": [
         "funding rate 的 native precision/settlement timestamp reliability 需按 venue conformance 确认。"
@@ -607,138 +190,40 @@
     },
     {
       "id": "MAP-9A16EE1A3C",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "CcxtDataBroker 的 Contract/Record 边界应拆为 funding 与 order-book 两个声明叶子，允许各自独立出现且不引入完整 Broker SDK。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/ccxt-tools.ts:1-18: imports legacy Contract, UnifiedTradingAccount, UTAManager and defines CcxtDataBroker methods returning Record<string, unknown>."
       ],
       "currentBehavior": "CcxtDataBroker 用 `Contract` 作为输入、用 `Record<string, unknown>` 作为 funding/order-book 输出；tool factory 因而依赖 UnifiedTradingAccount 与 UTAManager 的 legacy object shape。",
       "problem": "类型系统抹掉了 action/result 关联、AccountScope、instrument identity、freshness 与失败变体，AI tool 可以把 adapter-native record 当协议输出，违反 tool -> application -> broker SPI 依赖方向。",
-      "targetModel": "将 CcxtDataBroker 替换为两个可独立发现的 provider data leaves：`getFundingRate(FundingRateRequest{dataScope: Public | Account(AccountScope), ...}) -> Effect<FundingRateResponse, QueryFailure>` 与 `getOrderBook(OrderBookRequest{dataScope: Public | Account(AccountScope), ...}) -> Effect<OrderBookResponse, QueryFailure>`；broker 侧只接受 typed InstrumentId 与显式 DataScope，不要求完整 Broker SDK。",
-      "pureTransitions": [
-        "DataScope + instrument hint -> authorized provider data leaf request：Public 不推导 AccountScope，Account 必须先解析显式 scope；各 response codec 穷尽字段、单位与 freshness。",
-        "FundingRateWire|OrderBookWire -> typed observation：不得把 Contract/SDK object 透过工具传递，也不得把一个 data leaf 的缺失当另一个 leaf 的缺失。"
-      ],
-      "effectBoundary": "tool execute 是 IO/application boundary，只依赖 service port；manager/account directory 与 CCXT Exchange 的 Effect 在 composition root 装配，CcxtDataBroker 不再拥有其访问权。",
-      "durability": "查询响应不直接改交易 authority；如缓存则由 named market-data projection 写 checkpoint。公共 observation identity 使用 provider/source/instrument/asOf facts，不捏造 AccountScope；private action/observation identity 才在显式 scope 下包含 AccountScope，任何 prepare 使用 observation 都保存 version/asOf。",
-      "errors": [
-        "QueryFailure(InvalidInput|Unauthorized|CapabilityUnavailable|Unavailable|Stale)：tool 将 variant 编码成协议 response。",
-        "NativeProtocolViolation：adapter 解码失败，不能成为 `Record` 的缺失字段。",
-        "InstrumentResolutionFailure：application 要求精确 selector，不调用错误 market。"
-      ],
       "preservedBehavior": [
         "仍提供 funding-rate 与 order-book 两项工具能力。",
         "仍可支持 CCXT-specific source/account resolution，但它通过 typed selector/service 完成，而不是 legacy UTA 反射。"
-      ],
-      "replacementSteps": [
-        "在 application/protocol 定义两个具名 request/response schema 和 QueryFailure。",
-        "删除 Contract/UnifiedTradingAccount/UTAManager imports from tool module，接入 service ports。",
-        "将 CCXT adapter raw responses 在边界 decode 后再返回，迁移工具 callers 与 tests。"
-      ],
-      "verificationCases": [
-        "编译时不能把 FundingRateResponse 当 OrderBookResponse 使用；运行时两者的 tag 与 schema 独立。",
-        "service 返回 Unauthorized/Unavailable 时 tool 返回相应 typed envelope，不抛 raw SDK object。",
-        "InstrumentId 与 AccountScope 不匹配时 prepare/query 停止在 application boundary。"
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-808F4F2BEE",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "resolveCcxtOne 把两个无关 method 绑在一起是 selection 缺陷；目标按 operation capability leaf 独立解析 scope，不以 provider object presence 推断能力。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/ccxt-tools.ts:20-39: resolveCcxtOne filters manager.resolve(source) by brokerEngine and presence of both getFundingRate/getOrderBook, then returns string errors for zero/multiple targets."
       ],
       "currentBehavior": "resolveCcxtOne 以 source 字符串调用 manager.resolve，要求 brokerEngine='ccxt' 且同时拥有两个 method；零目标返回 No CCXT account，多个目标返回带 id 的字符串错误，单目标直接交出 legacy UTA/broker。",
       "problem": "选择逻辑把两个无关 query capability 绑在一起，duck typing 不能证明 principal 授权、scope readiness、连接健康或具体 instrument capability；自由字符串错误也无法驱动可恢复分支。",
-      "targetModel": "`AccountSelector = Public | ExactScope(accountId, subAccountId) | Provider(providerId) | SoleAuthorized`；AccountDirectory 只为 Account selector 返回 Available/Discovering/Unavailable，Public 直接选择 public data leaf。SoleAuthorized 只有恰有一个授权且 Available 的 explicit scope 时成立，绝不产生无 scope default；funding 与 order-book 仍按 operation 独立检查 capability。",
-      "pureTransitions": [
-        "DataScope selector + principal -> SelectionResult：Public 直接筛选 provider public leaf；Account selector 只筛选同一 provider/venue、授权且 readiness 可用的 explicit scope；多个 account candidates 返回 AmbiguousAccount/ScopeRequired，不选第一个。",
-        "SelectionResult + required operation -> AuthorizedQueryPort：funding 与 order-book 独立检查 capability；一个 operation 缺失不隐藏另一个，也不从 Public 推导 Account。"
-      ],
-      "effectBoundary": "manager/projection/account health 读取是 application Effect；selection policy 可纯执行。工具不 introspect broker methods，也不读取 SDK。",
-      "durability": "selection 只保存 scope revision、connection generation 与 selected capability leaf 的 fingerprint；它是 query context，不创建交易计划。若后续 effect 使用同一 scope，effect writer 自己保存其 identity/version。",
-      "errors": [
-        "NoAccountAvailable：目录没有可用 CCXT scope。",
-        "AmbiguousAccount(candidates)/ScopeRequired：要求 explicit account+subAccount。",
-        "ScopeDiscoveryPending：Discovering 不能当 default。",
-        "OperationCapabilityUnavailable(operation)：只缺 funding 或 order-book 时精确报告。",
-        "UnauthorizedScope：principal 不得越权。"
-      ],
       "preservedBehavior": [
         "只有一个合法 CCXT account 时可继续提供自动选择，但必须是显式 Available scope。",
         "source 仍可按 account id/provider 标识目标；改变的是 resolver 返回 ADT 而非字符串。"
-      ],
-      "replacementSteps": [
-        "实现 AccountQueryService/CapabilityService，按 operation 取 capability。",
-        "将 `manager.resolve` duck typing 替换为 selector decoder + account directory lookup。",
-        "迁移 callers 对 typed failures 的穷尽处理，删除 free-form error objects。"
-      ],
-      "verificationCases": [
-        "目录一个已授权 Available scope 时 SoleAuthorized 成功且返回 explicit AccountScope；两个 scope 或 discovery pending 时不自动选择。",
-        "账户只声明 funding capability 时 funding query 可用，order-book 返回 OperationCapabilityUnavailable；反之亦然。",
-        "connection degraded、scope revision 过期或 keyless 无 private capability 时 query 得 typed failure，不从旧 UTA object 继续调用。"
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-F12C6450E2",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "tool 当前只捕获 selector 错误并让 broker rejection 逸出；目标让 funding leaf 拥有精确 input/output/error schema，保留 keyless public route 的独立 availability。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K05",
-        "K06",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/ccxt-tools.ts:41-66: defines a Zod input with aliceId/source, calls contractFromAliceId, calls broker.getFundingRate, and spreads the result with source."
       ],
       "currentBehavior": "getFundingRate 只用 Zod 检查 aliceId/source 字符串，解析 legacy Contract；解析异常被转成 `{error: message}`，broker rejection 不在 try/catch 中而直接逸出，成功结果以 source 加 raw broker fields spread 返回。",
       "problem": "输入未解析为 AccountScope+InstrumentId，输出/失败未 schema 化；broker transport、native protocol、授权和 stale observation 可能直接成为未处理 Promise rejection，调用者看不到可区分的 QueryFailure。",
-      "targetModel": "tool 边界 decode `FundingRateRequest{principal, dataScope: Public | Account(AccountScope), instrumentHint}`，application 返回 `FundingRateResponse | QueryFailure`；FundingObservation 明确 perpetual kind、Decimal rate、observedAt、source、freshness 与 dataScope。Public 只能在 provider 声明 public funding 时可用，Account 必须携显式 authorized scope。",
-      "pureTransitions": [
-        "wire schema -> Result<FundingRateRequest, InvalidProtocolInput>：验证 selector/native hint 结构；不把字符串通过即视为授权或 instrument resolution 成功。",
-        "FundingRateRequest -> service -> response：先 authorize/resolve，再 decode native funding；missing/invalid rate/time、broker rejection、stale 与 transport 保持不同 QueryFailure。"
-      ],
-      "effectBoundary": "execute 只调用 application service；CCXT fetchFundingRate 的 Effect 由 adapter 映射 BrokerUnavailable/Unknown/ProtocolViolation。tool 不捕获 Error.message 再推断 domain variant。",
-      "durability": "funding observation 可写 market-data cache/checkpoint；工具响应带 observation asOf/freshness。它不是交易 journal event，除非另有显式 prepare precondition。",
-      "errors": [
-        "InvalidAccountSelector/InstrumentResolutionFailure：在 service 前返回协议 validation failure。",
-        "UnauthorizedScope/CapabilityUnavailable/PublicOnly：按 principal、scope 与 capability 拒绝。",
-        "NativeProtocolViolation/ObservationUnavailable/StaleObservation：typed failure；不返回 raw exception 或 0 rate。"
-      ],
       "preservedBehavior": [
         "仍支持 `accountId|nativeKey` 形式的来源提示，并返回来源标识。",
         "仍保留 next/previous funding fields；不再把缺字段默认为无证据的成功值。"
-      ],
-      "replacementSteps": [
-        "共享 FundingRateRequest/Response/QueryFailure codec，替换 Zod+Record output。",
-        "将 contractFromAliceId 改为 AccountDirectory/InstrumentCatalog 解析，broker 只接 typed identity/capability。",
-        "为 malformed、wrong account、public-only/keyless、broker rejection、stale 和 invalid native payload 增加 service contract cases。"
-      ],
-      "verificationCases": [
-        "合法 perpetual selector 返回 typed FundingRateResponse，scope（若私有）、InstrumentId、source、observedAt 均可回读。",
-        "malformed/wrong-account/keyless-without-public-capability 在 service 前失败，不产生 native call 或成功 response。",
-        "fetchFundingRate timeout/rejected response 变成 Unavailable/Unknown/ProtocolViolation，tool execute 不出现未处理 Promise rejection。"
       ],
       "openQuestions": [
         "funding rate 的 native precision/settlement timestamp reliability 需按 venue conformance 固定；未确认时 freshness 降级。"
@@ -746,48 +231,14 @@
     },
     {
       "id": "MAP-CC557A8B9C",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "limit 1..100/default 20 是用户可观察约束；目标保留它并把 depth、sequence、freshness、backpressure 组成 order-book data leaf，禁止空列表伪造成功。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K05",
-        "K06",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/ccxt-tools.ts:68-95: validates optional limit 1..100, defaults to 20, resolves a Contract, calls getOrderBook, and spreads broker fields with source."
       ],
       "currentBehavior": "getOrderBook 输入只限制整数 limit 1-100，默认 20；解析 aliceId 后将 Contract 交给 broker，返回 source 与 broker raw fields。没有 response schema、freshness、authorization 或背压结果。",
       "problem": "limit 的语法校验未形成 venue request policy，raw levels 可缺 price/amount 或不排序；失败与 stale/partial 数据没有可观察状态，AI 可能把空/旧盘口用于风险判断。",
-      "targetModel": "`OrderBookRequest{principal, dataScope: Public | Account(AccountScope), instrumentHint, depth: Depth(1..100), consistency}` -> `OrderBookResponse{dataScope,instrumentId,bids,asks,observedAt,source,freshness,coverage}`；levels 使用 typed Price/Quantity。`Public` 与 `Account` 是显式数据路由，public/keyless route 只有 provider capability 声明才可选，不能凭空创建 default scope。",
-      "pureTransitions": [
-        "input -> DataScope + Depth：缺省 depth 20，拒绝 0/101/non-integer；Public/Account route、instrument resolution 与 authorization 每一步产生独立 failure。",
-        "NativeOrderBook -> Result<OrderBookObservation, NativeProtocolViolation>：验证 finite/nonnegative levels、排序、instrument、timestamp/sequence；缺 sides/invalid values 不被映射为 0。",
-        "query pressure/freshness -> Coverage：过载为 Backpressured，provider incomplete 为 Partial，stale 为 Stale；tool 不 spread raw fields。"
-      ],
-      "effectBoundary": "application service 控制 rate/backpressure，adapter interpreter 执行 fetchOrderBook；tool 只 decode/encode，不能直接访问 UTA/Exchange。",
-      "durability": "盘口 observation 只进入缓存/market projection，checkpoint 带 asOf/freshness；不把 stale/partial levels 写成交易 precondition，准备时若依赖盘口需保存 observation version。",
-      "errors": [
-        "InvalidDepth/DataScopeResolutionFailure：边界拒绝。",
-        "UnauthorizedAccountScope/CapabilityUnavailable/PublicRouteUnavailable：账户或 public route 不可用时拒绝。",
-        "Backpressured、Stale、Partial、Unavailable、NativeProtocolViolation：分别可观察，不能统一成 bids=[] 成功。"
-      ],
       "preservedBehavior": [
         "默认深度 20 与最大 100 的用户可见约束保留。",
         "返回 bid/ask 两侧 levels 与 source 语义保留；增加单位、scope、freshness 以防误用。"
-      ],
-      "replacementSteps": [
-        "将 input/response 收敛到公共 MarketDataCodec，Depth 变为 typed ADT。",
-        "application 实施 rate/backpressure/freshness policy；adapter 只负责 fetch 和 native decode。",
-        "迁移 callers 从 raw broker object 到 typed observation/failure，加入 malformed levels/timestamp/partial cases。"
-      ],
-      "verificationCases": [
-        "limit omitted/20、1、100 产生对应 depth；非法值在 adapter 前返回 InvalidDepth。",
-        "levels 未按约定排序、含负/NaN、instrument 不一致或 timestamp 无效时返回 ProtocolViolation。",
-        "overload、timeout、partial depth、stale cache 分别呈现 Backpressured/Unavailable/Partial/Stale，不出现 empty-book success。"
       ],
       "openQuestions": [
         "各 venue 的 depth limit、序列号与 timestamp freshness 需实测后进入 capability；不支持的深度返回 UnsupportedDepth。"
@@ -795,46 +246,14 @@
     },
     {
       "id": "MAP-D084EF97BB",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "Bitget 的 exact native route 证据应保留，但 Classic/Unified 识别属于 provider account capability leaf，不能由同名 SDK method 或全局账户接口推导。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/exchanges/bitget.ccxt.spec.ts:1-25: creates real ccxt.bitget instances with mocked private methods and asserts unscoped balance goes to spot while explicit USDT-FUTURES swap goes to contract assets."
       ],
       "currentBehavior": "测试使用 CCXT Bitget 实例但替换 native private methods；`fetchBalance()` 无参数调用 spot assets，`fetchBalance({type:'swap', productType:'USDT-FUTURES'})` 调用 contract assets，断言具体 native payload。",
       "problem": "测试证明了当前 CCXT routing，却没有把 product/account family 绑定到 AccountScope 或 typed native request；若 transport 误切到 UTA v3，仍可能通过相似 method 名成功但读到另一钱包。",
-      "targetModel": "`BitgetAccountFamily = ClassicV2 | UnifiedV3`；Classic connection capability 明确 `spotBalance` 与 `usdtFuturesBalance` endpoint/product route，request 携 `AccountScope{accountId, subAccountId: spot|derivatives}`；native schema 固定 route/productType，不能因同名 SDK method 切到 UnifiedV3。",
-      "pureTransitions": [
-        "AccountScope + Bitget capability -> BalanceRoute：spot scope 编译 unscoped/spot route，derivatives scope 编译 swap + productType USDT-FUTURES。",
-        "Native balance payload -> AccountObservation：schema decode 后标记 wallet namespace、asOf 与 completeness。"
-      ],
-      "effectBoundary": "测试可使用真实 CCXT class 但 native HTTP methods 仍是 fake Effect；生产 ConnectionLayer 在配置时检查 Classic family，interpreter 才调用 endpoint，domain 不依赖 ccxt instance。",
-      "durability": "余额 observation 以 scope/namespace/version 写入 AccountingProjection checkpoint；prepared plan 只消费带 scope 与 freshness 的 immutable facts，不把 endpoint call 本身当成功证据。",
-      "errors": [
-        "BitgetFamilyMismatch：配置宣称 UTA/Classic 不一致时 connection acquisition 失败。",
-        "NativeRouteMismatch：scope 与 productType 不一致返回 ProtocolViolation。",
-        "BalanceUnavailable/Incomplete：不能用 spot 成功掩盖 derivatives 失败。"
-      ],
       "preservedBehavior": [
         "Classic spot balance 的无 scope compatibility route 仅可在目录已产生 explicit spot/default scope 且 capability 证明时保留。",
         "USDT-FUTURES swap balance route 与 exact native parameters 保留，但 response 必须绑定 derivatives scope。"
-      ],
-      "replacementSteps": [
-        "把 CCXT endpoint spy 改为 NativeRequestSchema/interpreter conformance test，同时构造 Classic scope。",
-        "新增 Unified family mismatch、wrong productType、partial wallet evidence cases。",
-        "输出 typed AccountObservation，删除把 native method call 作为唯一契约的测试。"
-      ],
-      "verificationCases": [
-        "Classic + spot scope 只产生 spot endpoint；Classic + derivatives scope 必须携 `type=swap, productType=USDT-FUTURES`。",
-        "productType 改为 COIN-FUTURES、声明 UnifiedV3 或 endpoint family mismatch 时 route decoder/connection layer 拒绝，不调用 Classic path。",
-        "一侧 endpoint permission/transport failure 时 AccountObservation 是 Partial/Unavailable，不能返回完整 balance 或把另一 wallet 当成功。"
       ],
       "openQuestions": [
         "Classic 与 Unified v3 的账户识别/响应字段和权限错误码需真实连接 conformance 固定；未证实前禁止 UTA capability。"
@@ -842,48 +261,14 @@
     },
     {
       "id": "MAP-A5CD6EF457",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "planType/productType 路由是 Bitget provider extension；target 保留请求精确字段并把 parent/child 关系作为未证实 observation，而不是隐含的全局 attached-order contract。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K07",
-        "K08"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/exchanges/bitget.ccxt.spec.ts:27-44: sends a swap trigger/profit_loss open-order request and asserts the Bitget plan endpoint receives productType and planType."
       ],
       "currentBehavior": "测试以 swap/productType=USDT-FUTURES/trigger/planType=profit_loss 调用 fetchOpenOrders，并断言 CCXT 选择 `privateMixGetV2MixOrderOrdersPlanPending`，payload 保留 productType 与 planType；这是 Bitget 条件 open-order data read，不是 place/protection dispatch，也没有验证 parent/child identity 或 observation completeness。",
       "problem": "条件 namespace route 虽然可达，但测试没有证明 listing row 的 identity、scope、分页或 parent/child relation；把 read route 成功解释为 attached protection 或 dispatch 会伪造保护状态，失败也不应启动补偿 mutation。",
-      "targetModel": "`BitgetConditionalNamespace = NormalPlan | ProfitLoss | TrackPlan` 是 provider data-listing leaf；request 绑定 derivatives AccountScope、`productType=USDT-FUTURES` 与该 leaf 声明的 trigger/trailing fields，response 产出 `OrderObservation`，可附 `ProtectionRelationEvidence{Known|Unknown}`、parent/child/native id、namespace、trigger/limit prices 与 asOf。`planType` 仅是 route tag，不冒充 attached protection 或其他 provider 的 protection schema；future protection effect 若存在，另由独立 effect leaf 声明。",
-      "pureTransitions": [
-        "declared conditional listing schema + Bitget capability -> ConditionalReadRequest：仅已声明 namespace 与 exact native extensions 可编译；unsupported action/protection parameter variants 结构性不存在，不创建 command。",
-        "Native conditional row -> Result<OrderObservation, NativeProtocolViolation>：先解码 required order identity/scope/status/price；缺 parent/child relation 产生 `ProtectionRelationEvidence.Unknown` 或 Partial，不变成 attached protection。",
-        "Listing rows + cursor/asOf evidence -> ListingResult：namespace coverage 不完整时 Partial/Unavailable；read route 的成功不构造 effect acknowledgement。"
-      ],
-      "effectBoundary": "native endpoint read/observe 是 adapter Effect；planType mapping、row identity/relation 与 response codec 为纯。读取 Ack 只表示返回了 observation，不是 protection acknowledgement，也没有 dispatch boundary。",
-      "durability": "持久化 scope、request/cursor、namespace、observation identity、relation evidence 与 listing checkpoint；缺 parent/child relation 时保留 Unknown/Partial，不创建 dispatch identity、approval、compensation 或 effect conflict lock。若另一个 controlled effect 消费 relation，该 effect 自己写 WAL/CAS/unknown recovery。",
-      "errors": [
-        "ConditionalNamespaceLeafAbsent：没有该 data leaf/schema 时无 command，不以 Unsupported stub 代替。",
-        "ConditionalObservationUnavailable：声明的 listing leaf 暂时不可达或权限不足，返回 Partial/Unavailable。",
-        "ProtectionRelationUnknown：row 缺可证明 parent/child linkage 时只保留 Unknown/Partial relation。",
-        "NativeProtocolViolation(path)：缺 required order identity/scope/status/invalid price 时拒绝归属并保留 evidence。"
-      ],
       "preservedBehavior": [
         "profit_loss route 的 exact productType/planType 仍保留。",
         "open-order sweep 可继续发现 conditional orders，但不再把 route call 的成功当作 attached protection confirmation。"
-      ],
-      "replacementSteps": [
-        "将计划 namespace 编成 typed Bitget conditional listing request，保留 route fields 并绑定 derivatives scope。",
-        "迁移测试从 method spy 扩展为 request schema decode、row identity/relation 与 ListingResult completeness。",
-        "为 attached TP/SL、trailing effect（若另有声明）、unknown endpoint outcome 补 conformance cases；读路径不挂 PlaceOrder/Compensation action contract。"
-      ],
-      "verificationCases": [
-        "profit_loss request 仅在 derivatives scope + USDT-FUTURES 下编译；spot scope 或 COIN-FUTURES 直接返回 route/schema failure，不产生 command。",
-        "native response 缺 required order identity/status/price 时返回 ProtocolViolation；缺 parent/child relation 时保留 OrderObservation 与 Unknown/Partial relation，不能报告保护已存在。",
-        "namespace read timeout 或分页边界未知返回 Partial/Unavailable/ObservationUnknown，恢复先按 data observation policy reconcile，不发送保护 mutation。"
       ],
       "openQuestions": [
         "Bitget Classic plan endpoint 是否返回稳定 parent/child identity、分页与最终一致性证据需实测。"
@@ -891,90 +276,27 @@
     },
     {
       "id": "MAP-F14E67E0AE",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "id-only CcxtOrder 与最小 Exchange cast 只证明测试 wiring；目标改成 native schema fixture 与受限 endpoint port，不要求其他 provider 共享 Bitget order shape。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/exchanges/bitget.spec.ts:1-15: fakeOrder casts {id,symbol} to CcxtOrder and fakeExchange casts a minimal object with fetchPositions/fetchOpenOrders to Exchange."
       ],
       "currentBehavior": "Bitget tests 以仅含 id/symbol 的对象强转 CcxtOrder，并以仅含两个方法的对象强转 Exchange；fixture 没有 status、amount、namespace、timestamps 或 native response envelope。",
       "problem": "强转 fixture 会掩盖 decoder 对缺字段、错误类型和权限错误的处理，无法证明 open-order observation 能携带 AccountScope、completeness 与 order identity。",
-      "targetModel": "`BitgetNativeOrderFixture` 由 `NativeOrderSchema` 构造，包含 id/symbol/status/amount/filled/price/timestamps、wallet namespace 与 raw-safe evidence；`BitgetTestConnection` 仅实现 typed endpoint ports，不把两个方法强转成完整 Exchange。",
-      "pureTransitions": [
-        "NativeOrderFixture -> Result<OrderObservation, NativeProtocolViolation>：字段/单位/status/namespace 关系先校验，再映射 InstrumentId + AccountScope。",
-        "Endpoint fixtures -> ListingResult：每 response 携 namespace/cursor/asOf；缺必需 identity 或 coverage 证据返回 Partial/ProtocolViolation，不生成 Complete 空列表。"
-      ],
-      "effectBoundary": "纯 fixture/codec 测试不需真实 CCXT Exchange；interpreter contract test 可以注入受限 endpoint port，禁止 SDK object 离开 adapter。",
-      "durability": "fixture 无持久化职责；目标 reconciliation 用 durable `ListingResult` checkpoint 与 broker order identity 去重，测试可验证重复 observation 幂等。",
-      "errors": [
-        "NativeProtocolViolation(path)：缺 id/symbol/status、类型/数值/timestamp 非法时失败。",
-        "NamespaceIncomplete(namespace)：coverage 不全产生 Partial/Unavailable，不等于无订单。",
-        "ScopeMismatch(expected, actual)：wallet namespace 与请求 scope 不一致时拒绝归属。"
-      ],
       "preservedBehavior": [
         "保留 Bitget order/position endpoint 的隔离测试意图。",
         "保留对 namespace 参数和 dedup 的覆盖，但将 fake raw object 替换为可验证 schema fixture。"
-      ],
-      "replacementSteps": [
-        "移除 `as CcxtOrder`/`as unknown as Exchange` 的成功 fixture path。",
-        "用 typed native response builders 覆盖 regular/trigger/plan/trailing rows。",
-        "将测试结果接到 OrderObservation/ListingResult contract，不把 method shape 当协议。"
-      ],
-      "verificationCases": [
-        "合法 Bitget order fixture 解码为 scope-bound observation，保留 namespace/asOf。",
-        "缺 id、非数值 amount、unknown status、invalid timestamp 各自产生具体 ProtocolViolation/Unknown，不经 cast 成功。",
-        "同一 scoped order 在多个 namespace fixture 中合并一条、保留 provenance；不同 scope/instrument 不合并。"
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-2305603E29",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "strict booleans 的 source 意图是防止 material read 伪成功；target 改成按 scope/namespace 派生 availability，保留该安全约束但移除全局 read flags。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/exchanges/bitget.spec.ts:16-24: asserts spot/derivatives sub-account definitions and strictPrivateReads/strictOpenOrderReads true."
       ],
       "currentBehavior": "测试固定两个 subAccounts：spot walletTypes=['spot']、derivatives walletTypes=['swap']，并固定两个 strict boolean 为 true；这些值来自 generic optional override interface。",
       "problem": "布尔 flag 不能表达哪个 namespace 必须成功、scope/permission 需要什么，也不能区分 account-family mismatch 与暂时不可达；strictness 只在运行时 catch 分支决定。",
-      "targetModel": "`BitgetAccountMetadata{family: ClassicV2, scopes:[spot, derivatives], requiredReads, optionalReads, walletRoute}`；`CapabilitySet` 按 operation/namespace 给出 Required/Optional/Unavailable，取代两个 boolean 与裸 walletTypes。",
-      "pureTransitions": [
-        "AccountMetadata + requested scope -> ReadPlan：spot/derivatives route 与 required namespace 集合显式固定；scope 缺失或 family mismatch 失败。",
-        "ReadPlan + endpoint results -> ObservationCompleteness：所有 required reads 成功且 boundary 证据完整才 Complete；permission/transport/schema failure 产 Partial/Unavailable/Unknown。"
-      ],
-      "effectBoundary": "capability derivation 与 read-plan 编译纯；endpoint permission/health query 由 connection Effect 注入并产生 evidence。",
-      "durability": "保存 account family、scope revision、capability fingerprint、required/covered namespace 与 observation checkpoint；strict failure 不可写成完整 AccountSnapshot。",
-      "errors": [
-        "AccountFamilyMismatch：拒绝绑定错误 Bitget family。",
-        "CapabilityUnavailable{namespace}：调用者不得执行依赖该 namespace 的 action/query。",
-        "RequiredReadFailed{namespace,evidence}：AccountObservation/listing 标 Partial/Unavailable，保持 reconciliation exclusion。"
-      ],
       "preservedBehavior": [
         "Bitget Classic 的 spot 与 USDT-M scope 仍是两个显式账户。",
         "strict private/open-order semantics 继续阻止 material read failure 被当作成功，只是由 typed coverage 表达。"
-      ],
-      "replacementSteps": [
-        "用 account metadata/capability records 替换 strict booleans 和 wallet type strings。",
-        "让 capability service 在连接/权限证据基础上派生每个 action availability。",
-        "迁移测试断言 required namespace、scope 与 typed failures。"
-      ],
-      "verificationCases": [
-        "spot 与 derivatives scope 的 required read 集合不同且显式；请求不指定 subAccountId 时不会在两者间猜测。",
-        "缺 derivatives required read 时 AccountSnapshot 非 Complete，不能写 zero equity；缺 optional read 时只按 policy 降级并保留 evidence。",
-        "配置 UnifiedV3 时 Classic-only product route 被拒绝，而不是切换 strict flag 后继续。"
       ],
       "openQuestions": [
         "Bitget permission errors 是否能稳定区分未开通 wallet 与网络故障需实测；两者须保留不同 evidence。"
@@ -982,47 +304,14 @@
     },
     {
       "id": "MAP-0AD385A30A",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "USDT-FUTURES 与 spot route 的 exact 参数是可保留的 Bitget-native behavior；目标仅增加 scope-bound schema/observation，不把余额读取套上交易 effect 状态。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/exchanges/bitget.spec.ts:26-55: tests swap balance routing with productType, unchanged spot routing, and positions routing with productType USDT-FUTURES."
       ],
       "currentBehavior": "测试断言 swap balance 通过 defaultImpl 收到 `{type:'swap', productType:'USDT-FUTURES'}`，spot params 原样传递，positions 调用 `fetchPositions(undefined,{productType:'USDT-FUTURES'})`。",
       "problem": "路由正确性目前只靠 raw params/call shape；没有 schema 验证 productType 与 AccountScope，也没有观察 timestamp、currency/unit、partial failure 或 derivatives-only 归属。",
-      "targetModel": "定义 `BitgetWalletScope = Spot | Derivatives` 与 typed `BalanceRequest`/`PositionsRequest`；derivatives route native params 由 capability 编译为 `type=swap, productType=USDT-FUTURES`，spot route 不隐式添加 productType。输出 scope-bound `AccountObservation`/`PositionObservation`，并独立记录 listing coverage 与 mark/PnL valuation authority；缺 optional valuation evidence 不抹掉已覆盖 position rows。",
-      "pureTransitions": [
-        "scope + operation -> NativeReadRequest：仅 Derivatives 可编译 USDT-FUTURES positions/balance；Spot 不产生 derivatives request，family mismatch 在 dispatch 前失败。",
-        "Native balance/position rows -> typed observations：校验 Decimal quantity/money、currency/instrument、source/asOf 与 namespace completeness，不把 undefined symbol 当全账户语义。"
-      ],
-      "effectBoundary": "request compilation/decode 纯；fetchBalance/fetchPositions 的 network Effect 属 Bitget interpreter；application/accounting 只消费 typed observations。",
-      "durability": "AccountSnapshot 与 PositionObservation 按 AccountScope、instrument identity、observation sequence 写 projection；required read 失败保留 Partial，不更新为零值。",
-      "errors": [
-        "InvalidProductRoute(scope, params)：scope/type/productType 不一致时 ProtocolViolation。",
-        "PermissionDenied/NetworkUnavailable(namespace)：按 namespace 返回 typed ObservationFailure，不能以另一 wallet 成功掩盖。",
-        "PositionDecodeFailure(path)：缺/坏 required quantity、instrument、currency 或 scope marker 时保留 row/error，不写 zero position。",
-        "PositionValuationUnavailable(path)：contractSize、mark 或 PnL 缺失/单位未证实时只降低 valuation capability，不把已覆盖 position listing 变成空或 zero。"
-      ],
       "preservedBehavior": [
         "swap 始终使用 USDT-FUTURES，spot route 不新增 productType。",
         "positions 只从 derivatives route 读取，避免把 spot wallet 误当杠杆持仓。"
-      ],
-      "replacementSteps": [
-        "把 raw params 断言升级为 typed request/response conformance。",
-        "迁移 account/position callers 绑定 AccountScope 与 timestamp/freshness。",
-        "实现 per-namespace failure/completeness 处理，删除 undefined/raw record 作为隐式 scope。"
-      ],
-      "verificationCases": [
-        "Derivatives scope 的 balance/positions request 准确带 productType；Spot scope 只走 spot balance 且不会调用 derivatives positions route。",
-        "调用 positions 时缺 derivatives scope、family 不是 ClassicV2 或 productType 冲突时 dispatch 前失败。",
-        "native row 缺 currency/instrument/quantity 或 response coverage 不明时返回 ProtocolViolation/Partial，而不是空持仓。"
       ],
       "openQuestions": [
         "Bitget position row 的 contractSize/mark/PnL 字段可靠性需实测后决定 accounting capability。"
@@ -1030,46 +319,14 @@
     },
     {
       "id": "MAP-D119678B33",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "六次调用的顺序是 rate/fairness 事实，长度不是 coverage 证明；target 改成 Bitget provider namespace HOF 与 durable observation cursor，而非通用 broker sweep。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/exchanges/bitget.spec.ts:57-75: asserts six namespace requests execute in order and returns one order per namespace."
       ],
       "currentBehavior": "测试 fake fetchOpenOrders 对 spot regular/trigger 与 USDT-M regular/normal_plan/profit_loss/trailing 六组 params 顺序返回一条 order，并断言调用参数顺序与结果长度为 6。",
       "problem": "当前测试只看顺序/长度，无法证明每个 namespace 的覆盖 evidence、cursor、scope、限速等待和 partial outcome；任何空列表或遗漏都可能仍被当成完整 sweep。",
-      "targetModel": "`BitgetNamespace = SpotRegular | SpotTrigger | SwapRegular | SwapNormalPlan | SwapProfitLoss | SwapTrackPlan`；`ListingResult` 是 C07 的 `Complete(scope, coverage, cursorBoundary, observedAt, orders) | Partial | Unavailable`，namespace 顺序由 typed FairnessPolicy 固定。",
-      "pureTransitions": [
-        "NamespacePlan + capability -> ordered Observe jobs：每次提交下一 namespace，持久化 request/lease/attempt；不以 Promise array 的长度证明覆盖。",
-        "Namespace results -> ListingResult：全部 required namespace 成功、每页 cursor boundary 明确才 Complete；known permission/transport/schema failure 按 policy 保留 Partial/Unavailable。"
-      ],
-      "effectBoundary": "namespace fetch 是 Effect；scheduler/rate-limit/backpressure 负责串行执行，纯 fold 合并 namespace rows、去重与 coverage。",
-      "durability": "每个 namespace 的 observation job、lease、cursor/asOf 与 failure evidence 由 durable observation checkpoint 保存；这是一种数据 listing 进度，不是 order approval/WAL。未完成 coverage 继续排除 absence 结论。",
-      "errors": [
-        "NamespaceUnavailable(namespace)：ListingResult.Partial/Unavailable，并安排 durable reconciliation。",
-        "RateLimited(namespace)：按 durable backoff 延后，不并行 burst。",
-        "DuplicateOrderIdentity：按 ScopedOrderRef 合并并保留全部 namespace provenance。"
-      ],
       "preservedBehavior": [
         "六组具体 namespace 与当前串行顺序保留。",
         "同一 sweep 返回合并订单的目标不变；新增 completeness/observedAt 使其可安全用于外部订单观察。"
-      ],
-      "replacementSteps": [
-        "把参数数组改成具名 NamespacePlan ADT，记录 required/optional 与 rate policy。",
-        "迁移测试断言 ordered requests、coverage、cursor、scope 和 complete/partial result。",
-        "接入 durable reconciliation worker；移除仅以返回长度代表成功的测试。"
-      ],
-      "verificationCases": [
-        "六 namespace 全成功且 boundary 完整时返回 Complete，orders 去重后数量和 provenance 正确。",
-        "第五 namespace permission failure 返回 Partial/Unavailable，covered orders 保留但 absence detector 不把遗漏当撤单。",
-        "worker 在 namespace 3 后崩溃，重启从 durable checkpoint 续跑未完成 namespace，未知已发送请求不被 blind retry。"
       ],
       "openQuestions": [
         "Bitget endpoint 是否支持稳定分页/cursor 与每类 rate limit 需实测，未确认边界不得标 Complete。"
@@ -1077,45 +334,14 @@
     },
     {
       "id": "MAP-D0F4B7EAFE",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "symbol:id 去重已经暴露 scope/instrument collision 风险；ScopedOrderRef 作为该 provider 的稳定观察 identity 保留，不声称 native id 全局唯一。",
-      "contractAnchors": [
-        "K02",
-        "K03",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/exchanges/bitget.spec.ts:77-99: verifies duplicate native ids for one symbol merge while equal ids on different symbols remain distinct."
       ],
       "currentBehavior": "测试让六 namespace 返回相同 id；同 symbol 时期望一条，不同 symbol 时期望两条。实现实际以 `${order.symbol ?? ''}:${order.id}` 去重，缺 id 的 row 在 helper 中被跳过。",
       "problem": "未校验字符串 key 没有 AccountScope、canonical InstrumentId 或 venue generation；缺 symbol 会聚到 `:id`，同 instrument 的字段冲突也无版本/观察证据。",
-      "targetModel": "定义 `BrokerOrderId` 与 `ScopedOrderRef{scope,instrumentId,brokerOrderId}`；dedup key 为 scope + canonical instrument + native id，namespace 只作 provenance。venue 若证明 id 全局唯一也只记录 evidence，不能默认跨 instrument/scope 合并。",
-      "pureTransitions": [
-        "decoded OrderObservation[] -> Map<ScopedOrderRef, MergedOrder>：同 ref 合并 namespace provenance；冲突字段按 observation version/asOf 进入 reconcile，不任意覆盖。",
-        "Merged map -> ListingResult：缺 native id/symbol -> InstrumentId 的 row 返回 ProtocolViolation/Partial，不写空 key 或算作完整覆盖。"
-      ],
-      "effectBoundary": "dedup/merge 是纯 fold；native order decode 与 catalog identity 在 adapter boundary，projection writer 负责持久化 merged observation。",
-      "durability": "ScopedOrderRef 是 OrdersProjection 与 RemoteObservations 的稳定唯一键；合并结果、source namespace、observation version 原子写入，避免重启后 cache 丢失导致 duplicate。",
-      "errors": [
-        "MissingOrderIdentity(path)：row 不进入 Complete，保留 decode evidence。",
-        "ConflictingOrderObservation(ref, fields)：保留版本并进入 reconcile。",
-        "ScopeMismatch(expected, actual)：拒绝跨 wallet 合并相同 native id。"
-      ],
       "preservedBehavior": [
         "同 symbol/native id 的重复结果仍只产生一个 order。",
         "不同 symbol 即使 native id 相同仍保持两个 distinct order；canonical identity 进一步避免 cross-venue collision。"
-      ],
-      "replacementSteps": [
-        "从 raw string key 迁移到 ScopedOrderRef constructor。",
-        "在 native decoder 中先解析 symbol -> InstrumentId，再做 dedup。",
-        "projection/index 使用 durable unique key 与 observation version，补冲突/缺字段 cases。"
-      ],
-      "verificationCases": [
-        "同 scope+instrument+id 横跨 regular/trigger/plan 只保留一条，provenance 含所有 namespace。",
-        "同 id 不同 instrument、settlement、venue 或 subAccount 保留独立 entries。",
-        "空 id、缺 symbol 或 symbol 无法 catalog resolve 返回明确 failure，不能产生 `:id` 或 Complete listing。"
       ],
       "openQuestions": [
         "Bitget native order id 是否跨 namespace 全局唯一需实测；在没有证据时必须保留 instrument+scope 复合键。"
@@ -1123,45 +349,14 @@
     },
     {
       "id": "MAP-5AA0964109",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "partial rejection 不能丢掉已覆盖 namespace；target 保留 covered/missing/error evidence，并把 recovery 仅用于已发出的不确定远程请求，而非普通读的订单补偿。",
-      "contractAnchors": [
-        "K02",
-        "K05",
-        "K07",
-        "K08"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/exchanges/bitget.spec.ts:101-112: makes profit_loss namespace throw and expects the entire open-order sweep to reject rather than return a partial list."
       ],
       "currentBehavior": "测试让 profit_loss request 抛出 `bitget permission denied`，并断言 fetchAllOpenOrders 整体 rejection；它防止 partial list 伪装成空/完整，但失败目前是 generic Error。",
       "problem": "抛异常无法携带已覆盖 namespaces、missing evidence、scope 与 durable checkpoint，重启/外部观察只能丢弃整个上下文；strict rejection 也没有分清 known permission failure 与 unknown transport outcome。",
-      "targetModel": "`ListingResult.Partial{scope,coveredNamespaces,missing,evidence,orders}` 与 `Unavailable{scope,reason}`；`ObservationFailure` 区分 PermissionDenied、TransportUnknown、NativeProtocolViolation。failure policy 只允许对 known rejection 显式决定继续，material listing 缺口永不 Complete。",
-      "pureTransitions": [
-        "namespace fold + failure -> ListingResult：保存已合并 orders、covered/missing namespaces 和 failure evidence；不丢弃前面成功事实，也不把 failure 变成空列表。",
-        "failure class + durable observation job state -> ObservationRecoveryDecision：known permission 可标 capability degraded；request-start 后 Unknown 进入 data observation Reconciling/RecoveryRequired，不能 blind retry 未知 read。若另一个 controlled effect 消费该 observation，该 effect 另有自己的 transaction recovery。"
-      ],
-      "effectBoundary": "namespace fetch 是 data-observation Effect；纯 fold 负责保留 evidence。writer 持久化 checkpoint，scheduler 决定后续 reconcile；普通 read 不由 catch block 触发 mutation retry，任何另行的 effect recovery 由其自身 contract 负责。",
-      "durability": "partial checkpoint 与 failure evidence 原子写入 RemoteObservations/ProjectionCheckpoints；未完成 listing 的 scope/order absence exclusion 保持数据排他性，恢复后从 durable cursor/namespace 状态继续，不创建交易 effect lock。",
-      "errors": [
-        "PermissionDenied(namespace)：Partial/Unavailable，更新 capability evidence，不把 covered rows 当全量。",
-        "ObservationUnknown：保持 data ObservationRecoveryRequired/exclusion，先 observe/reconcile。",
-        "NativeProtocolViolation：阻断该 adapter/result，保留 raw-safe evidence。"
-      ],
       "preservedBehavior": [
         "profit_loss material failure 仍阻止 Complete listing；已覆盖 orders 与失败 namespace 证据现在保留在 Partial/checkpoint。",
         "不能因为 strict source test 期望 rejection 就丢弃可恢复上下文；safe target 返回 typed result。"
-      ],
-      "replacementSteps": [
-        "将 throw-only contract 改为 typed ListingResult/ObservationFailure，保存 covered/missing/checkpoint。",
-        "按 C03 将 permission/transport/schema 分类，scheduler 只重试可证明未发送或安全的 read job。",
-        "未知期间暂停受影响 scope 的 absence mutation/交易 forward，但允许独立安全 observation，不把所有 query 永久停摆。"
-      ],
-      "verificationCases": [
-        "profit_loss permission failure 返回 Partial/Unavailable，absence detector 不撤销未见订单。",
-        "transport timeout after request start 返回 Unknown/Reconciling，不伪造 PermissionDenied。",
-        "重启从 checkpoint 继续未发送 namespace；已发送但 outcome Unknown 的 namespace 先按 observation policy 处理。"
       ],
       "openQuestions": [
         "Bitget permission response 与 timeout 的可分类字段需实测；若无法区分，统一按 Unknown/Unavailable 保守处理。"
@@ -1169,45 +364,14 @@
     },
     {
       "id": "MAP-8BF5C81D82",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "Classic-only 注释不是 family probe；target 将 family/version 变成 provider availability evidence，未证明时不注册 Classic leaf。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/exchanges/bitget.ts:1-15: documents Classic-only semantics, warns Unified Trading Account v3 must not be enabled, and declares the USDT-FUTURES constant."
       ],
       "currentBehavior": "文件以注释约束 Bitget Classic：spot/futures 资金分属 v2 endpoints，CCXT 未带参数时默认为 spot；Unified Trading Account v3 被明确排除，但代码层只有 registry 选择与文档，没有 account-family 类型。",
       "problem": "靠注释和 exchange key 无法阻止错误 credential/config 连接 UTA v3；相同 CCXT class 可能让错误账户看似可读，进而把不同 wallet semantics 写成同一个 scope。",
-      "targetModel": "`BitgetAccountFamily = ClassicV2 | UnifiedV3`；connection config 必须声明 family，`BitgetClassicInterpreter` 只接受 ClassicV2，`AccountScope` 显式包含 accountId + `subAccountId: spot|derivatives`；USDT-FUTURES 是 derivatives `ProductId`。",
-      "pureTransitions": [
-        "config + connection/account evidence -> AccountFamilyCheck：声明与 native endpoint/version 不一致返回 FamilyMismatch，未证实时 capability unavailable。",
-        "ClassicV2 + scope -> CapabilitySet：派生 spot/futures wallet reads 与 required namespace coverage，不能从 exchange name 或 transport option 推断 UnifiedV3。"
-      ],
-      "effectBoundary": "family probe、credential resolution、native endpoint version 是 connection Effect；ADTs/capability derivation 纯。family mismatch 在 Layer acquisition 阶段失败，不进入交易 kernel。",
-      "durability": "AccountId 独立于 CredentialRef；持久化 family、scope revision、endpoint/version evidence、capability fingerprint 与 historical observations。secret rotation 不重建 scope identity。",
-      "errors": [
-        "BitgetAccountFamilyMismatch{declared,observed}：拒绝进入 Classic layer。",
-        "AccountScopeUnavailable/DiscoveryPending：尚未证明 scope 时不创建 default。",
-        "CapabilityUnavailable{namespace}：不能以 spot read 代替 derivatives truth，也不能以 Classic route 代替 UnifiedV3。"
-      ],
       "preservedBehavior": [
         "Classic spot 与 futures 分离及 USDT-FUTURES route 保留。",
         "Unified v3 不被此 adapter 误启用；若未来支持，必须另建具名 interpreter/capability，而非 transport option。"
-      ],
-      "replacementSteps": [
-        "把 family 作为 config schema 与 connection identity 的必需 tag。",
-        "在启动 Layer 中做 endpoint/account evidence 检查并产出 scope/capability。",
-        "移除仅靠 `exchangeOverrides[config.exchange]` 选择 Classic semantics 的路径，注册 family-specific interpreter。"
-      ],
-      "verificationCases": [
-        "声明 ClassicV2 且 native evidence 一致时创建 explicit spot/derivatives scopes。",
-        "声明 UnifiedV3、endpoint version mismatch 或 family evidence 不足时 Layer 获取失败/Unavailable，绝不调用 Classic productType。",
-        "CredentialRef rotation 后 AccountId、family 与 sub-account identity 不变。"
       ],
       "openQuestions": [
         "Bitget native account family 识别 endpoint/version 的可靠字段需 live probe；无证据时 family capability 保持 unavailable。"
@@ -1215,46 +379,14 @@
     },
     {
       "id": "MAP-B432FAA965",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "顺序请求和 symbol:id 合并是 source 的可复用意图，target 以 schema decode、scope/instrument identity 和 listing coverage 重新表达，不依赖 raw array。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/exchanges/bitget.ts:17-30: fetchAndMergeOpenOrders sequentially fetches configured parameter sets and deduplicates non-empty orders by symbol plus native id."
       ],
       "currentBehavior": "fetchAndMergeOpenOrders 对 parameterSets 逐项 await fetchOpenOrders，跳过没有 id 的 row，以 `${symbol}:${id}` 合并并返回 raw CcxtOrder[]；没有 namespace/source/time/completeness/request identity。",
       "problem": "raw result 丢失哪个 namespace 已覆盖、哪些失败/遗漏、scope 与观察时间；跳过无 id 会静默丢掉 potentially material order；字符串 key 未验证 symbol。",
-      "targetModel": "`NamespaceObservation{namespace,scope,requestId,cursor,observedAt,rows}`；每 row 先经 NativeOrderSchema + catalog identity 生成 ScopedOrderRef；fold 输出 ListingResult Complete/Partial/Unavailable 与 provenance。缺 id 不静默 skip，而是 ProtocolViolation/Partial。",
-      "pureTransitions": [
-        "ordered namespace responses -> Result<ListingResult, ObservationFailure>：逐项 decode/validate，累积 coverage 与 dedup；required failure 使结果 Partial/Unavailable。",
-        "ScopedOrderRef -> MergedOrder：同 scope/instrument/id 合并 namespace provenance，冲突版本进入 reconcile，不能靠 raw symbol string 覆盖。"
-      ],
-      "effectBoundary": "每次 fetchOpenOrders 是 Bitget interpreter 的 remote Effect；sequential scheduling/rate-limit 由 durable scheduler，merge/decoder/completeness 是纯。",
-      "durability": "namespace request/response、cursor、attempt、merged observation 与 checkpoint 由 `ObservationCheckpointWriter` 持久化；未知/partial 只保留 listing exclusion，不能被解释为交易补偿状态。",
-      "errors": [
-        "MissingNativeOrderIdentity：记录 ProtocolViolation/Partial，不能当成无订单。",
-        "NamespaceReadFailed(namespace)：typed Partial/Unavailable。",
-        "ObservationUnknown：请求已发出时保持 data-observation reconciliation，不能 blind retry 或把 namespace 当 empty；若由另一个 effect 消费，effect outcome 单独建模。"
-      ],
       "preservedBehavior": [
         "按 parameterSets 顺序访问并按 symbol+id 去重的业务意图保留。",
         "非空 order 才能参与 merge 的安全条件保留，但空 identity 不再静默丢失而是显式证据。"
-      ],
-      "replacementSteps": [
-        "将 parameterSets 改为具名 BitgetNamespacePlan，含 scope、required、cursor 与 fairness policy。",
-        "在每个响应处执行 native schema/catalog decode，再 fold 成 ListingResult。",
-        "接入 durable observation jobs/checkpoints，删除 raw CcxtOrder[] 作为公共结果。"
-      ],
-      "verificationCases": [
-        "同一 order 被多个 namespace 返回时合并一条并记录全部 provenance。",
-        "某 namespace permission error 时结果 Partial/Unavailable，covered rows 保留且不被当全量。",
-        "order 缺 id 时触发 ProtocolViolation；中断/重启按 attempt evidence 分类，未知 request 不重复发送。"
       ],
       "openQuestions": [
         "Bitget open-order namespace 的分页、最终一致性及 native id retention 需实测后确定 cursor/absence policy。"
@@ -1262,45 +394,14 @@
     },
     {
       "id": "MAP-4714F941FF",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "strict flags 与 walletTypes 只表达配置，不表达 entitlement；target 让 Bitget provider tree 声明 required/optional namespace，并分离 availability 与 structural absence。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/exchanges/bitget.ts:32-42: sets strictPrivateReads/strictOpenOrderReads and declares spot/derivatives subAccounts with walletTypes spot/swap."
       ],
       "currentBehavior": "Bitget override 用两个 optional booleans 声明 private/open-order 严格读取，并把 subAccounts 声明为 spot 与 derivatives；实际失败行为由 CcxtBroker 对 generic flags 的 catch 分支决定。",
       "problem": "flags 与 walletTypes 是松散配置，不能说明每个 action 的 namespace coverage、权限、scope revision 或 Partial/Unavailable 的 payload；strictness 不能代替 capability derivation。",
-      "targetModel": "`BitgetReadPolicy` 按 scope/operation 声明 required namespace、optional namespace、permission requirement、failure classification；`CapabilitySet` 输出 ActionAvailability 与 observation completeness policy，scope 永远显式。",
-      "pureTransitions": [
-        "AccountMetadata + operation -> RequiredReadSet：从 family/scope/kind 选择 namespace，不使用 boolean。",
-        "ReadResult[] -> CapabilityObservation：required 全部成功才 Complete，否则 Partial/Unavailable 并附 evidence。"
-      ],
-      "effectBoundary": "policy/capability/read-set 是纯；权限 probe 与 private endpoint 调用是 connection/interpreter Effect，错误通过 typed error channel 传出。",
-      "durability": "scope/capability fingerprint、required/covered namespace 与 permission evidence 写入 account projection；strict read failure 不写完整 snapshot，ObservationRecoveryRequired 保持受影响 scope 的 listing/exclusion，不创建交易 approval。",
-      "errors": [
-        "RequiredNamespaceUnavailable(namespace)：CapabilityUnavailable 或 PartialObservation。",
-        "PermissionDenied vs NetworkUnknown：分别保留可分类 evidence，后者不被转成 rejection。",
-        "UnknownScope：拒绝读取而不 fallback spot。"
-      ],
       "preservedBehavior": [
         "Bitget 两个 wallet scope 与 private/open-order strict 意图保留。",
         "material read 缺失继续阻止 false equity/empty order list；target 仅把理由和 coverage 类型化。"
-      ],
-      "replacementSteps": [
-        "删除 strict booleans 作为公共 capability，改为 BitgetReadPolicy/CapabilitySet。",
-        "在 account discovery 产生 scope + required reads，按 operation 派生 availability。",
-        "把 CcxtBroker catch path 迁移到 typed Listing/AccountObservation outcome。"
-      ],
-      "verificationCases": [
-        "spot read 成功但 derivatives required read 失败时 aggregate AccountSnapshot 非 Complete。",
-        "open-order required namespace 缺失时 listing 为 Partial/Unavailable，不能返回 []。",
-        "scope selector 错误只返回 UnknownScope，不读取默认 wallet。"
       ],
       "openQuestions": [
         "哪些 Bitget namespaces 对 Classic account 是 material/optional 需基于真实 account product entitlement 样本确认。"
@@ -1308,47 +409,14 @@
     },
     {
       "id": "MAP-B224A5F3E2",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "USDT-FUTURES route 与 undefined-symbol positions 是真实 source 边界；target 保留 exact native params，但要求 response scope evidence，避免把 read projection 当交易 authority。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/exchanges/bitget.ts:44-53: adds productType USDT-FUTURES for swap balances and fetches positions from that product namespace, while spot params pass through."
       ],
       "currentBehavior": "fetchBalance 根据 params.type===swap 添加 productType=USDT-FUTURES 后调用 defaultImpl；其他 params 原样传递。fetchPositions 永远用 undefined symbol 与 productType=USDT-FUTURES 调用 Exchange。",
       "problem": "raw params 与 undefined symbol 无法证明 derivatives AccountScope、settlement/product identity 或 response completeness；spot/default 误用可跨 wallet 读错资金。",
-      "targetModel": "`BitgetBalanceRoute{scope: Spot|Derivatives, product: Spot|UsdtFutures}` 与 `PositionReadRoute{scope: Derivatives, productType: USDT-FUTURES}`；native request schema 由 account family/capability 编译，response decode 成 AccountObservation/PositionObservation。",
-      "pureTransitions": [
-        "AccountScope + requested operation -> RoutePlan：只有 derivatives scope 可编译 USDT-FUTURES positions，spot scope 不产生该 request。",
-        "Native payload -> typed observation：currency, quantity, instrument, source/asOf/completeness 都经 constructor 校验。"
-      ],
-      "effectBoundary": "route compile/decode 纯；defaultImpl/Exchange fetch 是 interpreter Effect。adapter 不把 raw balance record 交给 accounting。",
-      "durability": "Account/Position observations 按 scope 与 observation sequence 写 projection；product route 与 capability fingerprint 进入 evidence，partial read 不覆盖旧完整 snapshot。",
-      "errors": [
-        "RouteScopeMismatch：拒绝 spot/derivatives 交叉请求。",
-        "ProductTypeUnsupported：若该 route/variant 未在 selected leaf schema 声明，则输入/route schema failure；若已声明但当前 connection 无法提供，则 CapabilityUnavailable。",
-        "PositionObservationInvalid：不写零/空 position，保留 native evidence。",
-        "ObservationUnknown：查询请求已发出但结果未知时进入 data observation reconcile，不冒充 empty；ordinary read 不产生 transaction RemoteOutcome。"
-      ],
       "preservedBehavior": [
         "swap balance 与 positions 继续使用 USDT-FUTURES；spot balances 继续保持原参数。",
         "不改变 Bitget Classic wallet separation，只增加 typed scope/product proof。"
-      ],
-      "replacementSteps": [
-        "以 route ADT 替代 `params?.['type']` 字符串分支。",
-        "给 positions request 显式绑定 derivatives scope 与 product capability。",
-        "迁移 defaultImpl 结果为 schema-backed observation，并保留 source/time/completeness。"
-      ],
-      "verificationCases": [
-        "derivatives scope 的 balance/positions 请求准确携 productType；spot scope 不调用 derivatives endpoint。",
-        "调用 positions 时无 derivatives scope 或非 Classic family 立即失败。",
-        "native balance/position response 缺 currency/instrument/quantity 时返回 ProtocolViolation。"
       ],
       "openQuestions": [
         "USDT-FUTURES endpoint 是否返回足够的 account/position scope markers 需真实响应样本确认。"
@@ -1356,48 +424,14 @@
     },
     {
       "id": "MAP-56798F3CBB",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "六类 namespace 的完整 sweep 是 Bitget-specific data coverage；target 用可组合 namespace leaves 与 checkpoint 表达它，禁止把单个 Promise 当 Complete。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/exchanges/bitget.ts:55-67: sweeps six explicit namespaces (spot regular/trigger and USDT-M regular/normal-plan/profit-loss/trailing) sequentially through fetchAndMergeOpenOrders."
       ],
       "currentBehavior": "fetchAllOpenOrders 固定六组 params，前三/后续区分 spot、swap、trigger、productType、normal_plan、profit_loss、track_plan，并通过串行 helper 合并；没有 durable request identity、rate-limit record 或 completeness result。",
       "problem": "全量订单事实依赖六次 raw SDK call；中途失败、进程崩溃、权限差异和 endpoint eventual consistency 都无法在结果中表达，scheduler 只能看到一个 Promise。",
-      "targetModel": "`BitgetOpenOrderSweepPlan{scope, ordered namespaces, requiredness, fairness/backoff}`；每 namespace 产生 `ObserveOpenOrdersJob`，最终输出 C07 ListingResult。scope、venue、namespace 与 order identity 进入 conflict key/provenance。",
-      "pureTransitions": [
-        "SweepPlan + durable cursor -> next namespace job：每次按 order 定义的顺序提交，禁止并行 burst。",
-        "NamespaceObservation fold -> Complete|Partial|Unavailable：仅六类 required evidence/cursor 都齐全时 Complete。",
-        "ListingResult -> OrdersProjection delta：按 ScopedOrderRef 去重与版本比较，partial 不运行 absence removal。"
-      ],
-      "effectBoundary": "scheduler lease、CCXT requests、rate-limit waits 是 Effect；plan validation、merge、completeness 和 projection delta 是纯/Writer boundary。",
-      "durability": "每个 namespace 的 observation job、cursor、attempt、checkpoint 与 listing evidence 由数据投影 writer 持久化；Unknown/Partial 保持受影响 scope 的 exclusion，不套用订单 approval/compensation。",
-      "errors": [
-        "NamespacePermissionDenied：明确 Partial/Unavailable，capability 降级。",
-        "RateLimited：durable backoff，不在 catch 里重放全 sweep。",
-        "SweepUnknown：请求已发出时只观察，不能把未完成 namespace 视为空。",
-        "ProjectionConflict：按 order identity/version 重试 writer，而非重复远端读取。"
-      ],
       "preservedBehavior": [
         "六个 Bitget namespace 和串行顺序必须保持，避免 API burst。",
         "regular/trigger/plan/trailing 都纳入账户 open-order truth，不以统一 CCXT endpoint 替代。"
-      ],
-      "replacementSteps": [
-        "把参数数组拆为 typed namespace plan，写明 requiredness/rate policy。",
-        "以 durable Observe jobs 执行 sweep，并把每次结果写入 checkpoint。",
-        "让 OrdersProjection 只消费 Complete 或显式处理 Partial；删除单次 Promise/raw list authority。"
-      ],
-      "verificationCases": [
-        "六 namespace 全部完成且 cursor boundary 明确，返回 Complete 且 dedup 正确。",
-        "任一 namespace 失败，返回 Partial/Unavailable，未见订单不被标为 canceled。",
-        "在 namespace 4 后 crash/restart 时，恢复读取 durable checkpoint 并按 recovery 分类，不能盲目重新发送未知请求。"
       ],
       "openQuestions": [
         "Bitget 六类 endpoint 的分页/重复/最终一致性行为与可用 rate limit 需 live evidence；在缺证据时 listing 不能标 Complete。"
@@ -1405,93 +439,27 @@
     },
     {
       "id": "MAP-AF6737A53E",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "Bybit id-only fixtures 不足以证明 native order schema；target 仅在 Bybit provider leaf 内补 category/status/fill evidence，不推广成全局 order record。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/exchanges/bybit.spec.ts:1-8: defines fake native orders with an id and symbol and imports the Bybit override for isolated listing tests."
       ],
       "currentBehavior": "Bybit listing test 以 `{id,symbol}` 强转 CcxtOrder，未提供 category/status/amount/fill/time 或 scope，直接把 fake Exchange 交给 override。",
       "problem": "fixture 绕过 Bybit native response schema，无法覆盖 category identity、conditional order fields、unknown status 和 partial listing evidence；id-only cast 不能证明 merge 安全。",
-      "targetModel": "`BybitNativeOrderFixture` 由 `NativeOrderSchema` 构造，至少含 id/symbol/category/status/amount/filled/timestamps 与 raw-safe evidence；typed test connection 分别实现 spot/swap category endpoints，并显式绑定 AccountScope。",
-      "pureTransitions": [
-        "native fixture -> Result<OrderObservation, NativeProtocolViolation>：先解码 category/symbol -> InstrumentId，再绑定 scope/ref/status/fill。",
-        "category response fold -> ListingResult：coverage、cursor/asOf、dedup provenance 必须显式，不能从 id 数组推出 Complete。"
-      ],
-      "effectBoundary": "fixture/decoder 纯；category endpoint 调用通过 Bybit interpreter Effect port，不直接传 Exchange SDK 对象到领域或 protocol。",
-      "durability": "测试不写 journal；生产观察保存 category provenance、ScopedOrderRef 与 checkpoint，重启不依赖进程内 fake/cache。",
-      "errors": [
-        "NativeProtocolViolation(path)：缺 identity/status/amount、类型非法或 category unknown。",
-        "CategoryIncomplete(category)：未完成 category 返回 Partial/Unavailable，不代表无订单。",
-        "ScopeMismatch(expected, actual)：order category/wallet 与请求 scope 不一致时拒绝。"
-      ],
       "preservedBehavior": [
         "保留 Bybit override 的隔离 open-order listing 测试目的。",
         "保留通过 fake endpoint 验证 category routing 的低成本方式，但数据先经过 schema。"
-      ],
-      "replacementSteps": [
-        "删除 CcxtOrder/Exchange 强转 fixture，改用 typed native response builders。",
-        "把 order identity、category、status 与 observedAt 加到 fixtures。",
-        "增加 malformed/unknown/partial cases，结果断言 ListingResult/OrderObservation。"
-      ],
-      "verificationCases": [
-        "合法 spot/swap fixture 均解码为 scope-bound observations，保留 category/asOf。",
-        "相同 scoped id/symbol 的 overlap 合并并保留 category provenance；不同 instrument/scope 保持 distinct。",
-        "缺 id、非法 category、invalid numeric/timestamp 产生 ProtocolViolation，不返回成功空列表。"
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-8F4D954D91",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "spot/swap 两次请求与 overlap dedup 是 Bybit source contract；target 保留 category leaves、ScopedOrderRef 和 coverage evidence，不把 category literals 变成 universal SDK API。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/exchanges/bybit.spec.ts:9-28: expects explicit spot and swap category requests, deduplication of overlapping id, and merged ids."
       ],
       "currentBehavior": "测试以 `byType` 对 spot/swap 返回 rows，断言两次请求 params 分别为 `{type:'spot'}`/`{type:'swap'}`，重复 s1 被按 id 合并，最终 ids 为 s1/w1。",
       "problem": "测试没有断言 AccountScope、category coverage/cursor/timestamp、symbol identity 或 listing Complete；仅按 id dedup 可能在不同 instrument/scope 误合并。",
-      "targetModel": "`BybitCategory` 是该 provider 当前声明的 `Spot | Swap` category leaf（新增/未知 category 需另有 provider schema extension）；`BybitListingPlan{scope, requiredCategories, cursorPolicy}` 每 row 解析成 `ScopedOrderRef(scope,instrumentId,brokerOrderId)`，输出 C07 Complete/Partial/Unavailable，category 仅作 provenance/coverage。若账户 capability 明确不含某 declared category，结果为 explicit unavailable 而非静默省略，且不存在的 category leaf 不要求其他 venue 复刻。",
-      "pureTransitions": [
-        "CategoryPlan -> durable Observe jobs：调度顺序/并行性由 fairness policy，但每 category 的 request/coverage identity 必须记录。",
-        "Category rows -> merge：同 ScopedOrderRef 合并重复 category evidence；不同 instrument/scope 保持 distinct。",
-        "merge + coverage -> ListingResult：两类 required evidence 与 cursor boundary 齐全才 Complete。"
-      ],
-      "effectBoundary": "Bybit `fetchOpenOrders(...,{type})` 属 adapter Effect；category plan、dedup、completeness 是纯，projection writer/scheduler 持久化。",
-      "durability": "保存 category request identity, scope, cursor/asOf, lease/attempt 与 merged order projections；partial listing 不执行 absence removal，ObservationRecoveryRequired 保持数据排他性，不创建交易 effect lock。",
-      "errors": [
-        "CategoryLeafAbsent(category)：该 provider 未声明该 category 时没有 query command，不以 Unsupported stub 填充。",
-        "CategoryUnavailable(category)：已声明 category 暂时不可用时返回 ListingResult.Partial/Unavailable，不返回 []。",
-        "OrderIdentityConflict：保留冲突 evidence 并 reconcile。",
-        "RateLimited/TransportUnknown：scheduler backoff/reconcile，不依赖 concurrent Promise 默认行为。"
-      ],
       "preservedBehavior": [
         "spot+swap 两个显式 category 请求保留。",
         "重叠同一 order 的 dedup 结果保留；target key 加 scope/instrument 以避免错误 collision。"
-      ],
-      "replacementSteps": [
-        "将 category literals 收敛为 BybitCategory ADT 与 capability required set。",
-        "用 schema decoder + ScopedOrderRef 做 merge，结果返回 ListingResult。",
-        "测试增加 coverage/asOf/scope/partial/restart evidence，不只比较 id 数组。"
-      ],
-      "verificationCases": [
-        "spot/swap 都成功且 coverage boundary 完整时返回 Complete，overlap order 只有一条且 provenance 含两类。",
-        "同 id 不同 symbol/instrument/scope 不合并；缺任一 required category 时不存在的 order 不触发撤单。",
-        "账户明确为 spot-only 时 category policy 以 typed capability 报告 swap unavailable，不伪造 two-category Complete。"
       ],
       "openQuestions": [
         "Bybit category response 是否存在跨 category 同 id 不同 symbol、分页与最终一致性需实测后固定 identity/absence policy。"
@@ -1499,44 +467,14 @@
     },
     {
       "id": "MAP-4651A86203",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "mock 的 10016 字符串不能证明 permission；target 保留 spot facts 并返回 typed Partial/Unknown，由 Bybit leaf 的 native error evidence 决定 availability。",
-      "contractAnchors": [
-        "K02",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/exchanges/bybit.spec.ts:30-40: makes swap category throw after spot returns an order and expects the sweep to reject with the service error."
       ],
       "currentBehavior": "测试模拟 spot 成功返回 s1、swap 抛出 `bybit 10016 service error`，断言整体 rejection；它保护了 partial listing 不应 ghost 订单的规则，但没有 typed missing-category evidence。",
       "problem": "generic throw 丢弃已覆盖 spot order 和 swap failure 分类；恢复时无法知道是否可重试、是否权限问题，也无法把 scope/order 排他权交给 durable RecoveryCase。",
-      "targetModel": "`ListingResult.Partial{scope,covered:[Spot],missing:[Swap],orders,evidence}`；failure 包含 Bybit error code/class，区分 PermissionRejected、TransportUnknown、NativeProtocolViolation；request-start 后 Unknown 进入 data observation Reconciling/RecoveryRequired，而不是 transaction RemoteOutcome。",
-      "pureTransitions": [
-        "category responses + failure -> Partial/Unavailable：保留已读 spot rows 与 swap failure evidence，不能 throw 后丢上下文。",
-        "failure class + attempt state -> RecoveryDecision：known permission 可标 capability degraded；Unknown 只排 observe/reconcile，不能直接再读/写。"
-      ],
-      "effectBoundary": "category fetch 是 Effect，纯 fold/classifier 不抛 generic Error；writer 原子写 partial checkpoint，scheduler 触发 retry/reconcile。",
-      "durability": "Partial/Unknown observation 与 category cursor 写入 RemoteObservations/ProjectionCheckpoints；missing category 期间 scope/order absence 不作撤单证据，RecoveryRequired 保持 exclusion。",
-      "errors": [
-        "BybitPermissionRejected(code)：typed Partial/Unavailable，要求 capability recovery。",
-        "BybitObservationUnknown：保留 attempt evidence，进入 data observation Reconciling，不视为权限或空列表。",
-        "NativeProtocolViolation：停止该 result、保留诊断，不降为空。"
-      ],
       "preservedBehavior": [
         "swap category 的 source failure 继续阻止 Complete listing；spot 已读事实不丢失。",
         "generic rejection 被替换成带 covered/missing scope 的 typed partial evidence，不放宽安全性。"
-      ],
-      "replacementSteps": [
-        "将 throw assertion 改为 ListingResult/ObservationFailure contract，记录 category checkpoint。",
-        "将错误 code 分类但未证明的 code 按 Unknown 处理；禁止从 mock message 猜 Permission。",
-        "接入 durable reconcile/recovery，Partial 不触发 absence detection 或 blind retry。"
-      ],
-      "verificationCases": [
-        "swap permission failure 返回 Partial/Unavailable，s1 仍可被观察但不视为全量。",
-        "swap timeout after request start 返回 Unknown/Reconciling，而非 PermissionDenied。",
-        "重启后依据 durable category evidence 继续观察，不丢 spot provenance 或误撤未见订单。"
       ],
       "openQuestions": [
         "Bybit code 10016 是否稳定代表服务/权限故障需真实响应确认；未确认时按 Unknown 保守处理。"
@@ -1544,48 +482,15 @@
     },
     {
       "id": "MAP-A80A70DAA5",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "四路 lookup 顺序和 stop:true 是 Bybit-native lookup behavior；target 保留它并把每路错误/absence 留在 provider leaf，不能用 catch-all not-found。",
-      "contractAnchors": [
-        "K02",
-        "K03",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/exchanges/bybit.ts:1-31: fetchOrderById tries open regular, open conditional, closed regular, and closed conditional endpoints in order, using stop:true for conditional paths, then throws generic not-found Error."
       ],
       "currentBehavior": "Bybit override 依次调用 fetchOpenOrder(id,symbol)、同 endpoint 加 stop:true、fetchClosedOrder、同 endpoint 加 stop:true；每次 catch 所有异常，最终以 generic `Order ... not found` 结束。",
       "problem": "任一 endpoint 的网络超时、权限拒绝或 schema 错误都被当作 not found；顺序虽有 venue 依据但没有 dispatch identity、scope、absence evidence 或 durable reconciliation。",
-      "targetModel": "`OrderQuery = ByIds(scope, NonEmpty BrokerOrderIds)`；每 requested id 在 catalog 已有 instrument binding 后编译 `BybitOrderLookupPlan{scope,instrumentId,brokerOrderId,paths:[RegularOpen,ConditionalOpen,RegularClosed,ConditionalClosed]}`，每 path 返回 Found/DefinitiveAbsent/Rejected/TransportUnknown/NativeProtocolViolation，最终逐 ID 返回 Found/NotFoundWithEvidence/Unavailable/ProtocolFailure；缺 instrument/native lookup descriptor 先返回 MissingLookupDescriptor，NotFound 只在四路明确 absence evidence 后构造。",
-      "pureTransitions": [
-        "each requested id + lookup descriptor -> LookupPathResult[] -> PerIdLookupResult：按固定顺序保留 first Found；任何 timeout/permission/schema error 阻止该 id 的 NotFound，只有全部 DefinitiveAbsent 才 NotFoundWithEvidence。",
-        "Found native order -> OrderObservation：schema decode status/fill/identity，构造 ScopedOrderRef；一个 id 的 Found 不因后续 path 不可达而被覆盖，其他 requested ids 独立分类。"
-      ],
-      "effectBoundary": "四个 endpoint calls 是 Bybit interpreter Effect；路径选择、error classification、merge 与 outcome evaluation 纯。SDK casts 被限制在 adapter codec。",
-      "durability": "order lookup job 保存 scope、symbol/native lookup descriptor、attempt/lease、path evidence 与 observation sequence；Unknown/ObservationRecoveryRequired 保持 order absence/exclusion，重启不得因 cache 缺失判 not found，也不创建交易 effect lock。",
-      "errors": [
-        "MissingLookupDescriptor(scope, brokerOrderId)：没有持久化/授权的 instrument/native symbol 时不发 lookup request。",
-        "DefinitiveNotFound：四路明确 absence 后才返回 NotFoundWithEvidence，不能用来证明 mutation 未执行。",
-        "BybitPermissionRejected(path)：typed ObservationFailure，修复 capability 后重试。",
-        "ObservationUnknown：path transport/retention 未知时只排 data observation reconcile，不转成 RemoteOutcome 或 not-found。",
-        "NativeProtocolViolation(path)：保留 raw-safe evidence，阻断该 lookup result。"
-      ],
       "preservedBehavior": [
         "四路 endpoint 顺序与 conditional `stop:true` 参数保留。",
         "找到任一路 order 即返回，不因其他路径不可达而覆盖 Found。",
         "generic not-found 改为有证据的 NotFound，避免扩大 not-found 语义。"
-      ],
-      "replacementSteps": [
-        "为各 endpoint 定义 native response/error schemas 与 absence evidence。",
-        "把 override 改成 typed observer，接收 scoped lookup descriptor 而非裸 symbol/id。",
-        "将 lookup job 接入 durable reconciliation，删除 catch-all Error。"
-      ],
-      "verificationCases": [
-        "open regular Found 时返回 scoped observation，不因后续 path 未调用/不可达改变 Found。",
-        "regular paths definitive absent、closed conditional Found 时返回 conditional observation。",
-        "任一路 timeout/permission/schema failure 时结果 Unknown/Rejected/ProtocolViolation，不能返回 not found；四路均明确 absent 才 NotFound。"
       ],
       "openQuestions": [
         "Bybit 各 path 的错误码与 definitive absence payload、订单 retention horizon 需真实 conformance 固定。"
@@ -1593,46 +498,14 @@
     },
     {
       "id": "MAP-9D14A7D985",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "Bybit category sweep 的 provenance/coverage 是数据观察约束；target 保留合并与 absence guard，不让 listing 读路径承担交易审批或补偿。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/exchanges/bybit.ts:33-52: documents category-scoped open orders, fetches spot and swap explicitly, merges non-empty ids, and throws on category failure."
       ],
       "currentBehavior": "Bybit open-order override 说明默认 type=swap 会隐藏 spot；实现顺序查询 spot/swap，只有 `o.id` 才 merge，按 id 去重；任一 category fetch 抛错即整体抛出。",
       "problem": "raw id dedup 与 generic throw 没有 scope/instrument/category provenance、cursor/asOf、rate policy 或 Partial/Unavailable；缺 id row 被静默跳过。",
-      "targetModel": "`BybitCategoryObservation{category,scope,requestIdentity,cursor,observedAt,rows}` -> C07 ListingResult；row 经 NativeOrderSchema 与 catalog 解码为 ScopedOrderRef，category coverage 是 Complete 判据。",
-      "pureTransitions": [
-        "category response fold -> Result<ListingResult, ObservationFailure>：spot/swap required policy 与 scope/cursor 均验证；任一未分类 failure 返回 Partial/Unavailable，缺 id 是 ProtocolViolation。",
-        "ScopedOrderRef fold -> OrdersProjection delta：同 order 合并 category provenance；Partial/Unknown 禁止 absence removal。"
-      ],
-      "effectBoundary": "fetchOpenOrders category calls 与 retries/backoff 属 scheduler/interpreter Effect；decode/dedup/completeness 纯；writer 负责 checkpoint 原子提交。",
-      "durability": "category job/lease/attempt、cursor/asOf、merged orders 与 failure evidence 持久化；unknown/partial scope 的 order-absence exclusion 进入 ObservationRecoveryCase，不因 throw/empty 释放，也不创建交易 effect lock。",
-      "errors": [
-        "CategoryUnavailable(category)：ListingResult.Partial/Unavailable，禁止空列表。",
-        "MissingOrderIdentity：ProtocolViolation/Partial，不跳过无证据 row。",
-        "RateLimited/TransportUnknown：durable backoff 或 Reconciling，不重发未知 request。"
-      ],
       "preservedBehavior": [
         "spot/swap 显式 category sweep 与 id overlap merge 保留。",
         "任何 category 失败继续不能形成完整 listing；target 用 typed completeness 替代 throw。"
-      ],
-      "replacementSteps": [
-        "以 BybitCategory ADT 与 required coverage policy 替换 literals。",
-        "实现 native order decode、ScopedOrderRef 与 C07 ListingResult。",
-        "接入 durable observation scheduler，记录 category-level evidence 和 freshness。"
-      ],
-      "verificationCases": [
-        "spot/swap 全成功且 cursor boundary 明确时 Complete；same id/symbol overlap 仅一条且 provenance 完整。",
-        "swap failure 返回 Partial/Unavailable，spot rows 保留但不驱动 absence detection。",
-        "无 id row 触发 ProtocolViolation；same id across distinct instrument/scope 不合并。"
       ],
       "openQuestions": [
         "Bybit category listing 的分页、cursor、eventual consistency 与 rate limit 需实测。"
@@ -1640,48 +513,14 @@
     },
     {
       "id": "MAP-DD9535B452",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "Hyperliquid 的 IOC-limit 语义只由注释和 adapter source 暗示；target 把它作为有证据门槛的 provider effect leaf，并把 position mark 保留为 data evidence。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K04",
-        "K07",
-        "K08"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/exchanges/hyperliquid.ts:1-19: documents CCXT market-order emulation as slippage-bounded IOC limit requiring a reference ticker, an 80% server deviation cap, and parsePosition mapping positionValue to notional without markPrice."
       ],
       "currentBehavior": "源码注释记录 Hyperliquid 没有 native market order、需 reference ticker 的 slippage-bounded IOC-limit 仿真及 80% server deviation cap；同一文件的 parsePosition 不填 markPrice、把 positionValue 映射为 notional。注释本身不证明当前 override 已执行 bound/cap 校验。",
       "problem": "这些关键 venue semantics 仅存在注释，capability/action contract 看不出 market order 实际是 IOC limit，也看不出 markPrice 来源是 derived；prepare 可能错误宣称普通 Market 或 authoritative valuation。",
-      "targetModel": "`HyperliquidOrderSemantics` capability 明确 `Market = IocLimit{referencePrice, slippageBound, deviationCap, timeInForce: IOC}`；只有 native conformance 证明 bound/cap 才启用自动 market capability。`PriceEvidence = Authoritative | Derived{formula,inputs,observedAt}`，PositionObservation 携 mark provenance；AccountScope/InstrumentId 贯穿。",
-      "pureTransitions": [
-        "Capability + PlaceOrder(Market) + immutable quote -> PreparedNativePlan(IocLimit)：保存 side/amount/bound/reference quote identity/time/policy；若 capability 未证明返回 unavailable。",
-        "Position wire row -> PositionObservation：markPrice 缺失时只产生 Derived/Unavailable evidence；positionValue/notional 不自动变成 authoritative mark。"
-      ],
-      "effectBoundary": "ticker/position fetch 与 native dispatch 是 adapter/interpreter Effect；slippage/deviation policy、reference precondition、mark derivation、capability declaration 为纯逻辑。",
-      "durability": "PreparedPlanRecord 保存 serializable IOC rebuild data、quote observation/version、scope、InstrumentId、capability fingerprint；position observation 保存 notional/contracts/mark provenance/asOf。secret/SDK object 不进 journal。",
-      "errors": [
-        "MarketEmulationUnsupported/ReferencePriceUnavailable：prepare failure，不能用 dummy price。",
-        "ReferencePriceStale/DeviationPolicyUnavailable：要求 re-read/reprepare；未证明 cap 不允许自动 dispatch。",
-        "DerivedMarkOnly：估值可展示但不能满足交易 precondition。",
-        "NativeProtocolViolation：notional/contracts 无法解码。"
-      ],
       "preservedBehavior": [
         "保留注释记录的 IOC-limit/reference ticker/80% deviation concern，但把它们从“实现已验证”降为 capability contract + evidence requirement。",
         "positionValue/notional 可进入显式 derived valuation，不能伪装 CCXT markPrice。"
-      ],
-      "replacementSteps": [
-        "将文档中的 Hyperliquid semantics 落到 typed capability/interpreter contract，并绑定版本/venue evidence。",
-        "prepare 读取并锁定 quote/slippage policy，dispatch 只用 serialized plan，不重取 ticker。",
-        "引入 PriceEvidence/source/freshness ADT，迁移 accounting caller；无 native evidence 保持 unavailable。"
-      ],
-      "verificationCases": [
-        "Market action 在 capability 已证明且 ticker quote 有效时生成 IOC-limit plan，保存 quote/bound/cap evidence；无 capability 时不 dispatch。",
-        "ticker 缺 last/close 或 quote stale 时 prepare 返回 ReferencePriceUnavailable/Stale，无 DispatchStarted。",
-        "position mark 缺失但 notional/contracts 可解码时仅为 Derived；不可解码时保留 position facts + MarkUnavailable，不写 0。"
       ],
       "openQuestions": [
         "Hyperliquid slippage default、ticker freshness 与 native order/idempotency behavior 需 live evidence 后才能启用自动 market capability。"
@@ -1689,48 +528,14 @@
     },
     {
       "id": "MAP-DD56DE539D",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "inline ticker fetch 与 createOrder 混在一起使 reference quote 不可恢复；target 分成 provider-specific prepare leaf 与 transaction effect wrapper，保留 last/close 顺序和 Unknown recovery。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K07",
-        "K08",
-        "K10"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/exchanges/hyperliquid.ts:20-41: placeOrder fetches ticker.last/close for a market order lacking price, throws if unavailable, and passes the reference price to defaultImpl."
       ],
       "currentBehavior": "placeOrder 在 `type==='market'` 且 price 未定义时临时 fetchTicker，优先 last 再 close；两者都缺则 generic throw；若 market 已有显式 price 则不 fetch ticker，随后把 refPrice 与 raw params 交给 defaultImpl/createOrder。ticker acquisition、validation 与 mutation 在同一调用内。",
       "problem": "reference price 未进入 durable plan，可能在重试时变化；直接 defaultImpl 没有 stable DispatchIdentity、IOC criterion、ack/unknown/reconcile，且 generic error 丢失准备失败与远端状态。",
-      "targetModel": "`PreparedHyperliquidMarketPlan{scope,instrumentId,units,referencePrice,quoteObservationId,slippagePolicy,nativeType:'limit',timeInForce:'IOC'}`；显式 input price 必须经 capability policy 解释为 reference quote，不能默认为普通 limit price。`DispatchIdentity` 与 `RemoteOutcome<OrderObservation>` 独立关联。",
-      "pureTransitions": [
-        "MarketAction + quote observation + capability -> Result<PreparedPlanRecord, PrepareFailure>：保持 last 优先、close fallback；对显式 price/quote 的 Decimal finite/positive/freshness/bound 检查。",
-        "Prepared plan -> NativeCreateOrderRequest：确定性编译 IOC limit，不重新 fetch ticker 或重新计算 size。",
-        "Ack + later observation -> outcome：Ack only received；fill/remaining/status 决定 Confirmed/StillWorking/Rejected/Unknown。"
-      ],
-      "effectBoundary": "fetchTicker 是 prepare facts Effect，createOrder 是 post-DispatchStarted interpreter Effect；pure compiler 不访问 Exchange。",
-      "durability": "JournalWriter 先写 Prepare/DispatchPlanned/DispatchStarted 与 serialized native plan；未知 outcome 进入 Reconciling，保存 quote/attempt evidence，不盲目第二次 createOrder。",
-      "errors": [
-        "ReferencePriceUnavailable/StaleQuote/ReprepareRequired：prepare 阶段失败，无 DispatchStarted。",
-        "ExplicitPriceNotAllowed：显式 price 未满足 Hyperliquid reference-price policy 时拒绝，不把 market 误发为 ordinary limit。",
-        "BrokerRejected：known rejection 按 plan FailurePolicy；RemoteOutcome.Unknown 只安排 observe，不能重发 IOC。"
-      ],
       "preservedBehavior": [
         "market 无 price 时仍可用 ticker.last，last 缺失再用 close；两者都无仍拒绝。",
         "最终 native call 仍传 reference price，但改为 serialized IOC-limit plan，避免语义漂移。"
-      ],
-      "replacementSteps": [
-        "将 ticker acquisition 移到 prepare facts stage，记录 quote observation id/asOf。",
-        "实现 native compiler，把 market action 编译为 bounded IOC-limit；native bound/cap 未证实则 capability unavailable。",
-        "JournalWriter 先写 Prepared/Approved/DispatchPlanned，DispatchStarted 后才 createOrder；接入 observer/reconcile，删除 inline fetch+mutation。"
-      ],
-      "verificationCases": [
-        "last=100、close=99 时 reference=100；last 缺失时 reference=99；显式 price 只有符合 reference policy 才生成 plan。",
-        "两者缺失、非有限/非正或 quote stale 时无 DispatchStarted/createOrder。",
-        "createOrder 在请求已发后 timeout 产生 Unknown，恢复 worker 先 observe，不重复 createOrder。"
       ],
       "openQuestions": [
         "Hyperliquid endpoint 是否支持稳定 client order identity/lookup 需实测；若不能，未知 outcome 需 operator recovery。"
@@ -1738,46 +543,14 @@
     },
     {
       "id": "MAP-AE93DB138F",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "notional/contracts 推导 mark 是降级数据事实；target 保留 signed inputs/formula/provenance，明确它不获得交易授权或 authoritative valuation。",
-      "contractAnchors": [
-        "K02",
-        "K03",
-        "K04",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/exchanges/hyperliquid.ts:43-53: calls defaultFetchPositions and fills missing markPrice using abs(notional)/abs(contracts) when contracts is nonzero."
       ],
       "currentBehavior": "fetchPositions 取得 raw positions 后 map；仅在 markPrice 为空、notional/contracts 非空且 contracts !== 0 时，用绝对 notional 除绝对 contracts 生成 markPrice，返回浅复制对象，否则原样返回。源码未检查 finite、单位、scope 或 derived provenance。",
       "problem": "计算结果写回 raw SDK shape，无法区分 authoritative/derived，也没有观察时间/identity；NaN、Infinity、零结果或单位不一致可能进入 accounting，缺 mark 时也可能被保留为未标记的 raw position。",
-      "targetModel": "`PositionObservation{scope,instrumentId,quantity,notional,contracts,mark,observedAt}`；`mark = AuthoritativeMark | DerivedMark{value,formula:'abs(notional)/abs(contracts)',inputEvidence} | MarkUnavailable`。Derived 只在 inputs finite、contracts nonzero、结果 finite 且满足 valuation policy（通常正价格）时成立；原始 signed facts 必须保留。",
-      "pureTransitions": [
-        "DecodedPosition -> PositionObservation：authoritative mark 先经 finite/unit 校验；否则对 Decimal(abs(notional),abs(contracts)) 推导并记录 inputs/formula/asOf，零/无效结果保留 position 但 mark unavailable。",
-        "PriceEvidence + valuation policy -> ValuationResult：Derived/Stale 可展示，不能自动满足交易 price/buying-power precondition。"
-      ],
-      "effectBoundary": "defaultFetchPositions/network 是 interpreter Effect；raw decode、Decimal derivation 与 evidence construction 纯。",
-      "durability": "持久化 position observation、input notional/contracts、derived formula、asOf 与 metadata version；projection rebuild 依据 observation evidence，不从已变异 SDK object 重算。",
-      "errors": [
-        "InvalidPositionNumeric(path)：required notional/contracts 数值非有限或单位无法解码时返回 observation failure；signed negative values 本身不因符号而拒绝。",
-        "MarkUnavailable：contracts=0、缺 inputs、结果非正/非有限或 policy 不允许时保留 quantity/notional facts，不写 zero mark；这是 valuation degradation，不是 position listing absence。",
-        "Scope/InstrumentMismatch：拒绝把 position 归入另一账户/产品。"
-      ],
       "preservedBehavior": [
         "markPrice 缺失时以绝对 notional/绝对 contracts 恢复的公式保留。",
         "已有 markPrice 的 position 不被覆盖；新模型只增加 provenance 与数值校验。"
-      ],
-      "replacementSteps": [
-        "在 native schema decode 后使用 pure Decimal derivation，不再 map raw SDK object。",
-        "将 mark source 纳入 PositionObservation/ValuationResult，更新 accounting projection。",
-        "补 zero/negative/invalid input 与 stale/precondition cases。"
-      ],
-      "verificationCases": [
-        "notional=-100、contracts=-2 产生 derived mark=50 并标记 Derived；signed negative 不被误判为 malformed。",
-        "contracts=0、缺 notional、non-finite 或 derived result=0 返回 MarkUnavailable，但 position quantity/notional observation 仍存在。",
-        "authoritative mark=50 保持 source=Authoritative；Derived/Stale 不直接满足 price precondition。"
       ],
       "openQuestions": [
         "Hyperliquid `positionValue` 与 `contracts` 的单位/符号关系需 live sample 证明；未证实前 derived mark 只能用于显式降级展示。"
@@ -1785,15 +558,6 @@
     },
     {
       "id": "MAP-5CC2CA6EF1",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "registry/pack loading 是 composition boundary，不应以 override object 或完整 handler 集合推断能力；target 只加载 declared provider leaves 并保留 manifest/version evidence。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/overrides.ts:1-30: documents default-plus-override extension policy and imports Bitget, Bybit, and Hyperliquid override objects.",
         "packages/uta-broker-ccxt/package.json:2-22: the CCXT broker pack is a private ESM package with ccxt declared as a direct dependency at ^4.5.38.",
@@ -1801,84 +565,22 @@
       ],
       "currentBehavior": "registry module 以注释约定 defaultImpl + per-exchange override，顶层 import Bitget/Bybit/Hyperliquid objects；所有扩展通过同一 legacy CcxtBroker registry 组合。",
       "problem": "extension point 的契约仍是 raw SDK method shape，新增 venue 只需塞 object 即可绕过 typed action association、capability version、account family 与 native response validation。",
-      "targetModel": "`CcxtVenueRegistry` 是 provider-pack composition seam：key 包含 `VenueIdentity{exchange,nativeApiVersion,environment}` 及（若发现）AccountFamily；value 只装配 typed connection/data/effect capability leaves、native codecs 与 availability derivation。`BrokerPackLoadingPolicy = InstalledImmutableRelease | ExplicitWorkspaceDev | PackLoadFailure` 仍约束加载来源；registry presence 不代表任何未声明 leaf 可用，也不要求一个 venue 提供其他 venue 的方法。",
-      "pureTransitions": [
-        "registry declaration + manifest/runtime facts -> Result<LoadedProviderPack, RegistrationError>：检查 key collision、版本/manifest compatibility 与每个已声明 leaf 的 schema identity；不填充缺失的 reads/effects。",
-        "provider pack + connection/account facts -> CapabilityDescriptor leaves：按 operation、scope、coverage、native evidence 派生 availability；data leaves 与 effect leaves 独立装载。"
-      ],
-      "effectBoundary": "registry composition 只在 composition root 装配 Effect Layers；纯 capability/handler selection 不实例化 SDK 或执行网络。",
-      "durability": "prepared plan 保存 adapter contract/version/capability fingerprint 与 broker-pack manifest/content digest；registry 变更使旧 plan 返回 PlanVersionUnsupported/ReprepareRequired，不能以新 override 重建不同 native request。",
-      "errors": [
-        "DuplicateVenueRegistration：启动失败，避免 handler ambiguity。",
-        "AdapterVersionMismatch：计划/observations 不可重放时拒绝自动执行。",
-        "BrokerPackLoadFailure(Absent|PointerCorrupt|ManifestInvalid|ProtocolMismatch|ImportFailure)：按 PackSourcePolicy 报告加载阶段与安全原因，不回退另一 authority。",
-        "BrokerPackSdkVersionMismatch(expected, actual)：拒绝注册，保留 capability unavailable，不尝试以 workspace 或内置 SDK 替代。",
-        "NoDeclaredCapabilityLeaf(operation)：pack 没有该 provider leaf 时没有 discovery/prepare command。",
-        "ActionCapabilityUnavailable(operation)：leaf 已声明但当前 evidence 不可用时明确拒绝，不走 default fallback。"
-      ],
       "preservedBehavior": [
         "default-plus-override 的扩展意图和 Bitget/Bybit/Hyperliquid 独立模块保留，但每个差异变成具名 typed handler。",
         "未覆盖方法只有在 capability 明确声明默认语义时才可用，不能把 raw fallback 当 universal support。"
-      ],
-      "replacementSteps": [
-        "将 registry value 改为 versioned typed venue/account adapter product，包含 read/action codecs 与 coverage policy。",
-        "把每个 override 拆成 native request/response/error/identity modules，保持 venue details 在 adapters。",
-        "composition root 只注册一个 authority；迁移后删除 legacy CcxtBroker mutation authority 和 string/raw fallback path。"
-      ],
-      "verificationCases": [
-        "BrokerPackLoadingPolicy 在 production 仅从 installed immutable release 加载；broken installed pointer/manifest 返回 PackLoadFailure 且不 fallback workspace/Mock。",
-        "manifest 的 BROKER_PACK_API_VERSION、BROKER_ENGINE、package version 与锁定的 CCXT SDK version 不匹配时返回 BrokerPackSdkVersionMismatch/PlanVersionUnsupported，不注册 handler。",
-        "Bitget Classic、Bybit、Hyperliquid 各以正确 family/version 注册并返回 scoped capabilities。",
-        "缺 PlaceOrder handler 或 capability 时 prepare 明确失败，不调用 default createOrder。",
-        "registry version 变化使持久化旧 plan 停止并报告 PlanVersionUnsupported。"
       ],
       "openQuestions": []
     },
     {
       "id": "MAP-ED742AC7B1",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "raw hook bag 混淆了 optional extension、读取和写入；target 改成开放的 provider capability tree，叶子各自声明 schema/error/availability，交易包装仅包写效果。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K04",
-        "K07",
-        "K08"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/overrides.ts:31-144: defines optional strict flags and hooks for balance, order lookup/cancel, placement, positions, attached TP/SL, open-order listing, and sub-account wallet definitions using raw Exchange/Record parameters."
       ],
       "currentBehavior": "CcxtExchangeOverrides 是 optional method bag；hooks 接收 raw Exchange、string/number 与 Record params，返回 raw CCXT orders/positions/balances；strict flags、walletTypes 与 TP/SL support 都是 optional fields。defaultImpl convention 允许修改输入、后处理结果或完全替换。",
       "problem": "optional hooks 让 action、ack、observation、failure、availability、idempotency 与 compensation 关系消失；任意 Record 可注入未经 schema 验证的 native params，且缺 hook 可能被误认为默认能力。",
-      "targetModel": "将 optional raw hook bag 改为开放的 provider capability tree。每个 provider leaf 自己声明精确 input/output/domain-error schema、delivery/effect kind、resource/scope requirements、native codecs 与 availability evidence；provider 可以通过 HOF 组合 funding/orderbook/balance/listing 或某个 place/cancel/protection effect，未声明的叶子结构上不存在。unsupported action/parameter variant 也只在该 leaf schema 中不存在；已声明 leaf 的暂时故障另以 availability 表示。固定的 `CapabilityDescriptor` 只是 UTA-facing 外层，不承担全局动作全集，也不是完整 Broker SDK。",
-      "pureTransitions": [
-        "provider leaf declaration + facts/capability -> leaf-specific prepared data 或 effect plan：组合器只接受该 leaf schema 声明的 provider-native parameters/extensions；未声明字段/变体没有 input schema 或 command，已声明但前置条件不足才返回具名 unavailable。",
-        "provider leaf output/error -> typed result：schema validator 在 handler 前区分 metadata/input/domain/delivery/output-violation；只有标为交易 effect 的 leaf 才进入 `withTransaction`，普通 read/stream 不创建 approval/compensation。"
-      ],
-      "effectBoundary": "native Exchange calls 仅在 selected interpreter Effect；registry/codec/availability/compensation assessment 纯。defaultImpl 不应作为跨 action 的隐式 retry/Mutation service。",
-      "durability": "数据 leaf 只持久化 observation/checkpoint/availability evidence；交易 effect leaf 才保存 serializable prepared payload、DispatchStarted、ack、outcome 与 recovery identity。闭包/HOF 实现身份不写入 plan，旧 plan 只在 leaf/schema/capability fingerprint 仍匹配时恢复。",
-      "errors": [
-        "InputSchemaRejected(field/path)：请求包含 selected leaf 未声明的字段/参数 variant，schema 中没有它且不创建 command；不得以 Unsupported stub 填充。",
-        "CapabilityUnavailable(leaf)：leaf 已声明但当前 scope/connection/native evidence 不可用时返回 availability failure，不伪造结构性支持。",
-        "NativeProtocolViolation：raw response/params schema 失败。",
-        "PlanVersionUnsupported：旧 handler 无法安全重建时阻断。",
-        "RemoteOutcome.Unknown：仅 effect leaf 进入 recovery，禁止 default fallback 发第二次 mutation。"
-      ],
       "preservedBehavior": [
         "各 venue 仍可覆盖实际差异 method；Bitget namespaces、Bybit category/path、TP/SL refusal 与 raw default intent 保留为具名 handlers。",
         "完整订单语义 的 notional, TRAIL LIMIT/offset/initial stop, GTD/session, parent/OCA, attached TP/SL 等不得静默丢弃；无 native evidence 维持 CapabilityUnavailable。"
-      ],
-      "replacementSteps": [
-        "以 provider capability tree 替代 optional raw hook bag，补齐 read handlers、coverage and failure classifiers。",
-        "按 venue 迁移 native schemas/capabilities；defaultImpl 仅留在 adapter 内 typed helper，不再跨 action 隐式 fallback/retry。",
-        "把 prepared/approved/dispatch/observe/reconcile 接入 transaction writer，切断 legacy raw override mutation authority。"
-      ],
-      "verificationCases": [
-        "selected provider leaf 的 input schema 遇到未声明 notional/relations/TIF/protection variant 时在 schema boundary rejection，无 command/EffectJob；已声明 leaf 但 capability evidence 缺失时才是 CapabilityUnavailable，不能混为一类。",
-        "provider leaf 明确允许的 fields 经过 schema/HOF 编译后必须原样进入稳定 plan；writer commit 后 crash before createOrder 可保持 QueueUnsent，crash after DispatchStarted 必须 ObserveUnknown。",
-        "createOrder Ack 且 filled=0 只得 StillWorking；timeout 后不重复 createOrder，也不把 accepted native fields 中遗漏的 trailing/protection 字段当作成功。"
       ],
       "openQuestions": [
         "每个 CCXT venue 的 native idempotency/compensation/attached-order evidence 需逐项 conformance；未证实 handler 维持 unavailable。"
@@ -1886,49 +588,14 @@
     },
     {
       "id": "MAP-663AADE476",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "default balance 与 lookup 的 fallback 规则必须按 operation 和 venue evidence 选择；target 分离 data observation leaf 与 effect recovery，不把 unscoped/raw helper 变成 universal policy。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K05",
-        "K07",
-        "K08"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/overrides.ts:146-167: defaultFetchBalance preserves an unscoped call, while defaultFetchOrderById tries regular fetchOrder then stop:true and throws generic not-found."
       ],
       "currentBehavior": "defaultFetchBalance(params undefined) 调用 unscoped `exchange.fetchBalance()`，有 params 才原样传递；defaultFetchOrderById 先 regular fetchOrder，再 catch 后若 symbol 存在以 `stop:true` 再试，任一路失败都抛 generic `Order ... not found`。",
       "problem": "balance raw cast 与 order lookup catch-all 把 unscoped semantics、conditional fallback、transport failure、permission rejection、definitive absence 混为一处；没有 scope/lookup descriptor、observation evidence 或 unknown recovery。",
-      "targetModel": "`BalanceReadPlan{scope,walletRoute,capability}` 明确 unscoped 仅在 single/unified capability proof 下允许；`OrderLookupPlan{scope,instrumentId,brokerOrderId,paths}` 每 path 返回 Found/DefinitiveAbsent/Rejected/Unknown/ProtocolViolation，输出 AccountObservation/OrderObservation 或 typed observation result。没有 matching read leaf 是结构性缺失；已声明 leaf 当前不可用才是 CapabilityUnavailable。keyless private account 不能伪造 balance/order absence。",
-      "pureTransitions": [
-        "scope + capability -> balance native request：separate-wallet scope 选择 explicit route；无 proof 的 unscoped 请求返回 ScopeRequired/CapabilityUnavailable。",
-        "lookup path results -> LookupResult：只有 definitive absence 才 NotFound，network/permission/schema failure 保留分类；fallback 仅在 capability 证明 safe 且未 dispatch 时允许。"
-      ],
-      "effectBoundary": "fetchBalance/fetchOrder 是 adapter Effect；request selection/error classification/native decode 是纯。调用者不通过 defaultImpl 接受 raw Record。",
-      "durability": "balance/order observations 保存 scope、route/lookup descriptor、attempt/observation id、asOf；普通 read 的 Unknown 进入 observation reconcile，不能释放 absence exclusion。只有另一个 controlled effect 的 DispatchStarted 才进入该 effect 自己的 transaction recovery，ordinary read 不产生 RemoteOutcome 或 mutation lock。",
-      "errors": [
-        "NoDeclaredReadLeaf(operation)：没有 balance/order lookup leaf 时没有 query command，不以 default helper 代替。",
-        "UnscopedReadNotProven：ScopeRequired/CapabilityUnavailable。",
-        "OrderAbsent：仅明确 absence evidence 可返回；generic catch 不得降级。",
-        "ObservationUnknown/PermissionRejected：typed data ObservationFailure；ordinary read 不转成 RemoteOutcome 或 generic not-found。",
-        "NativeProtocolViolation：raw response decode failure 保留 evidence。"
-      ],
       "preservedBehavior": [
         "已证明 unified account 的 unscoped balance compatibility 可保留；separate wallet route 必须显式。",
         "regular -> conditional `stop:true` 顺序可在具体 venue capability 证明后保留，不是 CCXT universal guarantee。"
-      ],
-      "replacementSteps": [
-        "把 default helper 改为 capability-guarded typed balance/lookup route。",
-        "为 regular/conditional endpoint 定义 response/error/absence classifiers；unknown endpoint failure 不作 NotFound。",
-        "接入 durable observation/projection，删除 generic throw/null translation 与 keyless-empty authority。"
-      ],
-      "verificationCases": [
-        "unified capability 才允许 unscoped balance；Bitget separate wallet 缺 scope 时返回 ScopeRequired。",
-        "regular order definitive absent、conditional Found 时返回 conditional observation；regular timeout 后是否 fallback 未证实时返回 Unknown。",
-        "keyless/private lookup 或 balance 不返回 zero/[] absence success；两路径均 definitive absent 才 NotFound。"
       ],
       "openQuestions": [
         "各 exchange regular/conditional endpoint 的 absence/error distinction 与 lookup retention 需实测；没有证据时保守为 Unknown。"
@@ -1936,46 +603,14 @@
     },
     {
       "id": "MAP-5B4370AB4D",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "regular 到 conditional cancel fallback 的 dispatch uncertainty 是交易效果问题；保留 WAL/observe-before-retry，只在 provider capability leaf 证明 unsupported-before-send 时 fallback。",
-      "contractAnchors": [
-        "K02",
-        "K07",
-        "K08",
-        "K10"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/overrides.ts:169-183: defaultCancelOrderById calls cancelOrder, retries with stop:true after any failure when symbol exists, and rethrows the first error if fallback fails."
       ],
       "currentBehavior": "取消先调用 cancelOrder(id,symbol)，捕获任意错误后若有 symbol 再调用 stop:true；fallback 成功即返回，否则抛出第一次错误。没有记录两次尝试的 dispatch identity 或远端状态。",
       "problem": "第一次错误可能意味着请求已到达而结果未知，立即第二次 remote mutation 会重复取消/触发 endpoint side effect；重抛第一次错误又隐藏 fallback/remote evidence。",
-      "targetModel": "`CancelOrderPlan{scope,ScopedOrderRef,orderVersion,endpointPolicy}`；`CancelAttempt=Planned|DispatchStarted|Ack|Rejected|Unknown`，只有 capability 证明第一路未发送且第二路语义安全时才 fallback；否则先 ObserveOrder，再构造 Compensation/Recovery outcome。",
-      "pureTransitions": [
-        "classified first failure + dispatch evidence -> NextStep：DefinitiveUnsupportedBeforeSend 可选 conditional fallback，Unknown/started 只能 observe。",
-        "cancel observation -> RemoteOutcome：最终 status/late fills 决定 canceled/working/unknown，Ack 不等于 absence。"
-      ],
-      "effectBoundary": "cancel endpoint calls 与 order observation 是 interpreter/scheduler Effect；fallback policy 与 failure classification 纯，不能由 exception handler 隐式决定。",
-      "durability": "每次 cancel attempt 写 DispatchStarted/ack/outcome，stable identity 含 direction/counter；fallback/observe jobs 与 lock 由 writer 原子提交，Unknown scope 保持 exclusion。",
-      "errors": [
-        "CancelAlreadyUnknown：请求可能已发，先排 observation。",
-        "ConditionalFallbackUnavailable：不重发，进入 RecoveryRequired/OperatorRequired。",
-        "OrderNotFound：仅 definitive absence；不能证明 cancel 未执行。",
-        "LateFillDetected：按 compensation policy 处理 exposure。"
-      ],
       "preservedBehavior": [
         "regular cancel 与 conditional stop:true endpoint 的 venue-specific possibility 保留。",
         "cancel成功仍只表示请求处理，不宣称订单已撤；target 增加观察闭环。"
-      ],
-      "replacementSteps": [
-        "将 retry-on-any-error 改为 typed endpoint policy + dispatch evidence。",
-        "为 cancel action 保存 scoped order/version 与 compensation assessment。",
-        "迁移 caller 到 durable observe/reconcile，删除 rethrow-first-error authority。"
-      ],
-      "verificationCases": [
-        "regular endpoint 明确 unsupported 且未 DispatchStarted时允许 stop:true fallback。",
-        "regular timeout after DispatchStarted 时不调用 fallback，先 observe。",
-        "cancel ack 后 order 仍 open/late-filled 时返回 StillWorking/ResidualRisk，不标 Canceled。"
       ],
       "openQuestions": [
         "各 CCXT venue 如何证明 cancel endpoint unsupported-before-send 与 idempotency horizon 需 live evidence。"
@@ -1983,52 +618,15 @@
     },
     {
       "id": "MAP-F032485592",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "createOrder 的 raw params 需要 provider-declared order schema/HOF 组合，而不是全局订单组合全集/动作表；target 仅把 durable transaction wrapper 放在受控效果边界。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K04",
-        "K07",
-        "K08",
-        "K09",
-        "K10"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/overrides.ts:185-196: defaultPlaceOrder forwards symbol/type/side/amount/price/params directly to exchange.createOrder and returns raw CcxtOrder."
       ],
       "currentBehavior": "defaultPlaceOrder 直接把 symbol、string type、buy/sell、number amount、optional price 与 Record params 传给 createOrder，返回 raw CcxtOrder；没有 durable intent/dispatch identity/ack versus observation distinction。",
       "problem": "任意 params 可绕过 provider-declared order semantics relation/units/scope/capability，SDK mutation 发生在 writer 之前或没有 write-ahead；network timeout 后无法判断 order 是否已落地，重试会产生 duplicate trade。",
-      "targetModel": "用 provider 声明的 order-effect input schema 与 HOF 组合器表达 source 接受的 sizing、price/time/protection/relations/native params；局部互斥（例如 units 与 notional）可以是小 union，但不建立全局订单组合全集、笛卡尔 action enum 或动作表。每次组合保留 provider extension 与精确 output/error/availability schema；最终 public handle 只提交 intent/receipt，不暴露 native dispatch。",
-      "pureTransitions": [
-        "provider order leaf schema + facts/capability/policy -> DraftReview/PreparationPreview 或 serializable PreparedPlanRecord：HOF 组合器只接受该 provider leaf schema 声明的 fields/units/relations/TIF/protection；未声明字段或 parameter variant 在 schema boundary 被拒绝且不创建 command，已声明字段的前置条件不足才返回 CapabilityUnavailable。",
-        "approved effect plan + writer commit + lease -> DispatchPlanned/DispatchStarted -> native dispatch Effect；Ack、observation criterion 与 RemoteOutcome 独立，Unknown 只进入 observe/recovery，不盲重发。"
-      ],
-      "effectBoundary": "createOrder 只存在于 CcxtActionInterpreter dispatch boundary；request compile/decode/criterion pure，credential injected at connection layer and never in plan/log。",
-      "durability": "Writer 原子提交 plan digest、approval/DispatchPlanned、EffectJob、DispatchStarted、attempt/epoch；同一 writer group 的后续 command 在当前 SQL transaction 的递进状态/CAS 上 decide，receipt 仅 commit 后发布。native lookup descriptor、scope、catalog/capability version 与 before-image 保存供重启观察，read projection failure 不抹掉 durable intent/outcome。",
-      "errors": [
-        "InputSchemaRejected(field/path)：selected leaf schema 未声明该 field/parameter variant，输入不能生成 command/EffectJob；不以 Unsupported stub 填充。",
-        "CapabilityUnavailable(leaf)：leaf 已声明但当前 scope/native evidence 或前置条件不可用时返回 availability failure；不得把结构性缺失和暂时不可用混为一类。",
-        "InvalidProviderCombination(reason)：该 provider leaf 的 schema/HOF 组合不接受同时出现的字段、relation、TIF、protection 或 sizing 变体时返回具名失败；不把此规则推广为跨 provider policy。",
-        "PlanNotRecoverable/PlanVersionUnsupported：不能安全重建该 provider native request 时停止。",
-        "BrokerRejected：按该 leaf 的 explicit FailurePolicy；RemoteOutcome.Unknown：RecoveryRequired/observe，不重发。"
-      ],
       "preservedBehavior": [
         "defaultPlaceOrder 的普通 market/limit native call 仍可作为 provider adapter implementation，但 cashQty/notional 的 quote conversion 必须把该 provider 的 quote identity、rounding/lot policy 和实际 units 固定进 plan。",
         "保留 source 接受的 stop/TP/SL input 与明确拒绝 TRAIL/TRAIL LIMIT、未验证 attached TP/SL 的安全意图；target 由 provider leaf schema 表达是否支持，不伪造跨 provider 支持。",
         "provider leaf 未声明的 relations/TIF/session/trailing variant 不出现在 input schema 或 command；已声明且接受的 provider-native fields 不因 CCXT 不能表达而静默丢弃。"
-      ],
-      "replacementSteps": [
-        "从 domain action compiler 生成 typed NativePlanRecord，删除 raw Record public mutation entry。",
-        "在 JournalWriter 写 Approved/DispatchPlanned/Started 后才允许 createOrder；read-only preview 保持 DraftReview。",
-        "实现 outcome observer/stable identity/reconcile/compensation，切断 defaultPlaceOrder 作为交易 authority。"
-      ],
-      "verificationCases": [
-        "selected provider leaf 的 schema 对未声明 quantity variant、relation/TIF/protection 变体返回 InputSchemaRejected，无 command/EffectJob；已声明 leaf 但 capability evidence 缺失时才是 CapabilityUnavailable，另一个 provider 可声明不同合法组合。",
-        "provider leaf 明确允许的 fields 经过 schema/HOF 编译后必须原样进入稳定 plan；writer commit 后 crash before createOrder 可保持 QueueUnsent，crash after DispatchStarted 必须 ObserveUnknown。",
-        "createOrder Ack 且 filled=0 只得 StillWorking；timeout 后不重复 createOrder，也不把 accepted native fields 中遗漏的 trailing/protection 字段当作成功。"
       ],
       "openQuestions": [
         "CCXT venue 是否提供稳定 client order id 与 retention/idempotency scope 需逐 venue 实测；无证据时 Unknown recovery 更保守。"
@@ -2036,48 +634,14 @@
     },
     {
       "id": "MAP-6AAB1AB711",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "positions 是 scope-bound data listing；target 保留 row/schema/coverage evidence 与 Partial/Unavailable，不引入订单 approval/compensation。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/overrides.ts:198-201: defaultFetchPositions simply calls exchange.fetchPositions and returns raw CcxtPosition rows."
       ],
       "currentBehavior": "defaultFetchPositions 没有参数/selector/schema，直接执行 exchange.fetchPositions() 并把 raw position rows 返回；没有 AccountScope、observation timestamp、完整性或 query failure。",
       "problem": "不同 venue 的 position endpoint 范围与字段不同，raw rows 可能来自错误 wallet、缺 mark/quantity 或 partial page；accounting 无法判断是否可用于 exposure/precondition。",
-      "targetModel": "`PositionReadPlan{AccountScope,instrumentFilter?,capability}` -> `PositionObservation{scope,instrumentId,side,quantity,price?,notional?,provenance,observedAt}`；`PositionListing=Complete|Partial|Unavailable` 仅描述 required row identity/quantity 与 enumeration/page coverage。mark/PnL/contractSize 是独立 valuation evidence：listing coverage 可以 Complete，而 valuation 仍 Incomplete/Unavailable。",
-      "pureTransitions": [
-        "NativePositionPayload -> Result<PositionObservation, NativeProtocolViolation>：校验 required units/currency/instrument/side/quantity；optional mark/notional/PnL 逐项带 authoritative/derived/unavailable evidence，不因缺 optional valuation 抛弃 position row。",
-        "Rows + coverage evidence -> PositionListing：scope/page/checkpoint 不完整时 Partial/Unavailable；单个坏 required row 不应写成 zero exposure，保留 error evidence。"
-      ],
-      "effectBoundary": "fetchPositions 是 adapter Effect；native schema/identity/Decimal decode 与 completeness fold 纯，accounting projection 只接 typed observation。",
-      "durability": "按 AccountScope/instrument identity/observation sequence 写 PositionsProjection；保存 query descriptor/cursor/asOf/freshness。Partial 不覆盖完整 snapshot，未知 scope 保持 exclusion。",
-      "errors": [
-        "PositionScopeUnavailable：capability/read failure。",
-        "NativeProtocolViolation：坏 required quantity/instrument/identity 或响应 schema；optional valuation 字段非法则只产生该字段的 evidence failure。",
-        "PositionValuationUnavailable：mark/PnL/contractSize 缺失、单位未证实或不可靠时降低 valuation capability，不把已覆盖 position rows 置零。",
-        "PartialPositionListing：enumeration/page/cursor coverage 不完整，不能作为 zero exposure/buying-power fact。",
-        "StaleObservation：可展示但不得自动满足 precondition。"
-      ],
       "preservedBehavior": [
         "default route 仍可供 venue 明确证明统一 positions endpoint 的 adapter 使用。",
         "原始 venue position semantics 在 adapter-specific decoder 保留；不把所有 exchange 强制成同一种字段假设。"
-      ],
-      "replacementSteps": [
-        "为每个 CCXT venue 定义 native position response schema 与 scope route。",
-        "把 default helper 改为 typed interpreter port，输出 observation/completeness。",
-        "迁移 accounting/positions projection 以 checkpoint/freshness 消费，不读取 raw rows。"
-      ],
-      "verificationCases": [
-        "完整 scoped response 且 required identity/quantity 与 enumeration boundary 明确才生成 PositionListing.Complete；mark/PnL 不在 required listing coverage 时可另标 unavailable。",
-        "缺 mark/PnL/contractSize 只产生 PositionValuationUnavailable 并保留 position facts；坏 required row 或 page boundary 不明分别产生 ProtocolViolation/Partial/Unavailable，不把 exposure 置零。",
-        "同 observation 重放幂等；不同 AccountScope 的相同 symbol 不合并。"
       ],
       "openQuestions": [
         "各 venue positions 是否全账户、是否分页、mark/PnL 是否权威需实测；未有 evidence 不能标 Complete。"
@@ -2085,47 +649,14 @@
     },
     {
       "id": "MAP-A1AE3F307F",
-      "assessment": "designed",
-      "contractDisposition": "retained",
-      "contractRationale": "OKX 单次 open-order 证据只能绑定具体 adapter/version/account；target 保留 per-venue coverage leaf 与逐订单 observe，不把 default helper 当跨 provider guarantee。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K05",
-        "K07"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/overrides.ts:203-213: documents the default unscoped fetchOpenOrders path, live OKX evidence for spot+swap, and warns that CCXT does not generalize completeness."
       ],
       "currentBehavior": "defaultFetchAllOpenOrders 只调用一次 exchange.fetchOpenOrders()；注释记录 live OKX pending endpoint 返回 spot+swap，但明确 CCXT 没有跨 venue completeness semantics，category-scoped venue 需 override。",
       "problem": "把 OKX 的一条实测推广到默认 adapter 会让不完整列表成为 absence truth，进而 ghost 外部 orders；raw [] 与 Complete listing 没有区分。",
-      "targetModel": "每个 venue/account/scope 注册 `OpenOrderCoveragePolicy{namespaces,pagination,absenceEvidence,observedAt}`；default unscoped response 只有 policy/evidence 明确时才 `ListingResult.Complete`，否则 Partial/Unavailable。OKX evidence 只绑定 OKX adapter/version/account facts。",
-      "pureTransitions": [
-        "policy + native listing response -> ListingResult：检查 required namespace、cursor boundary、scope 与 response schema；未证明完整返回 Partial/Unavailable。",
-        "Complete listing + known order identities -> absence candidates：缺席只触发 per-order observe，不能直接 cancel/reject；Partial/Unavailable 不产生 absence candidate。"
-      ],
-      "effectBoundary": "fetchOpenOrders 与 venue probe 是 adapter Effect；coverage policy evaluation、dedup 与 absence candidate calculation 纯，scheduler/writer 负责持久化。",
-      "durability": "ListingResult 保存 scope、policy/version、namespace coverage、cursor、asOf、order identities；Partial/Unavailable/RecoveryRequired 不移除 projection，并保留数据 listing 的 absence exclusion。该 read leaf 本身不创建或释放交易 effect conflict owner。",
-      "errors": [
-        "CoverageNotProven：Partial/Unavailable，capability degraded。",
-        "PaginationIncomplete：继续 durable observation 或保持 incomplete。",
-        "TransportUnknown：不把 [] 当 absence。",
-        "OrderAbsentCandidate：仅在 Complete coverage 后安排 per-order observation，等待 definitive absence。"
-      ],
       "preservedBehavior": [
         "OKX 单次 endpoint 的已实测覆盖可继续作为 OKX-specific policy，但不是全局默认 guarantee。",
         "category-scoped venue 仍由独立 override 执行。"
-      ],
-      "replacementSteps": [
-        "拆出 venue/version/account-specific coverage policy 与 listing result ADT。",
-        "把 default helper 输出改成 Complete/Partial/Unavailable，而非 raw array。",
-        "迁移 external-order observation 使用 complete coverage + per-order lookup，移除 [] on unsupported fallback。"
-      ],
-      "verificationCases": [
-        "OKX-specific policy、版本和完整 cursor evidence 满足时才返回 Complete；generic CCXT default 不自动继承该结论。",
-        "未知 venue 的 unscoped response 返回 Partial/Unavailable，不能驱动 absence detection。",
-        "listing 缺席 order 时先生成 observe job；per-order definitive absence 后才更新 projection。"
       ],
       "openQuestions": [
         "OKX 实测证据的 SDK/endpoint/account version 与 retention horizon 需记录；其他 venue 必须逐一 probe。"
@@ -2133,78 +664,18 @@
     },
     {
       "id": "MAP-AB05DEE8D4",
-      "assessment": "designed",
-      "contractDisposition": "reframed",
-      "contractRationale": "string registry 与 Binance wallet merge 是 source facts；target 改为 versioned registration/capability descriptors，保留 optional delivery 与各 venue family，禁止 registry presence 代替 leaf availability。",
-      "contractAnchors": [
-        "K01",
-        "K02",
-        "K03",
-        "K07",
-        "K08"
-      ],
       "sourceEvidence": [
         "services/uta/src/domain/trading/brokers/ccxt/overrides.ts:215-234: registers Binance spot/derivatives (future+delivery) plus Bitget, Bybit, and Hyperliquid in a string-keyed Record."
       ],
       "currentBehavior": "registry 在 Binance override 中声明 spot 与 derivatives（walletTypes future+delivery，delivery 注释 tolerated-on-failure），并以四个 exchange key 注册 Binance、Bitget、Bybit、Hyperliquid；没有 SDK/account-family/jurisdiction/version/capability context。",
       "problem": "字符串 key + raw override 无法表达 separate-wallet scope、optional delivery failure、required namespaces、connection identity 或 action availability；registry presence 可能被误当成可写/可观察。",
-      "targetModel": "`VenueAccountRegistration` 是 versioned provider registration descriptor：声明 `VenueIdentity`、可发现的 family/scopes、wallet routes、jurisdiction、native version、capability leaf ids 与 coverage evidence。Binance delivery 继续是显式 OptionalNamespace；Bitget/Bybit/Hyperliquid 的 provider leaves 由 connection discovery 装配。注册 key 只定位 pack，不生成未声明的 read/effect capability。",
-      "pureTransitions": [
-        "registration + runtime facts -> CapabilityDescriptor set：校验 venue/family/version/environment/scope；optional delivery 失败只影响该 leaf 的 availability，required leaf 不因另一个成功而伪造 Complete。",
-        "descriptor + operation request -> selected provider leaf：按 leaf schema、resource/scope 与 availability 选择；没有 matching leaf 就结构性缺失，而不是返回 Unsupported 方法占位。"
-      ],
-      "effectBoundary": "registry composition 与 runtime endpoint/account probes 在 connection Layer Effect；注册数据、capability derivation 与 scope policy 纯。",
-      "durability": "AccountId/ConnectionId/family/scope revision/capability fingerprint 与 required/optional coverage evidence 写入 projections；prepared plans 绑定 registry version，secret rotation 不改变 account identity。",
-      "errors": [
-        "RegistrationCollision/VersionMismatch：loading failure。",
-        "ScopeDiscoveryPending/UnknownScope：禁止 write/query auto-default。",
-        "OptionalWalletUnavailable：aggregate observation 标 Partial/Degraded，不伪造完整 equity。",
-        "NoDeclaredCapabilityLeaf(operation,namespace)：registration/pack 没有 matching leaf 时无 command，不以 Unsupported 方法占位。",
-        "CapabilityUnavailable(operation,namespace)：leaf 已声明但当前 scope/connection/evidence 不可用时 prepare/query 明确拒绝。"
-      ],
       "preservedBehavior": [
         "现有四个 exchange registrations 与 Binance future+delivery merge 意图保留；Binance delivery tolerated-on-failure 仅在显式 optional policy 下保留。",
         "Bitget/Bybit/Hyperliquid modules 继续独立，不把 venue-specific behavior 塞进 kernel switch；family 未证明时保持 unavailable。"
-      ],
-      "replacementSteps": [
-        "定义 typed VenueAccountRegistry 与 versioned registration schema，key 区分 native API/environment/family。",
-        "为每个 registration 装配 connection layer、native codecs、read/action handlers、coverage/idempotency policy。",
-        "迁移 CcxtBroker/manager lookup 到 AccountDirectory/CapabilityService，删除 string Record/raw override authority，避免双写。"
-      ],
-      "verificationCases": [
-        "同 exchange 的不同 family/scope registrations 可区分且生成不同 capabilities；registry key 存在但 capability 未证实时 prepare/query 返回 CapabilityUnavailable。",
-        "Binance delivery endpoint 失败只降级 optional evidence；required spot/future failure 不得 Complete。",
-        "SDK/native version 变化使旧 PreparedPlanRecord 拒绝重建，secret rotation 不改变 AccountId/scope。"
       ],
       "openQuestions": [
         "每个注册 venue 的 account-family、jurisdiction、idempotency、coverage 与 optional wallet 事实需 live conformance 固定；未证实能力保持 unavailable。"
       ]
     }
-  ],
-  "crossGroupContracts": [
-    "Composition contract `composition-contract.md#K02-K04` (CapabilityDescriptor, schema-first semantic units): CCXT native market leaves decode account-independent `InstrumentId` plus VenueIdentity/native key/quote/settlement/expiry/multiplier metadata; AccountScope is attached only where a private observation or controlled effect requires it (ccxt-contracts.ts:55-111).",
-    "Composition contract `composition-contract.md#K01-K03,K08` (declaration source, schema derivation, controlled effects): each CCXT provider declares its own read/data or controlled-effect leaves with exact input/output/domain-error schemas and capability availability. `withTransaction` wraps only effect leaves; prepared payload, ack, observation, unknown recovery and idempotency evidence are not a global operation map (overrides.ts:31-196).",
-    "Composition contract `composition-contract.md#K05-K07` (data delivery and heterogeneous boundary): funding, order-book, bars, balances, positions and listings are data capabilities selected per operation. Public market facts use explicit `DataScope.Public`; account facts use `DataScope.Account(AccountScope)` with authorization and readiness. Freshness, structural absence and availability remain distinct; data reads do not require order approval, compensation or per-frame transaction WAL (ccxt-tools.ts:20-95; CcxtBroker.ts:730-768,932-938,1099-1204).",
-    "Composition contract `composition-contract.md#K02,K05,K07` (provider capability tree, delivery and errors): Bitget provider leaves preserve ClassicV2 spot/derivatives routes, USDT-FUTURES parameters and six namespace coverage, while family, entitlement and completeness are declared availability evidence rather than mandatory methods (bitget.ts:1-68).",
-    "Composition contract `composition-contract.md#K02-K05,K07` (provider-native schema and listing evidence): Bybit provider leaves preserve spot/swap category coverage and four lookup paths; each leaf emits exact absence/error evidence and scoped identity, with no catch-all empty/not-found and no requirement that other providers implement those paths (bybit.ts:1-53).",
-    "Composition contract `composition-contract.md#K04,K07-K08` (semantic units, foreign boundary, controlled effects): Hyperliquid effect leaves may compose the documented reference-quote/IOC behavior only when native evidence enables it; position marks remain data evidence with derived provenance and do not inherit transaction guarantees (hyperliquid.ts:1-53).",
-    "Composition contract `composition-contract.md#K02,K07-K10` (availability, native errors, effect recovery): default helpers and registry are provider implementations, not universal policy. Unscoped balance, conditional fallback, cancel retry, listing completeness, protection relations and idempotency each require the selected leaf’s evidence; unknown remains a named availability/outcome (overrides.ts:146-234; CcxtBroker.ts:1112-1204)."
-  ],
-  "additionalFindings": [
-    "services/uta/src/domain/trading/brokers/ccxt/ccxt-contracts.ts:77-85,96-108: marketToContract 通过 unknown cast 读取 CcxtMarket 未声明的 expiry/contractSize/strike/optionType；expiry 可缺失而 FUT/OPT contractSize 缺失会 fallback `'1'`，必须由 native schema 与 derivative constructor 先拒绝/标记不完整，不能把 fallback multiplier 当事实。",
-    "services/uta/src/domain/trading/brokers/ccxt/ccxt-contracts.ts:118-122: contractToCcxt 接受 exchangeName 但函数体不使用它；catalog lookup 必须将 VenueIdentity 纳入 key，防止同 symbol 在不同 exchange 间误命中。",
-    "services/uta/src/domain/trading/brokers/ccxt/ccxt-tools.ts:25-30: resolveCcxtOne 要求一个 broker 同时存在 getFundingRate 与 getOrderBook 才可入选；capability selection 应按 operation 独立，不能因无关 tool 缺失隐藏可用 query。",
-    "services/uta/src/domain/trading/brokers/ccxt/ccxt-tools.ts:61-64,89-93: 工具只捕获 contractFromAliceId 错误，broker query rejection 会直接逸出；application MarketDataService 必须把 native/network/auth/stale/partial failure 映射为 typed QueryFailure。",
-    "services/uta/src/domain/trading/brokers/ccxt/CcxtBroker.ts:419-486: searchContracts 只取 active、base/quote 完整且 quote 属 USDT/USD/USDC 的 markets，按 swap>future>spot>option 与 USDT>USD>USDC 排序，并为结果 mutate derivativeSecTypes；该 preference 不是 universal catalog identity，也不能代替 per-market metadata/capability。",
-    "services/uta/src/domain/trading/brokers/ccxt/CcxtBroker.ts:509-626: placeOrder 会为 cashQty fetchTicker、拒绝未验证 attached TP/SL 与 TRAIL/TRAIL LIMIT、直接把 extraParams 交给 createOrder，并在 catch 中返回字符串；目标必须把 notional/reference quote、unsupported fields、dispatch identity 与 outcome 分开。",
-    "services/uta/src/domain/trading/brokers/ccxt/CcxtBroker.ts:730-768: 无 override 时合成一个 unified default sub-account；省略 selector 时 scopedSubAccounts 返回全部 scopes，未知 id 才抛 CONFIG；目标 AccountDirectory 必须把 discovery/default/aggregate semantics 类型化，不能把 synthetic default 当事实。",
-    "services/uta/src/domain/trading/brokers/ccxt/CcxtBroker.ts:932-938,1099-1102,1178-1204: keyless getAccount 返回零值 USD account，getOrders/getOpenOrders 返回 []；private readiness/absence 不能沿用这些 compatibility values，public market-data capability 必须单独声明。",
-    "services/uta/src/domain/trading/brokers/ccxt/CcxtBroker.ts:1112-1129,1132-1167: getOrder 没有 symbol hint 时返回 null，且把 lookup/convert 的全部错误 catch 为 null；convertCcxtOrder 还以 amount=0、buy 等 fallback 生成 Order view，目标 observer 必须区分 missing descriptor、definitive absence、protocol failure 与 Unknown。",
-    "services/uta/src/domain/trading/brokers/ccxt/CcxtBroker.ts:1290-1295: 静态 capability 只声明 CRYPTO/CRYPTO_PERP 与 MKT/LMT，虽 translator 可映射 FUT/OPT；交易 capability 必须以 market/account/action evidence 派生，不能由 translator 支持推断。",
-    "services/uta/src/domain/trading/brokers/ccxt/CcxtBroker.ts:1330-1375: getFundingRate 将缺 fundingRate 变为 0、缺 timestamp 变为 Date.now，getOrderBook 将缺 level price/amount 变为 0、缺 timestamp 变为 Date.now；typed market-data decoder 必须拒绝/降级这些无证据 defaults。",
-    "services/uta/src/domain/trading/brokers/ccxt/overrides.ts:146-213: default balance/order/position/open-order helpers 均使用 unscoped/raw Exchange calls，regular/conditional 与 OKX coverage 只具 venue-specific comments；每个 route、scope、pagination、absence evidence 需独立 policy，不能推广 default。",
-    "services/uta/src/domain/trading/brokers/ccxt/exchanges/hyperliquid.ts:20-41,43-53: market explicit price 会跳过 ticker fetch，missing mark 用 abs(notional)/abs(contracts) 仅在 contracts 非零时浅复制写回；prepare 必须解释 explicit price，position decoder 必须保留 signed facts 与 derived/MarkUnavailable provenance。",
-    "services/uta/src/domain/trading/brokers/ccxt/exchanges/bitget.ts:17-30: helper 顺序 fetch namespace、跳过无 id row、以 symbol:id 合并；缺 id 不是 safe absence，必须成为 ProtocolViolation/Partial 并持久化 namespace coverage。"
-  ],
-  "designBasis": "capability-composition-v1"
+  ]
 }
