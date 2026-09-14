@@ -29,6 +29,14 @@ the durable truth after it changes. Git history is the archive.
 
 ## Active
 
+- [[plans/uta-refactor.md]] — Rewrites UTA as an independent Rust
+  process: Alice clients read broker data, subscribe to market and account
+  changes, and place/modify/cancel orders through it; broker-specific
+  integrations translate protocols; the core owns permissions, forwarding,
+  subscription fan-out, instruction delivery with a durable call permit, and
+  ticket correlation, while brokers remain the source of trading truth.
+  Design is complete under `plans/uta-refactor/design/`; pre-implementation
+  experiments and the first vertical slice are the next increments.
 - [[plans/web-conversation-surface.md]] — Generalizes WebPi into one Web
   conversation surface: a neutral `WebSessionHost` with `pi-rpc`, `acp`,
   `claude-stream-json`, and `codex-app-server` transports, first-class
