@@ -1,7 +1,7 @@
 # UTA 重写（独立 Rust 进程）
 
-**状态**：设计完成，待实施前实验（§6 X1 Windows 传输、X2 存储实现）与首个垂直切片。
-**相关 issue**：待建（按 `plans/uta-refactor/design/uta-design.md` §7 实施顺序拆分）。
+**状态**：核心设计 v1 完成（`plans/uta-refactor/design/uta-core-design.md`，已过两位讨论者压力测试与一次外部阅读评审）；待实施前 spike（核心设计 §14）与首个垂直切片。
+**相关 issue**：待建（按 `plans/uta-refactor/design/uta-core-design.md` §14 未决 spike 与 §13 验收标准拆分）。
 
 ## 主线
 
@@ -14,21 +14,22 @@ UTA 是 Alice 与其配置的各 broker 账户之间的独立守护进程：Alic
 
 ## 交付
 
-`plans/uta-refactor/design/`：`uta-design.md`（唯一权威，§0 主线 / §1 驱动 Q1–Q21 / §2 模型 R1–R12 / §3 结构 / §5 走查 / §6 实验 / §7 记录）、`contracts/`（A-01…A-11、B-01…B-14 + IDL）、`adr/`（13 条，11 Accepted / 2 Provisional）、`walkthrough/`（两轮，末轮零卡点）、`investigation/`、`research/`。
+`plans/uta-refactor/design/`：
+
+- `uta-core-design.md` — 唯一权威：中心思维、四步机制（观察载体 / 程序值代数 / 决策 STS / 受控执行 + 证据 gate）、基础类型、Rust 映射、未决 spike（§14）、验收标准（§13）。
+- `problem-domain.md` — 问题域（F/H/C/P 事实）与维护者原话，迁移自原 uta-design.md §1 + 附录 B，依核心设计 §15 继续有效。
+- `research/` — `fp-00-synthesis.md` 综合索引 + `fp-01`…`fp-05` 一手证据链（Haskell / Scala FP 的多 provider 适配 + 组合式副作用消费案例）。
+- `investigation/` — venue 原生能力、Rust 生态可行性、既有缺陷、Alice 消费面四份调查（问题域事实的源码级出处）。
 
 ## 检查表
 
-- [x] 调查：broker 能力、Rust 可行性、既有缺陷 E1–E20、Alice 客户端需求 N1–N12
-- [x] 主线与驱动（K1–K8、F1–F10、N1–N12、Q1–Q21）
-- [x] 模型（帐票种类与引用、指令生命周期 R1–R12、结果不明处理、流 / 订阅 / 缺口、一次性读、能力声明、权限、持久与恢复）
-- [x] 结构（核心 + 每账户集成进程；七个模块；存储原子性；传输）
-- [x] 契约与 IDL；两轮独立走查（12 + 18 契约卡点 → 裁决 → 确认轮 0 卡点）
-- [ ] 实验 X1（Windows 传输）、X2（存储崩溃矩阵）、X3（分发吞吐）
-- [ ] 写路径切片 Q1–Q10（核心 + fixture 集成）
-- [ ] 流与读切片 Q11–Q16
-- [ ] 恢复切片 Q17–Q21
+- [x] 问题域与四类事实（`problem-domain.md` §1 + 附录 B）
+- [x] FP 证据链（`research/fp-00`…`fp-05`）与四份既有调查（`investigation/`）
+- [x] 核心设计（载体 / 三种进度 / 决策代数 / 程序 / 写与 unknown / 保留协议 / 能力 / 基础类型）
+- [ ] 实施前 spike（核心设计 §14 S1–S10）
+- [ ] 首个垂直切片（写路径：核心 + fixture 集成）
 - [ ] 首个真实集成（能力声明经官方文档核验）+ Alice 客户端迁移
 
 ## 完成标准
 
-新 UTA 在 macOS / Linux / Windows 通过 Q1–Q21；Alice 经生成客户端接入；`services/uta/` 删除；owner 指南更新；本计划删除。
+新 UTA 满足核心设计 §13 验收标准；Alice 经生成客户端接入；`services/uta/` 删除；owner 指南更新；本计划删除。
