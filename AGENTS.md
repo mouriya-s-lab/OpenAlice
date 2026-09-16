@@ -15,6 +15,7 @@ OpenAlice 是本地交易工作区：Alice 启动 Workspace 并注入交易上�
 | `plans/uta-refactor/design/problem-domain.md` | 问题域事实（F/O/S/H/P/C 编号）与维护者原话（B/C）。域事实只从这里取 |
 | `plans/uta-refactor/design/research/fp-00..05-*.md` | 一手案例调查（Haskell/Scala/FP），核心设计每条 [证据] 的出处 |
 | `plans/uta-refactor/design/investigation/*.md` | 问题域 §1 引用的旧系统与 venue 能力调查 |
+| `plans/uta-refactor/design/decision-log.md` | 维护者原话与裁决归档；正文与之冲突时以更晚条目为准；F 表列出已知未对齐处 |
 | `plans/uta-refactor/design/native-computation-design-handoff.md` | 自定义原生计算的场景与约束交接稿；核心 §5.3 为其落点 |
 | `plans/uta-refactor/TRIAGE.md` | 遗留文档裁决记录 |
 
