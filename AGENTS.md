@@ -13,7 +13,7 @@ OpenAlice 是本地交易工作区：Alice 启动 Workspace 并注入交易上�
 |---|---|
 | `plans/uta-refactor/design/uta-core-design.md` | 核心设计：设计中心、边界、验收标准、未决 spike。所有类型、模块、协议必须能从这里的代数组合出来 |
 | `plans/uta-refactor/design/problem-domain.md` | 问题域事实（F/O/S/H/P/C 编号）与维护者原话（B/C）。域事实只从这里取 |
-| `plans/uta-refactor/design/research/fp-00..08-*.md` | 一手案例调查，核心设计每条 [证据] 的出处（00–05 FP 案例；06 对账/in-doubt；07 类型导出与外部编译；08 段池选库） |
+| `plans/uta-refactor/design/research/fp-00..09-*.md` | 一手案例调查，核心设计每条 [证据] 的出处（00–05 FP 案例；06 对账/in-doubt；07 类型导出与外部编译；08 段池选库；09 原生 op 算法层/VectorTA、AoS/SoA、Rust SIMD） |
 | `plans/uta-refactor/design/investigation/*.md` | 问题域 §1 引用的旧系统与 venue 能力调查 |
 | `plans/uta-refactor/design/hpc-derivation-subsystem.md` | 行情派生高性能计算子系统（`Pooled` → 段池 → 原生 op）：**可选、独立、不属于核心**；核心 §5.3 只定接口 |
 | `plans/uta-refactor/design/decision-log.md` | 维护者原话与裁决归档；正文与之冲突时以更晚条目为准；F 表列出已知未对齐处 |
